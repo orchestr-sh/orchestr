@@ -318,26 +318,26 @@ This is the core foundation. Next components to build:
 
 ## Comparison to Laravel
 
-| Feature | Laravel | Laravel-Next |
-|---------|---------|--------------|
-| Service Container | ✅ | ✅ |
-| Service Providers | ✅ | ✅ |
-| Routing | ✅ | ✅ |
-| Middleware | ✅ | ✅ |
-| Controllers | ✅ | ✅ |
-| Request/Response | ✅ | ✅ |
-| Facades | ✅ | ✅ |
-| Eloquent ORM | ✅ | 🚧 |
-| Query Builder | ✅ | 🚧 |
-| Validation | ✅ | 🚧 |
-| Authentication | ✅ | 🚧 |
-| Authorization | ✅ | 🚧 |
-| Events | ✅ | 🚧 |
-| Queues | ✅ | 🚧 |
-| Cache | ✅ | 🚧 |
-| File Storage | ✅ | 🚧 |
-| Mail | ✅ | 🚧 |
-| Notifications | ✅ | 🚧 |
+| Feature | Laravel | Orchestr |
+|---------|---------|----------|
+| Service Container | ✅ | ✅        |
+| Service Providers | ✅ | ✅        |
+| Routing | ✅ | ✅        |
+| Middleware | ✅ | ✅        |
+| Controllers | ✅ | ✅        |
+| Request/Response | ✅ | ✅        |
+| Facades | ✅ | ✅        |
+| Eloquent ORM | ✅ | 🚧       |
+| Query Builder | ✅ | 🚧       |
+| Validation | ✅ | 🚧       |
+| Authentication | ✅ | 🚧       |
+| Authorization | ✅ | 🚧       |
+| Events | ✅ | 🚧       |
+| Queues | ✅ | 🚧       |
+| Cache | ✅ | 🚧       |
+| File Storage | ✅ | 🚧       |
+| Mail | ✅ | 🚧       |
+| Notifications | ✅ | 🚧       |
 
 ## License
 
