@@ -1,0 +1,57 @@
+{
+  "name": "@orchestr-sh/orchestr",
+  "version": "1.0.0",
+  "description": "A 1:1 Laravel replica in TypeScript - Brings Laravel's elegant syntax and architecture to Node.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "dev": "tsx watch examples/basic-app/server.ts",
+    "example:basic": "tsx examples/basic-app/server.ts"
+  },
+  "keywords": [
+    "laravel",
+    "framework",
+    "typescript",
+    "nodejs",
+    "mvc",
+    "ioc",
+    "dependency-injection",
+    "routing",
+    "middleware",
+    "service-container",
+    "eloquent",
+    "backend",
+    "web-framework"
+  ],
+  "author": "Sam Street <samstreet.dev@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/orchestr-sh/orchestr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/orchestr-sh/orchestr/issues"
+  },
+  "homepage": "https://github.com/orchestr-sh/orchestr#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "reflect-metadata": "^0.2.2"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  }
+}

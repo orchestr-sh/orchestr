@@ -1,0 +1,33 @@
+# Source files (only ship compiled dist/)
+src/
+examples/
+
+# Config files
+tsconfig.json
+.gitignore
+
+# Development
+node_modules/
+*.log
+npm-debug.log*
+
+# Tests
+test/
+tests/
+*.test.ts
+*.spec.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+tmp/
+temp/
