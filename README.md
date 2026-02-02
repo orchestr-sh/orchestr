@@ -26,6 +26,11 @@ npm install @orchestr-sh/orchestr reflect-metadata
 
 **Note**: `reflect-metadata` is required for dependency injection to work.
 
+## Documentation
+
+- **[Dependency Injection Guide](./DEPENDENCY_INJECTION.md)** - Complete guide to using DI with troubleshooting
+- **[DI Example](./examples/dependency-injection/)** - Working example with services and controllers
+
 ## Quick Start
 
 ```typescript
@@ -77,6 +82,45 @@ app.singleton('Database', () => new Database());
 // Resolve from container
 const userService = app.make('UserService');
 ```
+
+### Dependency Injection
+
+Orchestr supports automatic constructor-based dependency injection using TypeScript's reflection:
+
+```typescript
+import { Injectable, Controller, Request, Response } from 'orchestr';
+
+// Define a service
+export class UserService {
+  getUsers() {
+    return [{ id: 1, name: 'John' }];
+  }
+}
+
+// Use @Injectable() decorator to enable DI
+@Injectable()
+export class UserController extends Controller {
+  // Dependencies are automatically injected
+  constructor(private userService: UserService) {
+    super();
+  }
+
+  async index(req: Request, res: Response) {
+    const users = this.userService.getUsers();
+    return res.json({ users });
+  }
+}
+
+// Register the service in a provider
+class AppServiceProvider extends ServiceProvider {
+  register(): void {
+    // Bind the service to the container
+    this.app.singleton(UserService, () => new UserService());
+  }
+}
+```
+
+**Important**: The `@Injectable()` decorator is required for dependency injection to work. It triggers TypeScript to emit metadata about constructor parameters.
 
 ### Service Providers
 
@@ -211,19 +255,28 @@ Route.get('/profile', handler).addMiddleware(authMiddleware);
 
 ### Controllers
 
-MVC pattern with base controller:
+MVC pattern with base controller and dependency injection:
 
 ```typescript
-import { Controller, Request, Response, Route } from 'orchestr';
+import { Injectable, Controller, Request, Response, Route } from 'orchestr';
 
+// Use @Injectable() when injecting dependencies
+@Injectable()
 class UserController extends Controller {
+  // Services are automatically injected
+  constructor(private userService: UserService) {
+    super();
+  }
+
   async index(req: Request, res: Response) {
-    return res.json({ users: [] });
+    const users = await this.userService.getAll();
+    return res.json({ users });
   }
 
   async show(req: Request, res: Response) {
     const id = req.routeParam('id');
-    return res.json({ user: { id } });
+    const user = await this.userService.findById(id);
+    return res.json({ user });
   }
 
   async store(req: Request, res: Response) {
@@ -231,7 +284,8 @@ class UserController extends Controller {
       name: 'required',
       email: 'required|email',
     });
-    return res.status(201).json({ user: validated });
+    const user = await this.userService.create(validated);
+    return res.status(201).json({ user });
   }
 }
 
@@ -240,6 +294,8 @@ Route.get('/users', [UserController, 'index']);
 Route.get('/users/:id', [UserController, 'show']);
 Route.post('/users', [UserController, 'store']);
 ```
+
+**Note**: The `@Injectable()` decorator must be used on any class that needs constructor dependency injection. Without it, TypeScript won't emit the metadata needed for automatic resolution.
 
 ### Request
 

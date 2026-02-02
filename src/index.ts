@@ -25,6 +25,9 @@ export { Route } from './Facades/Route';
 // Helpers
 export { loadRoutes, base_path, routes_path } from './Support/helpers';
 
+// Decorators
+export { Injectable } from './Support/Injectable';
+
 // Providers
 export { RouteServiceProvider } from './Providers/RouteServiceProvider';
 export { DatabaseServiceProvider } from './Database/DatabaseServiceProvider';
