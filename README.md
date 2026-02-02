@@ -214,6 +214,8 @@ Route.get('/profile', handler).addMiddleware(authMiddleware);
 MVC pattern with base controller:
 
 ```typescript
+import { Controller, Request, Response, Route } from 'orchestr';
+
 class UserController extends Controller {
   async index(req: Request, res: Response) {
     return res.json({ users: [] });
@@ -232,6 +234,11 @@ class UserController extends Controller {
     return res.status(201).json({ user: validated });
   }
 }
+
+// Register controller routes
+Route.get('/users', [UserController, 'index']);
+Route.get('/users/:id', [UserController, 'show']);
+Route.post('/users', [UserController, 'store']);
 ```
 
 ### Request

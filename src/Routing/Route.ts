@@ -3,7 +3,7 @@ import { Request } from './Request';
 import { Response } from './Response';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
-export type RouteAction = Function | string;
+export type RouteAction = Function | string | [new (...args: any[]) => any, string];
 export type Middleware = (req: Request, res: Response, next: () => void) => void | Promise<void>;
 
 /**

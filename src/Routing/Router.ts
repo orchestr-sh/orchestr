@@ -230,6 +230,9 @@ export class Router {
     if (typeof action === 'function') {
       // Direct closure
       result = await action(req, res);
+    } else if (Array.isArray(action)) {
+      // Controller tuple: [ControllerClass, 'method']
+      result = await this.callControllerTuple(action, req, res);
     } else if (typeof action === 'string') {
       // Controller@method string
       result = await this.callControllerAction(action, req, res);
@@ -239,6 +242,31 @@ export class Router {
     if (result !== undefined && !res.finished) {
       res.send(result);
     }
+  }
+
+  /**
+   * Call a controller action using tuple format
+   * Laravel-style: [UserController, 'index']
+   */
+  private async callControllerTuple(
+    action: [new (...args: any[]) => any, string],
+    req: Request,
+    res: Response
+  ): Promise<any> {
+    const [ControllerClass, methodName] = action;
+
+    // Resolve the controller from the container
+    const controller = this.app.make(ControllerClass);
+
+    // Verify the method exists on the controller
+    if (typeof (controller as any)[methodName] !== 'function') {
+      throw new Error(
+        `Method [${methodName}] does not exist on controller [${ControllerClass.name}].`
+      );
+    }
+
+    // Call the controller method
+    return await (controller as any)[methodName](req, res);
   }
 
   /**
