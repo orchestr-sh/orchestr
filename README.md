@@ -12,6 +12,7 @@ Built from the ground up with Laravel's core components:
 - **Request/Response** - Elegant HTTP abstractions
 - **Middleware** - Global and route-level middleware pipeline
 - **Controllers** - MVC architecture support
+- **FormRequest** - Laravel-style validation and authorization
 - **Facades** - Static proxy access to services (Route, DB)
 - **Query Builder** - Fluent database query builder with full Laravel API
 - **Ensemble ORM** - ActiveRecord ORM (Laravel's Eloquent equivalent) with relationships (HasOne, HasMany, BelongsTo), eager/lazy loading, soft deletes, and more
@@ -247,6 +248,64 @@ const authMiddleware = async (req, res, next) => {
 
 Route.get('/profile', handler).addMiddleware(authMiddleware);
 ```
+
+### FormRequest Validation
+
+Laravel-style FormRequest for clean validation and authorization:
+
+```typescript
+import { FormRequest, ValidationRules, ValidationException, Route, Request, Response } from 'orchestr';
+
+// Create a FormRequest class
+export class StoreUserRequest extends FormRequest {
+  // Authorize the request
+  protected authorize(): boolean {
+    return this.request.header('authorization') !== undefined;
+  }
+
+  // Define validation rules
+  protected rules(): ValidationRules {
+    return {
+      name: 'required|string|min:3|max:255',
+      email: 'required|email',
+      password: 'required|string|min:8|confirmed',
+      age: 'numeric|min:18|max:120',
+      role: 'required|in:user,admin,moderator',
+    };
+  }
+
+  // Custom error messages
+  protected messages(): Record<string, string> {
+    return {
+      'name.required': 'Please provide your full name.',
+      'email.email': 'Please provide a valid email address.',
+      'password.min': 'Password must be at least 8 characters.',
+    };
+  }
+}
+
+// Use in routes
+Route.post('/users', async (req: Request, res: Response) => {
+  try {
+    // Validate request (checks authorization AND validation)
+    const formRequest = await StoreUserRequest.validate(StoreUserRequest, req, res);
+
+    // Get validated data only
+    const validated = formRequest.validated();
+
+    // Create user with safe, validated data
+    const user = await User.create(validated);
+
+    return res.status(201).json({ user });
+  } catch (error) {
+    // Validation/authorization errors already handled
+    if (error instanceof ValidationException) return;
+    throw error;
+  }
+});
+```
+
+**See [FORM_REQUESTS.md](./FORM_REQUESTS.md) for complete documentation.**
 
 ### Controllers
 
@@ -832,12 +891,12 @@ Core components completed and in progress:
 - [x] Model Attributes & Casting
 - [x] Model Relationships (HasOne, HasMany, BelongsTo)
 - [x] Eager/Lazy Loading
+- [x] FormRequest Validation & Authorization
 - [ ] Many-to-Many Relationships (BelongsToMany)
 - [ ] Relationship Queries (has, whereHas, withCount)
 - [ ] Polymorphic Relationships
 - [ ] Database Migrations
 - [ ] Database Seeding
-- [ ] Validation System
 - [ ] Authentication & Authorization
 - [ ] Queue System
 - [ ] Events & Listeners
@@ -870,7 +929,7 @@ Core components completed and in progress:
 | Polymorphic Relations | ✅ | 🚧       |
 | Migrations | ✅ | 🚧       |
 | Seeding | ✅ | 🚧       |
-| Validation | ✅ | 🚧       |
+| FormRequest Validation | ✅ | ✅        |
 | Authentication | ✅ | 🚧       |
 | Authorization | ✅ | 🚧       |
 | Events | ✅ | 🚧       |

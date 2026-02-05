@@ -7,6 +7,10 @@
 export { Application } from './Foundation/Application';
 export { ServiceProvider } from './Foundation/ServiceProvider';
 export { Kernel } from './Foundation/Http/Kernel';
+export { FormRequest } from './Foundation/Http/FormRequest';
+export { ValidationException } from './Foundation/Http/ValidationException';
+export { Validator } from './Foundation/Http/Validator';
+export type { ValidationRules, ValidationRule, ValidationRuleObject } from './Foundation/Http/Validator';
 
 // Container
 export { Container } from './Container/Container';
