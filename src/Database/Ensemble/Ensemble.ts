@@ -114,9 +114,15 @@ export abstract class Ensemble extends HasRelationshipsMixin {
   /**
    * Create a new Eloquent model instance
    */
-  constructor(attributes: Record<string, any> = {}) {
+  constructor(attributes: Record<string, any> = {}, fromDatabase: boolean = false) {
     super();
-    this.fill(attributes);
+    if (fromDatabase) {
+      // When hydrating from database, set all attributes directly
+      this.setRawAttributes(attributes);
+    } else {
+      // When creating manually, respect fillable/guarded
+      this.fill(attributes);
+    }
   }
 
   /**
@@ -143,6 +149,15 @@ export abstract class Ensemble extends HasRelationshipsMixin {
     }
 
     this.attributes[key] = value;
+    return this;
+  }
+
+  /**
+   * Set the array of model attributes (bypasses fillable/guarded)
+   * Used when hydrating from database
+   */
+  setRawAttributes(attributes: Record<string, any>): this {
+    this.attributes = attributes;
     return this;
   }
 
@@ -655,8 +670,8 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    * Create a new instance of the given model
    */
   newInstance(attributes: Record<string, any> = {}, exists: boolean = false): this {
-    const ModelClass = this.constructor as new (attributes: Record<string, any>) => this;
-    const instance = new ModelClass(attributes);
+    const ModelClass = this.constructor as new (attributes: Record<string, any>, fromDatabase: boolean) => this;
+    const instance = new ModelClass(attributes, exists);
     instance.exists = exists;
 
     if (exists) {

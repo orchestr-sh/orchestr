@@ -70,8 +70,9 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    * Create a new instance of the model
    */
   protected newModelInstance(attributes: Record<string, any> = {}, exists: boolean = false): T {
-    const ModelClass = this.model.constructor as new (attributes: Record<string, any>) => T;
-    const instance = new ModelClass(attributes);
+    const ModelClass = this.model.constructor as new (attributes: Record<string, any>, fromDatabase: boolean) => T;
+    // Pass true for fromDatabase to bypass fillable/guarded checks when hydrating from DB
+    const instance = new ModelClass(attributes, exists);
     (instance as any).exists = exists;
     (instance as any).syncOriginal();
     return instance;
