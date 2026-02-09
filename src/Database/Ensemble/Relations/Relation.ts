@@ -35,8 +35,6 @@ export abstract class Relation<TRelated extends Ensemble, TParent extends Ensemb
     this.query = query;
     this.parent = parent;
     this.related = query['model'];
-
-    this.addConstraints();
   }
 
   /**
