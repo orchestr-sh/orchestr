@@ -222,6 +222,8 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
    * Execute the query and get the models
    */
   async get(): Promise<TRelated[]> {
+    this.ensureConstraints();
+
     const builder = this.query.addSelect(...this.shouldSelect());
 
     const models = await builder.get();

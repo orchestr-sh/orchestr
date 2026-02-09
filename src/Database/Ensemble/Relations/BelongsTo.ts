@@ -140,6 +140,7 @@ export class BelongsTo<TRelated extends Ensemble, TParent extends Ensemble> exte
       return null;
     }
 
+    this.ensureConstraints();
     return this.query.first();
   }
 

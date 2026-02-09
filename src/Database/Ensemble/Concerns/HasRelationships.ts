@@ -81,7 +81,10 @@ export abstract class HasRelationshipsMixin {
     const relationName = relation || this.snake(instance.constructor.name);
 
     if (!foreignKey) {
-      foreignKey = this.snake(relationName) + '_' + instance.getKeyName();
+      // Generate foreign key from relation name + primary key
+      // Note: relationName should be singular (e.g., "user" not "users")
+      // If your model class is plural, pass the relation parameter explicitly
+      foreignKey = relationName + '_' + instance.getKeyName();
     }
 
     const finalOwnerKey = ownerKey || instance.getKeyName();

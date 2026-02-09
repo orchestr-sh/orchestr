@@ -117,6 +117,7 @@ export class HasOne<TRelated extends Ensemble, TParent extends Ensemble> extends
       return null;
     }
 
+    this.ensureConstraints();
     return this.query.first();
   }
 
