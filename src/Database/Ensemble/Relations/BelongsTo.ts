@@ -39,7 +39,7 @@ export class BelongsTo<TRelated extends Ensemble, TParent extends Ensemble> exte
     this.foreignKey = foreignKey;
     this.ownerKey = ownerKey;
     this.relationName = relationName;
-    this.addConstraints();
+    this.initializeRelation();
   }
 
   /**

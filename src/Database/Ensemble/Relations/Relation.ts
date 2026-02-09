@@ -29,12 +29,35 @@ export abstract class Relation<TRelated extends Ensemble, TParent extends Ensemb
   protected static constraints = true;
 
   /**
+   * Indicates if constraints have been applied
+   */
+  protected constraintsApplied = false;
+
+  /**
    * Create a new relation instance
    */
   constructor(query: EnsembleBuilder<TRelated>, parent: TParent) {
     this.query = query;
     this.parent = parent;
     this.related = query['model'];
+  }
+
+  /**
+   * Initialize the relation and prepare for constraint application
+   * Should be called by child classes after setting their properties
+   */
+  protected initializeRelation(): void {
+    // Don't apply constraints here - they will be applied when query executes
+  }
+
+  /**
+   * Ensure constraints are applied before executing the query
+   */
+  protected ensureConstraints(): void {
+    if (!this.constraintsApplied && Relation['constraints']) {
+      this.addConstraints();
+      this.constraintsApplied = true;
+    }
   }
 
   /**
@@ -66,6 +89,7 @@ export abstract class Relation<TRelated extends Ensemble, TParent extends Ensemb
    * Execute the query as a "select" statement
    */
   async get(): Promise<TRelated[]> {
+    this.ensureConstraints();
     return this.query.get();
   }
 

@@ -32,7 +32,7 @@ export class HasOne<TRelated extends Ensemble, TParent extends Ensemble> extends
     super(query, parent);
     this.foreignKey = foreignKey;
     this.localKey = localKey;
-    this.addConstraints();
+    this.initializeRelation();
   }
 
   /**

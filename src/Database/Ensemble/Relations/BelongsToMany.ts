@@ -100,7 +100,7 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
     this.parentKey = parentKey;
     this.relatedKey = relatedKey;
     this.relationName = relationName || '';
-    this.addConstraints();
+    this.initializeRelation();
   }
 
   /**
