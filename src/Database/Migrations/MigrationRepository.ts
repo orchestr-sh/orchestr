@@ -21,11 +21,7 @@ export class MigrationRepository {
    * Get the migrations that have been run
    */
   async getRan(): Promise<string[]> {
-    const results = await this.connection
-      .table(this.table)
-      .orderBy('batch', 'asc')
-      .orderBy('migration', 'asc')
-      .get();
+    const results = await this.connection.table(this.table).orderBy('batch', 'asc').orderBy('migration', 'asc').get();
 
     return results.map((row: any) => row.migration);
   }
@@ -34,10 +30,7 @@ export class MigrationRepository {
    * Get the list of migrations
    */
   async getMigrations(steps?: number): Promise<MigrationData[]> {
-    const query = this.connection
-      .table(this.table)
-      .orderBy('batch', 'desc')
-      .orderBy('migration', 'desc');
+    const query = this.connection.table(this.table).orderBy('batch', 'desc').orderBy('migration', 'desc');
 
     if (steps !== undefined && steps > 0) {
       query.limit(steps);
@@ -56,22 +49,14 @@ export class MigrationRepository {
       return [];
     }
 
-    return await this.connection
-      .table(this.table)
-      .where('batch', batch)
-      .orderBy('migration', 'desc')
-      .get();
+    return await this.connection.table(this.table).where('batch', batch).orderBy('migration', 'desc').get();
   }
 
   /**
    * Get the migrations for a batch
    */
   async getMigrationBatches(): Promise<Record<string, number>> {
-    const results = await this.connection
-      .table(this.table)
-      .orderBy('batch', 'asc')
-      .orderBy('migration', 'asc')
-      .get();
+    const results = await this.connection.table(this.table).orderBy('batch', 'asc').orderBy('migration', 'asc').get();
 
     const batches: Record<string, number> = {};
     results.forEach((row: any) => {

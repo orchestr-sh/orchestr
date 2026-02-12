@@ -43,7 +43,7 @@ export class Request {
     return new Promise((resolve, reject) => {
       let data = '';
 
-      this.raw.on('data', chunk => {
+      this.raw.on('data', (chunk) => {
         data += chunk.toString();
       });
 

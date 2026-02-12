@@ -79,12 +79,7 @@ export abstract class FormRequest {
     const rules = await this.rules();
 
     // Create validator
-    this.validator = new Validator(
-      this.request.all(),
-      rules,
-      this.messages(),
-      this.attributes()
-    );
+    this.validator = new Validator(this.request.all(), rules, this.messages(), this.attributes());
 
     // Run validation
     const passes = await this.validator.validate();
@@ -167,7 +162,7 @@ export abstract class FormRequest {
    */
   handleFailedAuthorization(res: Response): void {
     res.status(403).json({
-      message: 'This action is unauthorized.'
+      message: 'This action is unauthorized.',
     });
   }
 
@@ -181,7 +176,7 @@ export abstract class FormRequest {
   handleFailedValidation(res: Response, exception: ValidationException): void {
     res.status(422).json({
       message: 'The given data was invalid.',
-      errors: exception.errors()
+      errors: exception.errors(),
     });
   }
 

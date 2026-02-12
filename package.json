@@ -1,6 +1,6 @@
 {
   "name": "@orchestr-sh/orchestr",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "A 1:1 Laravel replica in TypeScript - Brings Laravel's elegant syntax and architecture to Node.js",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,7 +15,18 @@
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
-    "dev": "tsx watch examples/basic-app/server.ts"
+    "dev": "tsx watch examples/basic-app/server.ts",
+    "prepare": "husky",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "format": "prettier --write 'src/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts'"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   },
   "keywords": [
     "laravel",
@@ -46,22 +57,32 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "reflect-metadata": "^0.2.2",
-    "drizzle-orm": "^0.30.0"
+    "drizzle-orm": ">=0.30.0",
+    "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
-    "@types/node": "^22.10.5",
+    "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.9",
+    "@types/node": "^22.10.5",
+    "@typescript-eslint/eslint-plugin": "^8.55.0",
+    "@typescript-eslint/parser": "^8.55.0",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.55.0"
   },
   "peerDependencies": {
-    "typescript": ">=5.0.0",
-    "drizzle-orm": ">=0.30.0"
+    "drizzle-orm": ">=0.30.0",
+    "typescript": ">=5.0.0"
   },
   "optionalDependencies": {
     "better-sqlite3": "^9.4.0",
-    "postgres": "^3.4.3",
-    "mysql2": "^3.9.0"
+    "mysql2": "^3.9.0",
+    "postgres": "^3.4.3"
   }
 }

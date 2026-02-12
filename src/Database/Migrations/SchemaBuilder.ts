@@ -253,9 +253,7 @@ export class SchemaBuilder implements Schema {
       case 'longText':
         return 'TEXT';
       case 'decimal':
-        return column.precision && column.scale
-          ? `DECIMAL(${column.precision}, ${column.scale})`
-          : 'DECIMAL(8, 2)';
+        return column.precision && column.scale ? `DECIMAL(${column.precision}, ${column.scale})` : 'DECIMAL(8, 2)';
       case 'float':
         return 'REAL';
       case 'double':
@@ -310,17 +308,11 @@ export class SchemaBuilder implements Schema {
       case 'longText':
         return 'LONGTEXT';
       case 'decimal':
-        return column.precision && column.scale
-          ? `DECIMAL(${column.precision}, ${column.scale})`
-          : 'DECIMAL(8, 2)';
+        return column.precision && column.scale ? `DECIMAL(${column.precision}, ${column.scale})` : 'DECIMAL(8, 2)';
       case 'float':
-        return column.precision && column.scale
-          ? `FLOAT(${column.precision}, ${column.scale})`
-          : 'FLOAT';
+        return column.precision && column.scale ? `FLOAT(${column.precision}, ${column.scale})` : 'FLOAT';
       case 'double':
-        return column.precision && column.scale
-          ? `DOUBLE(${column.precision}, ${column.scale})`
-          : 'DOUBLE';
+        return column.precision && column.scale ? `DOUBLE(${column.precision}, ${column.scale})` : 'DOUBLE';
       case 'boolean':
         return 'TINYINT(1)';
       case 'date':
@@ -336,9 +328,7 @@ export class SchemaBuilder implements Schema {
       case 'binary':
         return 'BLOB';
       case 'enum':
-        return column.enumValues
-          ? `ENUM(${column.enumValues.map((v) => `'${v}'`).join(', ')})`
-          : 'VARCHAR(255)';
+        return column.enumValues ? `ENUM(${column.enumValues.map((v) => `'${v}'`).join(', ')})` : 'VARCHAR(255)';
       default:
         return 'TEXT';
     }

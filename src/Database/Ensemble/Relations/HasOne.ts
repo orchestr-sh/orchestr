@@ -23,12 +23,7 @@ export class HasOne<TRelated extends Ensemble, TParent extends Ensemble> extends
   /**
    * Create a new has one relationship instance
    */
-  constructor(
-    query: EnsembleBuilder<TRelated>,
-    parent: TParent,
-    foreignKey: string,
-    localKey: string
-  ) {
+  constructor(query: EnsembleBuilder<TRelated>, parent: TParent, foreignKey: string, localKey: string) {
     super(query, parent);
     this.foreignKey = foreignKey;
     this.localKey = localKey;
@@ -44,11 +39,7 @@ export class HasOne<TRelated extends Ensemble, TParent extends Ensemble> extends
 
       // Only add constraint if parent key exists
       if (parentKey !== null && parentKey !== undefined) {
-        this.query.where(
-          this.foreignKey,
-          '=',
-          parentKey
-        );
+        this.query.where(this.foreignKey, '=', parentKey);
       }
     }
   }
@@ -155,10 +146,7 @@ export class HasOne<TRelated extends Ensemble, TParent extends Ensemble> extends
   async create(attributes: Record<string, any> = {}): Promise<TRelated> {
     const instance = this.make(attributes);
 
-    instance.setAttribute(
-      this.foreignKey,
-      this.getParentKey()
-    );
+    instance.setAttribute(this.foreignKey, this.getParentKey());
 
     await instance.save();
 
@@ -169,10 +157,7 @@ export class HasOne<TRelated extends Ensemble, TParent extends Ensemble> extends
    * Create a new instance and set the foreign key
    */
   async save(model: TRelated): Promise<TRelated> {
-    model.setAttribute(
-      this.foreignKey,
-      this.getParentKey()
-    );
+    model.setAttribute(this.foreignKey, this.getParentKey());
 
     await model.save();
 

@@ -178,7 +178,7 @@ export class Container {
       if (!paramType || paramType === Object) {
         throw new Error(
           `Cannot resolve dependency at position ${index} for ${concrete.name}. ` +
-          `Make sure TypeScript decorators are enabled and the class has proper type hints.`
+            `Make sure TypeScript decorators are enabled and the class has proper type hints.`
         );
       }
 

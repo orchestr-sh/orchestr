@@ -23,12 +23,7 @@ export class HasMany<TRelated extends Ensemble, TParent extends Ensemble> extend
   /**
    * Create a new has many relationship instance
    */
-  constructor(
-    query: EnsembleBuilder<TRelated>,
-    parent: TParent,
-    foreignKey: string,
-    localKey: string
-  ) {
+  constructor(query: EnsembleBuilder<TRelated>, parent: TParent, foreignKey: string, localKey: string) {
     super(query, parent);
     this.foreignKey = foreignKey;
     this.localKey = localKey;
@@ -44,11 +39,7 @@ export class HasMany<TRelated extends Ensemble, TParent extends Ensemble> extend
 
       // Only add constraint if parent key exists
       if (parentKey !== null && parentKey !== undefined) {
-        this.query.where(
-          this.foreignKey,
-          '=',
-          parentKey
-        );
+        this.query.where(this.foreignKey, '=', parentKey);
       }
     }
   }
@@ -82,10 +73,7 @@ export class HasMany<TRelated extends Ensemble, TParent extends Ensemble> extend
       const key = model.getAttribute(this.localKey);
 
       if (key !== null && key !== undefined && dictionary[key]) {
-        model.setRelation(
-          relation,
-          new EnsembleCollection<TRelated>(dictionary[key])
-        );
+        model.setRelation(relation, new EnsembleCollection<TRelated>(dictionary[key]));
       }
     }
 
@@ -158,10 +146,7 @@ export class HasMany<TRelated extends Ensemble, TParent extends Ensemble> extend
   async create(attributes: Record<string, any> = {}): Promise<TRelated> {
     const instance = this.make(attributes);
 
-    instance.setAttribute(
-      this.foreignKey,
-      this.getParentKey()
-    );
+    instance.setAttribute(this.foreignKey, this.getParentKey());
 
     await instance.save();
 
@@ -185,10 +170,7 @@ export class HasMany<TRelated extends Ensemble, TParent extends Ensemble> extend
    * Create a new instance and set the foreign key
    */
   async save(model: TRelated): Promise<TRelated> {
-    model.setAttribute(
-      this.foreignKey,
-      this.getParentKey()
-    );
+    model.setAttribute(this.foreignKey, this.getParentKey());
 
     await model.save();
 

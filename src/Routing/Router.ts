@@ -143,8 +143,8 @@ export class Router {
    */
   private prefix(uri: string): string {
     const prefix = this.groupStack
-      .filter(group => group.prefix)
-      .map(group => group.prefix)
+      .filter((group) => group.prefix)
+      .map((group) => group.prefix)
       .join('/');
 
     return prefix ? `/${prefix}/${uri}`.replace(/\/+/g, '/') : uri;
@@ -262,9 +262,7 @@ export class Router {
 
     // Verify the method exists on the controller
     if (typeof (controller as any)[methodName] !== 'function') {
-      throw new Error(
-        `Method [${methodName}] does not exist on controller [${ControllerClass.name}].`
-      );
+      throw new Error(`Method [${methodName}] does not exist on controller [${ControllerClass.name}].`);
     }
 
     // Check if the method expects a FormRequest as first parameter
@@ -288,7 +286,7 @@ export class Router {
           if (error instanceof ValidationException) {
             res.status(422).json({
               message: 'The given data was invalid.',
-              errors: error.errors()
+              errors: error.errors(),
             });
             return;
           }
@@ -296,7 +294,7 @@ export class Router {
           // If authorization failed, send error response
           if (error instanceof Error && error.message === 'This action is unauthorized.') {
             res.status(403).json({
-              message: 'This action is unauthorized.'
+              message: 'This action is unauthorized.',
             });
             return;
           }
@@ -340,8 +338,7 @@ export class Router {
     // This would normally resolve the controller from the container
     // For now, throw an error indicating controllers need to be registered
     throw new Error(
-      `Controller action [${action}] not yet implemented. ` +
-      `Use closures or register controllers in the container.`
+      `Controller action [${action}] not yet implemented. ` + `Use closures or register controllers in the container.`
     );
   }
 

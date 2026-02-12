@@ -42,7 +42,7 @@ export class Route {
     // Convert Laravel-style parameters to regex
     // :id -> ([^/]+)
     // :id? -> ([^/]*)
-    let pattern = this.uri
+    const pattern = this.uri
       .replace(/\//g, '\\/')
       .replace(/:([a-zA-Z_][a-zA-Z0-9_]*)\?/g, '([^/]*)')
       .replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, '([^/]+)');

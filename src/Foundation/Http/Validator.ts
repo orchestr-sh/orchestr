@@ -69,7 +69,7 @@ export class Validator {
    */
   private parseRules(rule: ValidationRule): string[] {
     if (typeof rule === 'string') {
-      return rule.split('|').map(r => r.trim());
+      return rule.split('|').map((r) => r.trim());
     }
 
     if (Array.isArray(rule)) {
@@ -117,7 +117,7 @@ export class Validator {
         if (value === undefined || value === null || value === '') {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} field is required.`)
+            message: this.getMessage(field, rule, `The ${attribute} field is required.`),
           };
         }
         return { passes: true, message: '' };
@@ -126,7 +126,7 @@ export class Validator {
         if (value && !this.isValidEmail(value)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a valid email address.`)
+            message: this.getMessage(field, rule, `The ${attribute} must be a valid email address.`),
           };
         }
         return { passes: true, message: '' };
@@ -135,7 +135,7 @@ export class Validator {
         if (value && typeof value !== 'string') {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a string.`)
+            message: this.getMessage(field, rule, `The ${attribute} must be a string.`),
           };
         }
         return { passes: true, message: '' };
@@ -145,7 +145,7 @@ export class Validator {
         if (value && isNaN(Number(value))) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a number.`)
+            message: this.getMessage(field, rule, `The ${attribute} must be a number.`),
           };
         }
         return { passes: true, message: '' };
@@ -154,16 +154,23 @@ export class Validator {
         if (value && (!Number.isInteger(Number(value)) || isNaN(Number(value)))) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be an integer.`)
+            message: this.getMessage(field, rule, `The ${attribute} must be an integer.`),
           };
         }
         return { passes: true, message: '' };
 
       case 'boolean':
-        if (value !== undefined && typeof value !== 'boolean' && value !== 'true' && value !== 'false' && value !== 1 && value !== 0) {
+        if (
+          value !== undefined &&
+          typeof value !== 'boolean' &&
+          value !== 'true' &&
+          value !== 'false' &&
+          value !== 1 &&
+          value !== 0
+        ) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be true or false.`)
+            message: this.getMessage(field, rule, `The ${attribute} must be true or false.`),
           };
         }
         return { passes: true, message: '' };
@@ -173,13 +180,13 @@ export class Validator {
         if (typeof value === 'string' && value.length < parseInt(minValue)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be at least ${minValue} characters.`)
+            message: this.getMessage(field, rule, `The ${attribute} must be at least ${minValue} characters.`),
           };
         }
         if (typeof value === 'number' && value < parseFloat(minValue)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be at least ${minValue}.`)
+            message: this.getMessage(field, rule, `The ${attribute} must be at least ${minValue}.`),
           };
         }
         return { passes: true, message: '' };
@@ -189,13 +196,13 @@ export class Validator {
         if (typeof value === 'string' && value.length > parseInt(maxValue)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} may not be greater than ${maxValue} characters.`)
+            message: this.getMessage(field, rule, `The ${attribute} may not be greater than ${maxValue} characters.`),
           };
         }
         if (typeof value === 'number' && value > parseFloat(maxValue)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} may not be greater than ${maxValue}.`)
+            message: this.getMessage(field, rule, `The ${attribute} may not be greater than ${maxValue}.`),
           };
         }
         return { passes: true, message: '' };
@@ -206,11 +213,7 @@ export class Validator {
         if (numValue < parseFloat(minBetween) || numValue > parseFloat(maxBetween)) {
           return {
             passes: false,
-            message: this.getMessage(
-              field,
-              rule,
-              `The ${attribute} must be between ${minBetween} and ${maxBetween}.`
-            )
+            message: this.getMessage(field, rule, `The ${attribute} must be between ${minBetween} and ${maxBetween}.`),
           };
         }
         return { passes: true, message: '' };
@@ -219,7 +222,7 @@ export class Validator {
         if (value && !params.includes(String(value))) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The selected ${attribute} is invalid.`)
+            message: this.getMessage(field, rule, `The selected ${attribute} is invalid.`),
           };
         }
         return { passes: true, message: '' };
@@ -228,7 +231,7 @@ export class Validator {
         if (value && params.includes(String(value))) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The selected ${attribute} is invalid.`)
+            message: this.getMessage(field, rule, `The selected ${attribute} is invalid.`),
           };
         }
         return { passes: true, message: '' };
@@ -237,7 +240,7 @@ export class Validator {
         if (value && !Array.isArray(value)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be an array.`)
+            message: this.getMessage(field, rule, `The ${attribute} must be an array.`),
           };
         }
         return { passes: true, message: '' };
@@ -248,7 +251,7 @@ export class Validator {
         if (value !== confirmationValue) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} confirmation does not match.`)
+            message: this.getMessage(field, rule, `The ${attribute} confirmation does not match.`),
           };
         }
         return { passes: true, message: '' };
@@ -257,7 +260,7 @@ export class Validator {
         if (value && !this.isValidUrl(value)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a valid URL.`)
+            message: this.getMessage(field, rule, `The ${attribute} must be a valid URL.`),
           };
         }
         return { passes: true, message: '' };
@@ -266,7 +269,7 @@ export class Validator {
         if (value && !/^[a-zA-Z]+$/.test(value)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} may only contain letters.`)
+            message: this.getMessage(field, rule, `The ${attribute} may only contain letters.`),
           };
         }
         return { passes: true, message: '' };
@@ -275,7 +278,7 @@ export class Validator {
         if (value && !/^[a-zA-Z0-9]+$/.test(value)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} may only contain letters and numbers.`)
+            message: this.getMessage(field, rule, `The ${attribute} may only contain letters and numbers.`),
           };
         }
         return { passes: true, message: '' };
@@ -284,7 +287,11 @@ export class Validator {
         if (value && !/^[a-zA-Z0-9_-]+$/.test(value)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} may only contain letters, numbers, dashes and underscores.`)
+            message: this.getMessage(
+              field,
+              rule,
+              `The ${attribute} may only contain letters, numbers, dashes and underscores.`
+            ),
           };
         }
         return { passes: true, message: '' };
@@ -294,7 +301,7 @@ export class Validator {
         if (value && !pattern.test(value)) {
           return {
             passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} format is invalid.`)
+            message: this.getMessage(field, rule, `The ${attribute} format is invalid.`),
           };
         }
         return { passes: true, message: '' };

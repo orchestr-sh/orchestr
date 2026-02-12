@@ -182,7 +182,7 @@ export class Config {
     const output = { ...target };
 
     if (this.isObject(target) && this.isObject(source)) {
-      Object.keys(source).forEach(key => {
+      Object.keys(source).forEach((key) => {
         if (this.isObject(source[key])) {
           if (!(key in target)) {
             output[key] = source[key];

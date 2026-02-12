@@ -43,9 +43,7 @@ export class MigrateStatusCommand extends Command {
       const batchWidth = 5;
 
       // Print header
-      this.line(
-        `${'Migration'.padEnd(maxLength + 2)}  ${'Ran?'.padEnd(statusWidth)}  ${'Batch'.padEnd(batchWidth)}`
-      );
+      this.line(`${'Migration'.padEnd(maxLength + 2)}  ${'Ran?'.padEnd(statusWidth)}  ${'Batch'.padEnd(batchWidth)}`);
       this.line('-'.repeat(maxLength + statusWidth + batchWidth + 8));
 
       // Print migrations

@@ -88,7 +88,7 @@ export class MorphTo<TParent extends Ensemble> extends Relation<Ensemble, TParen
       const type = model.getAttribute(this.morphType);
       const id = model.getAttribute(this.foreignKey);
 
-      if (!type || (id === null || id === undefined)) {
+      if (!type || id === null || id === undefined) {
         continue;
       }
 
@@ -121,7 +121,7 @@ export class MorphTo<TParent extends Ensemble> extends Relation<Ensemble, TParen
       const type = model.getAttribute(this.morphType);
       const id = model.getAttribute(this.foreignKey);
 
-      if (!type || (id === null || id === undefined)) {
+      if (!type || id === null || id === undefined) {
         model.setRelation(relation, null);
         continue;
       }
@@ -153,10 +153,7 @@ export class MorphTo<TParent extends Ensemble> extends Relation<Ensemble, TParen
       }
 
       const instance = new modelClass();
-      const models = await instance
-        .newQuery()
-        .whereIn(this.ownerKey, Array.from(ids.keys()))
-        .get();
+      const models = await instance.newQuery().whereIn(this.ownerKey, Array.from(ids.keys())).get();
 
       // Store in dictionary for matching
       for (const model of models) {
@@ -180,7 +177,7 @@ export class MorphTo<TParent extends Ensemble> extends Relation<Ensemble, TParen
     const type = this.parent.getAttribute(this.morphType);
     const id = this.parent.getAttribute(this.foreignKey);
 
-    if (!type || (id === null || id === undefined)) {
+    if (!type || id === null || id === undefined) {
       return null;
     }
 
@@ -192,10 +189,7 @@ export class MorphTo<TParent extends Ensemble> extends Relation<Ensemble, TParen
     }
 
     const instance = new modelClass();
-    return instance
-      .newQuery()
-      .where(this.ownerKey, '=', id)
-      .first();
+    return instance.newQuery().where(this.ownerKey, '=', id).first();
   }
 
   /**

@@ -78,11 +78,16 @@ export type {
   MorphManyAccessor,
   MorphToAccessor,
   MorphToManyAccessor,
-  MorphedByManyAccessor
+  MorphedByManyAccessor,
 } from './Database/Ensemble/Concerns/HasDynamicRelations';
 
 // Ensemble Types
-export type { HasAttributes, CastType, AttributeMutator, AttributeAccessor } from './Database/Ensemble/Concerns/HasAttributes';
+export type {
+  HasAttributes,
+  CastType,
+  AttributeMutator,
+  AttributeAccessor,
+} from './Database/Ensemble/Concerns/HasAttributes';
 export type { HasTimestamps } from './Database/Ensemble/Concerns/HasTimestamps';
 export type { SoftDeletes } from './Database/Ensemble/SoftDeletes';
 export type { RelationshipConfig } from './Database/Ensemble/Concerns/HasRelationships';
@@ -129,16 +134,8 @@ export type {
   JoinClause,
   OrderByClause,
 } from './Database/Contracts/QueryBuilderInterface';
-export type {
-  Schema,
-  Blueprint,
-  ColumnDefinition,
-  ForeignKeyDefinition,
-} from './Database/Contracts/Schema';
-export type {
-  DatabaseManagerConfig,
-  DatabaseConnectionConfig,
-} from './Database/DatabaseManager';
+export type { Schema, Blueprint, ColumnDefinition, ForeignKeyDefinition } from './Database/Contracts/Schema';
+export type { DatabaseManagerConfig, DatabaseConnectionConfig } from './Database/DatabaseManager';
 
 // Console Types
 export type { CommandOptions } from './Console/Command';

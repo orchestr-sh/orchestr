@@ -88,7 +88,7 @@ export function createFacade<T extends object>(accessor: string): new () => T {
             return (...args: any[]) => root[prop](...args);
           }
           return root[prop];
-        }
+        },
       });
     }
   }
@@ -105,6 +105,6 @@ export function createFacade<T extends object>(accessor: string): new () => T {
         return (...args: any[]) => root[prop](...args);
       }
       return root[prop];
-    }
+    },
   });
 }

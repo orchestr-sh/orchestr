@@ -437,9 +437,7 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
     }
 
     const columns = Object.keys(records[0]);
-    const placeholders = records
-      .map(() => `(${columns.map(() => '?').join(', ')})`)
-      .join(', ');
+    const placeholders = records.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ');
 
     const bindings = records.flatMap((record) => columns.map((col) => record[col]));
 
@@ -584,7 +582,12 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
         const boolean = index === 0 ? '' : ` ${where.boolean.toUpperCase()} `;
 
         if (where.operator === 'raw') {
-          return boolean + (typeof where.column === 'object' && where.column && 'getValue' in where.column ? (where.column as Expression).getValue() : where.column);
+          return (
+            boolean +
+            (typeof where.column === 'object' && where.column && 'getValue' in where.column
+              ? (where.column as Expression).getValue()
+              : where.column)
+          );
         }
 
         if (where.operator === 'in' || where.operator === 'not in') {

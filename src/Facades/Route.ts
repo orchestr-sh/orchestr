@@ -47,5 +47,5 @@ export const Route = new Proxy(RouteFacade, {
     }
 
     return undefined;
-  }
+  },
 }) as unknown as typeof RouteFacade & Omit<Router, 'app'>;

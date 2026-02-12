@@ -58,17 +58,8 @@ export class MorphToMany<TRelated extends Ensemble, TParent extends Ensemble> ex
 
     // Join the pivot table with morph type constraint
     query
-      .join(
-        this.table,
-        `${this.getQualifiedRelatedKeyName()}`,
-        '=',
-        `${this.getQualifiedRelatedPivotKeyName()}`
-      )
-      .where(
-        `${this.table}.${this.morphType}`,
-        '=',
-        this.morphClass
-      );
+      .join(this.table, `${this.getQualifiedRelatedKeyName()}`, '=', `${this.getQualifiedRelatedPivotKeyName()}`)
+      .where(`${this.table}.${this.morphType}`, '=', this.morphClass);
   }
 
   /**
@@ -79,11 +70,7 @@ export class MorphToMany<TRelated extends Ensemble, TParent extends Ensemble> ex
 
     // Only add constraint if parent key value exists
     if (parentKeyValue !== null && parentKeyValue !== undefined) {
-      this.query.where(
-        this.getQualifiedForeignPivotKeyName(),
-        '=',
-        parentKeyValue
-      );
+      this.query.where(this.getQualifiedForeignPivotKeyName(), '=', parentKeyValue);
     }
   }
 
@@ -125,11 +112,7 @@ export class MorphToMany<TRelated extends Ensemble, TParent extends Ensemble> ex
   /**
    * Attach models to the parent with morph type
    */
-  async attach(
-    ids: any | any[],
-    attributes: Record<string, any> = {},
-    touch: boolean = true
-  ): Promise<void> {
+  async attach(ids: any | any[], attributes: Record<string, any> = {}, touch: boolean = true): Promise<void> {
     const idsArray = Array.isArray(ids) ? ids : [ids];
     const parentKey = this.parent.getAttribute(this.parentKey);
 
@@ -159,9 +142,7 @@ export class MorphToMany<TRelated extends Ensemble, TParent extends Ensemble> ex
       return 0;
     }
 
-    query
-      .where(this.foreignPivotKey, '=', parentKey)
-      .where(this.morphType, '=', this.morphClass);
+    query.where(this.foreignPivotKey, '=', parentKey).where(this.morphType, '=', this.morphClass);
 
     if (ids) {
       const idsArray = Array.isArray(ids) ? ids : [ids];
@@ -174,10 +155,7 @@ export class MorphToMany<TRelated extends Ensemble, TParent extends Ensemble> ex
   /**
    * Sync the intermediate tables with morph type
    */
-  async sync(
-    ids: any[],
-    detaching: boolean = true
-  ): Promise<{ attached: any[]; detached: any[]; updated: any[] }> {
+  async sync(ids: any[], detaching: boolean = true): Promise<{ attached: any[]; detached: any[]; updated: any[] }> {
     const changes = {
       attached: [] as any[],
       detached: [] as any[],

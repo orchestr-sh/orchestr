@@ -122,10 +122,12 @@ export abstract class Relation<TRelated extends Ensemble, TParent extends Ensemb
    * Get all of the primary keys for an array of models
    */
   protected getKeys(models: TParent[], key?: string): any[] {
-    return models.map((model) => {
-      const value = key ? model.getAttribute(key) : model.getKey();
-      return value;
-    }).filter((value) => value !== null && value !== undefined);
+    return models
+      .map((model) => {
+        const value = key ? model.getAttribute(key) : model.getKey();
+        return value;
+      })
+      .filter((value) => value !== null && value !== undefined);
   }
 
   /**

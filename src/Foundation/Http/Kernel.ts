@@ -53,11 +53,7 @@ export class Kernel {
   /**
    * Run global middleware
    */
-  private async runMiddleware(
-    request: Request,
-    response: Response,
-    finalHandler: () => Promise<void>
-  ): Promise<void> {
+  private async runMiddleware(request: Request, response: Response, finalHandler: () => Promise<void>): Promise<void> {
     const middleware = [...this.middleware];
 
     const runNext = async (index: number): Promise<void> => {
@@ -82,7 +78,7 @@ export class Kernel {
     if (!response.finished) {
       response.status(500).json({
         message: error instanceof Error ? error.message : 'Internal Server Error',
-        ...(this.app.isDebug() && { stack: error instanceof Error ? error.stack : undefined })
+        ...(this.app.isDebug() && { stack: error instanceof Error ? error.stack : undefined }),
       });
     }
   }

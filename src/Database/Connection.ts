@@ -161,11 +161,7 @@ export class Connection {
   /**
    * Run a query with logging
    */
-  protected async runQueryWithLogging<T>(
-    query: string,
-    bindings: any[],
-    callback: () => Promise<T>
-  ): Promise<T> {
+  protected async runQueryWithLogging<T>(query: string, bindings: any[], callback: () => Promise<T>): Promise<T> {
     if (!this.loggingEnabled) {
       return callback();
     }

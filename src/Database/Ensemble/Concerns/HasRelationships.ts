@@ -13,7 +13,18 @@ import { BelongsTo } from '../Relations/BelongsTo';
 import { BelongsToMany } from '../Relations/BelongsToMany';
 
 export interface RelationshipConfig {
-  type: 'hasOne' | 'hasMany' | 'belongsTo' | 'belongsToMany' | 'hasOneThrough' | 'hasManyThrough' | 'morphTo' | 'morphMany' | 'morphOne' | 'morphToMany' | 'morphedByMany';
+  type:
+    | 'hasOne'
+    | 'hasMany'
+    | 'belongsTo'
+    | 'belongsToMany'
+    | 'hasOneThrough'
+    | 'hasManyThrough'
+    | 'morphTo'
+    | 'morphMany'
+    | 'morphOne'
+    | 'morphToMany'
+    | 'morphedByMany';
   related: string;
   foreignKey?: string;
   localKey?: string;
@@ -156,14 +167,7 @@ export abstract class HasRelationshipsMixin {
 
     const finalLocalKey = localKey || (this as any).getKeyName();
 
-    return new MorphOne(
-      instance.newQuery() as EnsembleBuilder<TRelated>,
-      this as any,
-      name,
-      type,
-      id,
-      finalLocalKey
-    );
+    return new MorphOne(instance.newQuery() as EnsembleBuilder<TRelated>, this as any, name, type, id, finalLocalKey);
   }
 
   /**
@@ -181,14 +185,7 @@ export abstract class HasRelationshipsMixin {
 
     const finalLocalKey = localKey || (this as any).getKeyName();
 
-    return new MorphMany(
-      instance.newQuery() as EnsembleBuilder<TRelated>,
-      this as any,
-      name,
-      type,
-      id,
-      finalLocalKey
-    );
+    return new MorphMany(instance.newQuery() as EnsembleBuilder<TRelated>, this as any, name, type, id, finalLocalKey);
   }
 
   /**
@@ -207,14 +204,7 @@ export abstract class HasRelationshipsMixin {
     const finalOwnerKey = ownerKey || 'id';
 
     // MorphTo needs special handling - creates query builder dynamically
-    return new MorphTo(
-      (this as any).newQuery() as any,
-      this as any,
-      finalId,
-      finalType,
-      finalOwnerKey,
-      name
-    );
+    return new MorphTo((this as any).newQuery() as any, this as any, finalId, finalType, finalOwnerKey, name);
   }
 
   /**
@@ -295,10 +285,7 @@ export abstract class HasRelationshipsMixin {
    * Get the joining table name for a many-to-many relation
    */
   protected joiningTable(related: Ensemble): string {
-    const models = [
-      this.snake((this as any).constructor.name),
-      this.snake(related.constructor.name),
-    ];
+    const models = [this.snake((this as any).constructor.name), this.snake(related.constructor.name)];
 
     // Sort the model names alphabetically
     models.sort();
@@ -320,9 +307,7 @@ export abstract class HasRelationshipsMixin {
     const relation = (this as any)[method]();
 
     if (!(relation instanceof Relation)) {
-      throw new Error(
-        `Relationship method must return an object of type Relation (${method})`
-      );
+      throw new Error(`Relationship method must return an object of type Relation (${method})`);
     }
 
     return relation;
@@ -394,7 +379,7 @@ export abstract class HasRelationshipsMixin {
    */
   public async loadMissing(relations: string | string[]): Promise<this> {
     const relationArray = Array.isArray(relations) ? relations : [relations];
-    const missing = relationArray.filter(relation => !this.relationLoaded(relation));
+    const missing = relationArray.filter((relation) => !this.relationLoaded(relation));
 
     if (missing.length > 0) {
       await this.load(missing);

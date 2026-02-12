@@ -20,9 +20,7 @@ export const DB = new Proxy(DBFacade, {
     const root = target.getFacadeRoot() as DatabaseManager;
 
     if (!root) {
-      throw new Error(
-        'DB Facade: Database manager not found in container. Did you register DatabaseServiceProvider?'
-      );
+      throw new Error('DB Facade: Database manager not found in container. Did you register DatabaseServiceProvider?');
     }
 
     // If accessing a method/property on DatabaseManager

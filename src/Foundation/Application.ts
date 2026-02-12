@@ -36,7 +36,7 @@ export class Application extends Container {
    */
   private registerCoreContainerAliases(): void {
     const aliases: { [key: string]: string[] } = {
-      'app': ['Application'],
+      app: ['Application'],
     };
 
     for (const [key, aliasList] of Object.entries(aliases)) {
@@ -118,7 +118,7 @@ export class Application extends Container {
    * Register multiple service providers
    */
   registerProviders(providers: Array<ServiceProvider | (new (app: Application) => ServiceProvider)>): void {
-    providers.forEach(provider => this.register(provider));
+    providers.forEach((provider) => this.register(provider));
   }
 
   /**
@@ -169,7 +169,7 @@ export class Application extends Container {
    * Terminate the application
    */
   terminate(): void {
-    this.terminatingCallbacks.forEach(callback => callback());
+    this.terminatingCallbacks.forEach((callback) => callback());
   }
 
   /**

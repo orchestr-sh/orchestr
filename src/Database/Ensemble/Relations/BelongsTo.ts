@@ -51,11 +51,7 @@ export class BelongsTo<TRelated extends Ensemble, TParent extends Ensemble> exte
 
       // Only add constraint if foreign key value exists
       if (foreignKeyValue !== null && foreignKeyValue !== undefined) {
-        this.query.where(
-          this.ownerKey,
-          '=',
-          foreignKeyValue
-        );
+        this.query.where(this.ownerKey, '=', foreignKeyValue);
       }
     }
   }

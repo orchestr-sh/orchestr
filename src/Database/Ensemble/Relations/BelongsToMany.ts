@@ -121,12 +121,7 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
     query = query || this.query;
 
     // Join the pivot table on the related key
-    query.join(
-      this.table,
-      `${this.getQualifiedRelatedKeyName()}`,
-      '=',
-      `${this.getQualifiedRelatedPivotKeyName()}`
-    );
+    query.join(this.table, `${this.getQualifiedRelatedKeyName()}`, '=', `${this.getQualifiedRelatedPivotKeyName()}`);
   }
 
   /**
@@ -137,11 +132,7 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
 
     // Only add constraint if parent key value exists
     if (parentKeyValue !== null && parentKeyValue !== undefined) {
-      this.query.where(
-        this.getQualifiedForeignPivotKeyName(),
-        '=',
-        parentKeyValue
-      );
+      this.query.where(this.getQualifiedForeignPivotKeyName(), '=', parentKeyValue);
     }
   }
 
@@ -174,10 +165,7 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
       const key = model.getAttribute(this.parentKey);
 
       if (key !== null && key !== undefined && dictionary[key]) {
-        model.setRelation(
-          relation,
-          new EnsembleCollection<TRelated>(dictionary[key])
-        );
+        model.setRelation(relation, new EnsembleCollection<TRelated>(dictionary[key]));
       }
     }
 
@@ -317,10 +305,7 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
    * Specify the pivot table columns to retrieve
    */
   withPivot(...columns: string[]): this {
-    this.pivotColumns = [
-      ...this.pivotColumns,
-      ...columns,
-    ];
+    this.pivotColumns = [...this.pivotColumns, ...columns];
 
     return this;
   }
@@ -400,10 +385,7 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
    * Attach models to the parent
    */
   async attach(ids: any | any[], attributes: Record<string, any> = {}): Promise<void> {
-    const records = this.formatAttachRecords(
-      this.parseIds(ids),
-      attributes
-    );
+    const records = this.formatAttachRecords(this.parseIds(ids), attributes);
 
     if (records.length === 0) {
       return;
@@ -418,11 +400,7 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
    */
   async detach(ids?: any | any[]): Promise<number> {
     const connection = this.parent.getConnection();
-    let query = connection.table(this.table).where(
-      this.foreignPivotKey,
-      '=',
-      this.parent.getAttribute(this.parentKey)
-    );
+    let query = connection.table(this.table).where(this.foreignPivotKey, '=', this.parent.getAttribute(this.parentKey));
 
     if (ids !== undefined) {
       const parsedIds = this.parseIds(ids);
@@ -449,9 +427,7 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
     const current = await this.getCurrentlyAttachedPivots();
     const records = this.formatRecordsList(this.parseIds(ids));
 
-    const detach = current.filter(
-      (id) => !records.some((record) => record.id === id)
-    );
+    const detach = current.filter((id) => !records.some((record) => record.id === id));
 
     if (detach.length > 0) {
       await this.detach(detach);

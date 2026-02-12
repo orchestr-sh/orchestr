@@ -128,11 +128,7 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
   /**
    * Eagerly load the relationship on a set of models
    */
-  protected async eagerLoadRelation(
-    models: T[],
-    name: string,
-    constraints: (query: any) => void
-  ): Promise<void> {
+  protected async eagerLoadRelation(models: T[], name: string, constraints: (query: any) => void): Promise<void> {
     // Get the relation instance from the first model
     const relation = this.getRelation(models[0], name);
 
@@ -197,17 +193,13 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
     const relationMethod = (model as any)[name];
 
     if (typeof relationMethod !== 'function') {
-      throw new Error(
-        `Call to undefined relationship [${name}] on model [${model.constructor.name}]`
-      );
+      throw new Error(`Call to undefined relationship [${name}] on model [${model.constructor.name}]`);
     }
 
     const relation = relationMethod.call(model);
 
     if (!(relation instanceof Relation)) {
-      throw new Error(
-        `Relationship method [${name}] must return a Relation instance`
-      );
+      throw new Error(`Relationship method [${name}] must return a Relation instance`);
     }
 
     // Disable default constraints for eager loading
@@ -245,7 +237,10 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
   /**
    * Get a paginated result
    */
-  async paginate(perPage: number = 15, page: number = 1): Promise<{
+  async paginate(
+    perPage: number = 15,
+    page: number = 1
+  ): Promise<{
     data: T[];
     total: number;
     perPage: number;

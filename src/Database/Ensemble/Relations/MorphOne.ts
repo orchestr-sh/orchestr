@@ -62,9 +62,7 @@ export class MorphOne<TRelated extends Ensemble, TParent extends Ensemble> exten
 
       // Only add constraints if parent key exists
       if (parentKey !== null && parentKey !== undefined) {
-        this.query
-          .where(this.foreignKey, '=', parentKey)
-          .where(this.morphType, '=', this.morphClass);
+        this.query.where(this.foreignKey, '=', parentKey).where(this.morphType, '=', this.morphClass);
       }
     }
   }
@@ -74,9 +72,7 @@ export class MorphOne<TRelated extends Ensemble, TParent extends Ensemble> exten
    */
   addEagerConstraints(models: TParent[]): void {
     const keys = this.getKeys(models, this.localKey);
-    this.query
-      .whereIn(this.foreignKey, keys)
-      .where(this.morphType, '=', this.morphClass);
+    this.query.whereIn(this.foreignKey, keys).where(this.morphType, '=', this.morphClass);
   }
 
   /**

@@ -20,20 +20,20 @@ function isRelation(value: any): boolean {
  */
 function createRelationshipProxy(relationGetter: () => any): any {
   // Create a function that returns the relation when called
-  const fn: any = function(...args: any[]) {
+  const fn: any = function (...args: any[]) {
     return relationGetter();
   };
 
   // Make the function thenable (Promise-like) by adding then/catch methods
-  fn.then = function(onFulfilled?: any, onRejected?: any) {
+  fn.then = function (onFulfilled?: any, onRejected?: any) {
     return relationGetter().getResults().then(onFulfilled, onRejected);
   };
 
-  fn.catch = function(onRejected?: any) {
+  fn.catch = function (onRejected?: any) {
     return relationGetter().getResults().catch(onRejected);
   };
 
-  fn.finally = function(onFinally?: any) {
+  fn.finally = function (onFinally?: any) {
     return relationGetter().getResults().finally(onFinally);
   };
 
@@ -44,20 +44,51 @@ function createRelationshipProxy(relationGetter: () => any): any {
  * List of method prefixes that should never be treated as relationships
  */
 const EXCLUDED_PREFIXES = [
-  'get', 'set', 'is', 'has', 'should', 'can',
-  'fill', 'save', 'delete', 'update', 'create',
-  'find', 'where', 'with', 'load', 'fresh',
-  'toObject', 'toJSON', 'toString', 'valueOf'
+  'get',
+  'set',
+  'is',
+  'has',
+  'should',
+  'can',
+  'fill',
+  'save',
+  'delete',
+  'update',
+  'create',
+  'find',
+  'where',
+  'with',
+  'load',
+  'fresh',
+  'toObject',
+  'toJSON',
+  'toString',
+  'valueOf',
 ];
 
 /**
  * List of known internal methods that should never be treated as relationships
  */
 const EXCLUDED_METHODS = [
-  'constructor', 'getTable', 'getKeyName', 'getKey', 'getAttribute',
-  'setAttribute', 'newQuery', 'newInstance', 'getConnection',
-  'query', 'getDirty', 'relationLoaded', 'getRelation', 'setRelation',
-  'syncOriginal', 'refresh', 'touch', 'makeHidden', 'makeVisible'
+  'constructor',
+  'getTable',
+  'getKeyName',
+  'getKey',
+  'getAttribute',
+  'setAttribute',
+  'newQuery',
+  'newInstance',
+  'getConnection',
+  'query',
+  'getDirty',
+  'relationLoaded',
+  'getRelation',
+  'setRelation',
+  'syncOriginal',
+  'refresh',
+  'touch',
+  'makeHidden',
+  'makeVisible',
 ];
 
 /**
@@ -108,7 +139,7 @@ const INTERNAL_PROPERTIES = new Set([
   'casts',
   'timestamps',
   'connection',
-  'dynamicRelations'
+  'dynamicRelations',
 ]);
 
 export function withDynamicRelations<T extends object>(instance: T): T {
@@ -165,7 +196,7 @@ export function withDynamicRelations<T extends object>(instance: T): T {
     // Pass through set operations without interference
     set(target: any, property: string | symbol, value: any, receiver: any): boolean {
       return Reflect.set(target, property, value, receiver);
-    }
+    },
   });
 }
 
@@ -205,32 +236,50 @@ export type DynamicRelationAccessor<T> = (() => any) & PromiseLike<T>;
  * const user = await post.user; // Type: User
  * const query = post.user(); // Type: BelongsTo<User, Post>
  */
-export type BelongsToAccessor<TRelated extends import('../Ensemble').Ensemble, TParent extends import('../Ensemble').Ensemble> =
-  TRelated | Promise<TRelated | null> | (() => import('../Relations/BelongsTo').BelongsTo<TRelated, TParent>);
+export type BelongsToAccessor<
+  TRelated extends import('../Ensemble').Ensemble,
+  TParent extends import('../Ensemble').Ensemble,
+> = TRelated | Promise<TRelated | null> | (() => import('../Relations/BelongsTo').BelongsTo<TRelated, TParent>);
 
-export type HasOneAccessor<TRelated extends import('../Ensemble').Ensemble, TParent extends import('../Ensemble').Ensemble> =
-  TRelated | Promise<TRelated | null> | (() => import('../Relations/HasOne').HasOne<TRelated, TParent>);
+export type HasOneAccessor<
+  TRelated extends import('../Ensemble').Ensemble,
+  TParent extends import('../Ensemble').Ensemble,
+> = TRelated | Promise<TRelated | null> | (() => import('../Relations/HasOne').HasOne<TRelated, TParent>);
 
-export type HasManyAccessor<TRelated extends import('../Ensemble').Ensemble, TParent extends import('../Ensemble').Ensemble> =
-  TRelated[] | Promise<TRelated[]> | (() => import('../Relations/HasMany').HasMany<TRelated, TParent>);
+export type HasManyAccessor<
+  TRelated extends import('../Ensemble').Ensemble,
+  TParent extends import('../Ensemble').Ensemble,
+> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/HasMany').HasMany<TRelated, TParent>);
 
-export type BelongsToManyAccessor<TRelated extends import('../Ensemble').Ensemble, TParent extends import('../Ensemble').Ensemble> =
-  TRelated[] | Promise<TRelated[]> | (() => import('../Relations/BelongsToMany').BelongsToMany<TRelated, TParent>);
+export type BelongsToManyAccessor<
+  TRelated extends import('../Ensemble').Ensemble,
+  TParent extends import('../Ensemble').Ensemble,
+> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/BelongsToMany').BelongsToMany<TRelated, TParent>);
 
-export type MorphOneAccessor<TRelated extends import('../Ensemble').Ensemble, TParent extends import('../Ensemble').Ensemble> =
-  TRelated | Promise<TRelated | null> | (() => import('../Relations/MorphOne').MorphOne<TRelated, TParent>);
+export type MorphOneAccessor<
+  TRelated extends import('../Ensemble').Ensemble,
+  TParent extends import('../Ensemble').Ensemble,
+> = TRelated | Promise<TRelated | null> | (() => import('../Relations/MorphOne').MorphOne<TRelated, TParent>);
 
-export type MorphManyAccessor<TRelated extends import('../Ensemble').Ensemble, TParent extends import('../Ensemble').Ensemble> =
-  TRelated[] | Promise<TRelated[]> | (() => import('../Relations/MorphMany').MorphMany<TRelated, TParent>);
+export type MorphManyAccessor<
+  TRelated extends import('../Ensemble').Ensemble,
+  TParent extends import('../Ensemble').Ensemble,
+> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/MorphMany').MorphMany<TRelated, TParent>);
 
 export type MorphToAccessor<TRelated extends import('../Ensemble').Ensemble> =
-  TRelated | Promise<TRelated | null> | (() => import('../Relations/MorphTo').MorphTo<any>);
+  | TRelated
+  | Promise<TRelated | null>
+  | (() => import('../Relations/MorphTo').MorphTo<any>);
 
-export type MorphToManyAccessor<TRelated extends import('../Ensemble').Ensemble, TParent extends import('../Ensemble').Ensemble> =
-  TRelated[] | Promise<TRelated[]> | (() => import('../Relations/MorphToMany').MorphToMany<TRelated, TParent>);
+export type MorphToManyAccessor<
+  TRelated extends import('../Ensemble').Ensemble,
+  TParent extends import('../Ensemble').Ensemble,
+> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/MorphToMany').MorphToMany<TRelated, TParent>);
 
-export type MorphedByManyAccessor<TRelated extends import('../Ensemble').Ensemble, TParent extends import('../Ensemble').Ensemble> =
-  TRelated[] | Promise<TRelated[]> | (() => import('../Relations/MorphedByMany').MorphedByMany<TRelated, TParent>);
+export type MorphedByManyAccessor<
+  TRelated extends import('../Ensemble').Ensemble,
+  TParent extends import('../Ensemble').Ensemble,
+> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/MorphedByMany').MorphedByMany<TRelated, TParent>);
 
 /**
  * Decorator to convert a relationship method into a dynamic property
@@ -257,7 +306,7 @@ export type MorphedByManyAccessor<TRelated extends import('../Ensemble').Ensembl
 export function DynamicRelation(value: any, context?: any) {
   // Modern decorator (TypeScript 5+ with context as second parameter)
   if (context && context.kind === 'method') {
-    context.addInitializer(function(this: any) {
+    context.addInitializer(function (this: any) {
       const methodName = context.name;
       const originalMethod = value;
 
@@ -266,26 +315,26 @@ export function DynamicRelation(value: any, context?: any) {
         get() {
           const relation = originalMethod.call(this);
 
-          const fn: any = function(...args: any[]) {
+          const fn: any = function (...args: any[]) {
             return relation;
           };
 
-          fn.then = function(resolve?: any, reject?: any) {
+          fn.then = function (resolve?: any, reject?: any) {
             return relation.getResults().then(resolve, reject);
           };
 
-          fn.catch = function(reject?: any) {
+          fn.catch = function (reject?: any) {
             return relation.getResults().catch(reject);
           };
 
-          fn.finally = function(onFinally?: any) {
+          fn.finally = function (onFinally?: any) {
             return relation.getResults().finally(onFinally);
           };
 
           return fn;
         },
         configurable: true,
-        enumerable: false
+        enumerable: false,
       });
     });
 
@@ -303,22 +352,22 @@ export function DynamicRelation(value: any, context?: any) {
     delete descriptor.value;
     delete descriptor.writable;
 
-    descriptor.get = function(this: any) {
+    descriptor.get = function (this: any) {
       const relation = originalMethod.call(this);
 
-      const fn: any = function(...args: any[]) {
+      const fn: any = function (...args: any[]) {
         return relation;
       };
 
-      fn.then = function(resolve?: any, reject?: any) {
+      fn.then = function (resolve?: any, reject?: any) {
         return relation.getResults().then(resolve, reject);
       };
 
-      fn.catch = function(reject?: any) {
+      fn.catch = function (reject?: any) {
         return relation.getResults().catch(reject);
       };
 
-      fn.finally = function(onFinally?: any) {
+      fn.finally = function (onFinally?: any) {
         return relation.getResults().finally(onFinally);
       };
 
@@ -335,34 +384,30 @@ export function DynamicRelation(value: any, context?: any) {
  * Helper to define dynamic relation getters programmatically
  * Use this if you can't use decorators
  */
-export function defineDynamicRelation<T>(
-  target: T,
-  relationName: string,
-  relationMethod: () => any
-): void {
+export function defineDynamicRelation<T>(target: T, relationName: string, relationMethod: () => any): void {
   Object.defineProperty(target, relationName, {
     get(this: any) {
       const relation = relationMethod.call(this);
 
-      const fn: any = function(...args: any[]) {
+      const fn: any = function (...args: any[]) {
         return relation;
       };
 
-      fn.then = function(resolve?: any, reject?: any) {
+      fn.then = function (resolve?: any, reject?: any) {
         return relation.getResults().then(resolve, reject);
       };
 
-      fn.catch = function(reject?: any) {
+      fn.catch = function (reject?: any) {
         return relation.getResults().catch(reject);
       };
 
-      fn.finally = function(onFinally?: any) {
+      fn.finally = function (onFinally?: any) {
         return relation.getResults().finally(onFinally);
       };
 
       return fn;
     },
     enumerable: false,
-    configurable: true
+    configurable: true,
   });
 }

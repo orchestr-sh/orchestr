@@ -370,14 +370,20 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    * Get all of the models from the database
    */
   static async all<T extends Ensemble>(this: { new (): T }, columns: string[] = ['*']): Promise<T[]> {
-    return (this as any).query().select(...columns).get();
+    return (this as any)
+      .query()
+      .select(...columns)
+      .get();
   }
 
   /**
    * Find a model by its primary key
    */
   static async find<T extends Ensemble>(this: { new (): T }, id: any, columns: string[] = ['*']): Promise<T | null> {
-    return (this as any).query().select(...columns).find(id);
+    return (this as any)
+      .query()
+      .select(...columns)
+      .find(id);
   }
 
   /**
@@ -396,13 +402,20 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    */
   static async findMany<T extends Ensemble>(this: { new (): T }, ids: any[], columns: string[] = ['*']): Promise<T[]> {
     const instance = new this();
-    return (this as any).query().select(...columns).whereIn(instance.getKeyName(), ids).get();
+    return (this as any)
+      .query()
+      .select(...columns)
+      .whereIn(instance.getKeyName(), ids)
+      .get();
   }
 
   /**
    * Create a new instance and save it to the database
    */
-  static async create<T extends Ensemble>(this: { new (attrs?: Record<string, any>): T }, attributes: Record<string, any>): Promise<T> {
+  static async create<T extends Ensemble>(
+    this: { new (attrs?: Record<string, any>): T },
+    attributes: Record<string, any>
+  ): Promise<T> {
     const instance = new this(attributes);
     await instance.save();
     return instance;
@@ -481,10 +494,7 @@ export abstract class Ensemble extends HasRelationshipsMixin {
     const connection = this.getConnection();
     const table = this.getTable();
 
-    await connection
-      .table(table)
-      .where(this.getKeyName(), '=', this.getKey())
-      .update(dirty);
+    await connection.table(table).where(this.getKeyName(), '=', this.getKey()).update(dirty);
 
     this.syncOriginal();
 
@@ -602,10 +612,7 @@ export abstract class Ensemble extends HasRelationshipsMixin {
     const connection = this.getConnection();
     const table = this.getTable();
 
-    await connection
-      .table(table)
-      .where(this.getKeyName(), '=', this.getKey())
-      .delete();
+    await connection.table(table).where(this.getKeyName(), '=', this.getKey()).delete();
 
     this.exists = false;
 

@@ -71,11 +71,7 @@ export class MorphedByMany<TRelated extends Ensemble, TParent extends Ensemble> 
         '=',
         `${this.getQualifiedForeignPivotKeyName()}` // Swapped for inverse
       )
-      .where(
-        `${this.table}.${this.morphType}`,
-        '=',
-        this.morphClass
-      );
+      .where(`${this.table}.${this.morphType}`, '=', this.morphClass);
   }
 
   /**
