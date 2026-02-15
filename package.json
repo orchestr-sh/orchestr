@@ -1,9 +1,26 @@
 {
   "name": "@orchestr-sh/orchestr",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "A 1:1 Laravel replica in TypeScript - Brings Laravel's elegant syntax and architecture to Node.js",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./Facades": {
+      "types": "./dist/Facades/index.d.ts",
+      "import": "./dist/Facades/index.js",
+      "require": "./dist/Facades/index.js"
+    },
+    "./Events": {
+      "types": "./dist/Events/index.d.ts",
+      "import": "./dist/Events/index.js",
+      "require": "./dist/Events/index.js"
+    }
+  },
   "bin": {
     "orchestr": "dist/Console/orchestr.js"
   },

@@ -28,6 +28,7 @@ export { Controller } from './Routing/Controller';
 export { Facade } from './Support/Facade';
 export { Route } from './Facades/Route';
 export { Config } from './Facades/Config';
+export { Event as EventFacade } from './Facades/Event';
 
 // Helpers
 export { loadRoutes, base_path, routes_path } from './Support/helpers';
@@ -123,6 +124,13 @@ export { MakeMigrationCommand } from './Console/Commands/MakeMigrationCommand';
 export { SeedCommand } from './Console/Commands/SeedCommand';
 export { MakeSeederCommand } from './Console/Commands/MakeSeederCommand';
 
+// Console Commands - Events
+export { MakeEventCommand } from './Console/Commands/MakeEventCommand';
+export { MakeListenerCommand } from './Console/Commands/MakeListenerCommand';
+export { EventListCommand } from './Console/Commands/EventListCommand';
+export { EventCacheCommand } from './Console/Commands/EventCacheCommand';
+export { EventClearCommand } from './Console/Commands/EventClearCommand';
+
 // Database Types
 export type { DatabaseAdapter, DatabaseConfig, QueryResult } from './Database/Contracts/DatabaseAdapter';
 export type {
@@ -144,9 +152,24 @@ export type { MigrationData } from './Database/Migrations/MigrationRepository';
 
 // Events
 export { Event } from './Events/Event';
+export type { EventClass } from './Events/Event';
 export { Dispatcher } from './Events/Dispatcher';
 export { EventServiceProvider } from './Events/EventServiceProvider';
 export { Dispatchable, applyDispatchable } from './Events/Concerns/Dispatchable';
+
+// Model Events
+export {
+  ModelEvent,
+  ModelRetrieved,
+  ModelCreating,
+  ModelCreated,
+  ModelUpdating,
+  ModelUpdated,
+  ModelSaving,
+  ModelSaved,
+  ModelDeleting,
+  ModelDeleted,
+} from './Database/Ensemble/Events';
 
 // Event Contracts & Types
 export type { DispatcherContract } from './Events/Contracts/Dispatcher';

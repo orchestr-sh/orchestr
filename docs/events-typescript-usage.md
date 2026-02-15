@@ -42,8 +42,9 @@ await UserRegisteredEvent.until(user);
 
 ## Solution 2: Use Event facade (Recommended)
 
-The recommended approach is to use the Event facade for dispatching:
+The recommended approach is to use the Event facade for dispatching. You can import it in two ways:
 
+**Option A: Subpath import (cleaner)**
 ```typescript
 import { Event } from '@orchestr-sh/orchestr/Facades';
 
@@ -58,6 +59,14 @@ Event.dispatch(new UserRegistered(user));
 Event.dispatchIf(condition, new UserRegistered(user));
 Event.dispatchUnless(condition, new UserRegistered(user));
 await Event.until(new UserRegistered(user));
+```
+
+**Option B: Named import from main package**
+```typescript
+import { EventFacade } from '@orchestr-sh/orchestr';
+
+// Use EventFacade to avoid naming conflict with Event base class
+EventFacade.dispatch(new UserRegistered(user));
 ```
 
 ## Solution 3: Export with proper typing
