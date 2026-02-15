@@ -72,6 +72,15 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
     const instance = new ModelClass(attributes, exists);
     (instance as any).exists = exists;
     (instance as any).syncOriginal();
+
+    // Fire retrieved event if this is from database
+    if (exists) {
+      // Fire asynchronously but don't wait for it
+      (instance as any).fireModelEvent?.('retrieved').catch(() => {
+        // Silently ignore errors from event firing during hydration
+      });
+    }
+
     return instance;
   }
 

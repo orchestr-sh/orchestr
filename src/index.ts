@@ -142,6 +142,16 @@ export type { CommandOptions } from './Console/Command';
 export type { MigrationOptions } from './Database/Migrations/Migrator';
 export type { MigrationData } from './Database/Migrations/MigrationRepository';
 
+// Events
+export { Event } from './Events/Event';
+export { Dispatcher } from './Events/Dispatcher';
+export { EventServiceProvider } from './Events/EventServiceProvider';
+export { Dispatchable, applyDispatchable } from './Events/Concerns/Dispatchable';
+
+// Event Contracts & Types
+export type { DispatcherContract } from './Events/Contracts/Dispatcher';
+export type { EventListener, EventSubscriber, ListenerInterface, ListenerClosure, EventPayload, QueuedListener } from './Events/types';
+
 // Types
 export type { HttpMethod, RouteAction, Middleware } from './Routing/Route';
 export type { Abstract, Concrete, Binding } from './Container/Container';

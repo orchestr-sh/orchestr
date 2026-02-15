@@ -9,6 +9,17 @@ import { DatabaseManager } from '../DatabaseManager';
 import { Connection } from '../Connection';
 import { EnsembleBuilder } from './EnsembleBuilder';
 import { HasRelationshipsMixin } from './Concerns/HasRelationships';
+import {
+  ModelRetrieved,
+  ModelCreating,
+  ModelCreated,
+  ModelUpdating,
+  ModelUpdated,
+  ModelSaving,
+  ModelSaved,
+  ModelDeleting,
+  ModelDeleted,
+} from './Events';
 
 export abstract class Ensemble extends HasRelationshipsMixin {
   /**
@@ -444,6 +455,11 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    * Save the model to the database
    */
   async save(): Promise<boolean> {
+    // Fire saving event
+    if (await this.fireModelEvent('saving') === false) {
+      return false;
+    }
+
     if (this.exists) {
       return this.performUpdate();
     }
@@ -455,6 +471,11 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    * Perform a model insert operation
    */
   protected async performInsert(): Promise<boolean> {
+    // Fire creating event
+    if (await this.fireModelEvent('creating') === false) {
+      return false;
+    }
+
     const attributes = this.getAttributesForInsert();
 
     if (this.timestamps) {
@@ -474,6 +495,12 @@ export abstract class Ensemble extends HasRelationshipsMixin {
     this.wasRecentlyCreated = true;
     this.syncOriginal();
 
+    // Fire created event
+    await this.fireModelEvent('created');
+
+    // Fire saved event
+    await this.fireModelEvent('saved');
+
     return true;
   }
 
@@ -487,6 +514,11 @@ export abstract class Ensemble extends HasRelationshipsMixin {
       return true;
     }
 
+    // Fire updating event
+    if (await this.fireModelEvent('updating') === false) {
+      return false;
+    }
+
     if (this.timestamps) {
       this.updateTimestamps();
     }
@@ -497,6 +529,12 @@ export abstract class Ensemble extends HasRelationshipsMixin {
     await connection.table(table).where(this.getKeyName(), '=', this.getKey()).update(dirty);
 
     this.syncOriginal();
+
+    // Fire updated event
+    await this.fireModelEvent('updated');
+
+    // Fire saved event
+    await this.fireModelEvent('saved');
 
     return true;
   }
@@ -609,12 +647,20 @@ export abstract class Ensemble extends HasRelationshipsMixin {
       return false;
     }
 
+    // Fire deleting event
+    if (await this.fireModelEvent('deleting') === false) {
+      return false;
+    }
+
     const connection = this.getConnection();
     const table = this.getTable();
 
     await connection.table(table).where(this.getKeyName(), '=', this.getKey()).delete();
 
     this.exists = false;
+
+    // Fire deleted event
+    await this.fireModelEvent('deleted');
 
     return true;
   }
@@ -706,5 +752,69 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    */
   getCreatedAtColumn(): string | null {
     return this.timestamps ? (this.constructor as typeof Ensemble).CREATED_AT : null;
+  }
+
+  /**
+   * Fire the given model event
+   *
+   * @param event - Event name (saving, saved, creating, created, etc.)
+   * @returns false if event is halting and a listener returned false, undefined otherwise
+   */
+  protected async fireModelEvent(event: string): Promise<boolean | undefined> {
+    // Try to get the event dispatcher
+    let dispatcher: any;
+    try {
+      // Import the Dispatcher and get from static resolver if available
+      const { Dispatcher } = await import('../../Events/Dispatcher');
+      const { Facade } = await import('../../Support/Facade');
+
+      try {
+        dispatcher = Facade.getFacadeApplication()?.make?.('events');
+      } catch {
+        // No dispatcher registered
+      }
+    } catch (error) {
+      // Event system not set up, skip firing events
+      return undefined;
+    }
+
+    if (!dispatcher || typeof dispatcher.dispatch !== 'function') {
+      return undefined;
+    }
+
+    // Map event names to event classes
+    const eventMap: Record<string, any> = {
+      retrieved: ModelRetrieved,
+      creating: ModelCreating,
+      created: ModelCreated,
+      updating: ModelUpdating,
+      updated: ModelUpdated,
+      saving: ModelSaving,
+      saved: ModelSaved,
+      deleting: ModelDeleting,
+      deleted: ModelDeleted,
+    };
+
+    const EventClass = eventMap[event];
+    if (!EventClass) {
+      return undefined;
+    }
+
+    const eventInstance = new EventClass(this);
+
+    // For halting events (creating, updating, saving, deleting), use until()
+    // which returns the first non-null result (false halts the operation)
+    if (['creating', 'updating', 'saving', 'deleting'].includes(event)) {
+      const result = await dispatcher.until?.(eventInstance);
+      // If any listener returns false, halt the operation
+      if (result === false) {
+        return false;
+      }
+    } else {
+      // For non-halting events, just dispatch normally
+      await dispatcher.dispatch(eventInstance);
+    }
+
+    return undefined;
   }
 }

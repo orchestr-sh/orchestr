@@ -11,6 +11,7 @@ export class Application extends Container {
   private booted: boolean = false;
   private serviceProviders: ServiceProvider[] = [];
   private loadedProviders: Map<string, boolean> = new Map();
+  private eventDiscoveryPaths: string[] = [];
 
   constructor(basePath: string = process.cwd()) {
     super();
@@ -219,5 +220,46 @@ export class Application extends Container {
    */
   hasBeenBootstrapped(): boolean {
     return this.booted;
+  }
+
+  /**
+   * Configure event discovery paths
+   *
+   * Allows customizing which directories should be scanned for event listeners
+   * during automatic discovery.
+   *
+   * @param {Object} options - Configuration options
+   * @param {string[]} options.discover - Array of directory paths to scan for listeners
+   * @returns {this} The application instance for chaining
+   *
+   * @example
+   * ```typescript
+   * app.withEvents({
+   *   discover: [
+   *     app.path('Listeners'),
+   *     app.path('Domain/Listeners')
+   *   ]
+   * })
+   * ```
+   */
+  withEvents(options: { discover?: string[] } = {}): this {
+    if (options.discover) {
+      this.eventDiscoveryPaths = options.discover;
+    }
+    return this;
+  }
+
+  /**
+   * Get the event discovery paths
+   *
+   * Returns the configured paths for event listener discovery.
+   * If no paths are configured, defaults to the 'Listeners' directory.
+   *
+   * @returns {string[]} Array of absolute directory paths
+   */
+  getEventDiscoveryPaths(): string[] {
+    return this.eventDiscoveryPaths.length > 0
+      ? this.eventDiscoveryPaths
+      : [this.path('Listeners')];
   }
 }

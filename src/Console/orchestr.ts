@@ -16,6 +16,11 @@ import { MigrateStatusCommand } from './Commands/MigrateStatusCommand';
 import { MakeMigrationCommand } from './Commands/MakeMigrationCommand';
 import { SeedCommand } from './Commands/SeedCommand';
 import { MakeSeederCommand } from './Commands/MakeSeederCommand';
+import { MakeEventCommand } from './Commands/MakeEventCommand';
+import { MakeListenerCommand } from './Commands/MakeListenerCommand';
+import { EventListCommand } from './Commands/EventListCommand';
+import { EventCacheCommand } from './Commands/EventCacheCommand';
+import { EventClearCommand } from './Commands/EventClearCommand';
 
 // Create application instance
 const app = new Application();
@@ -34,6 +39,11 @@ class OrchestrKernel extends ConsoleKernel {
       new MakeMigrationCommand(this.app),
       new SeedCommand(this.app),
       new MakeSeederCommand(this.app),
+      new MakeEventCommand(this.app),
+      new MakeListenerCommand(this.app),
+      new EventListCommand(this.app),
+      new EventCacheCommand(this.app),
+      new EventClearCommand(this.app),
     ]);
   }
 }

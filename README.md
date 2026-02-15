@@ -9,6 +9,37 @@ npm install @orchestr-sh/orchestr reflect-metadata drizzle-orm
 npm install better-sqlite3 # or your preferred database driver
 ```
 
+### CLI Setup
+
+After installation, the `orchestr` command will be available in your project via `npx`:
+
+```bash
+# Run orchestr commands
+npx orchestr make:event UserRegistered
+npx orchestr make:migration create_users_table
+npx orchestr migrate
+
+# Or add to package.json scripts for convenience
+{
+  "scripts": {
+    "orchestr": "orchestr"
+  }
+}
+
+# Then run with npm
+npm run orchestr make:event UserRegistered
+```
+
+For global installation (optional):
+
+```bash
+npm install -g @orchestr-sh/orchestr
+
+# Now use orchestr directly
+orchestr make:event UserRegistered
+orchestr migrate
+```
+
 ## Quick Start
 
 ```typescript
@@ -224,25 +255,25 @@ Laravel-style migrations with a fluent Schema builder.
 
 ```bash
 # Create a migration
-orchestr make:migration create_users_table --create=users
+npx orchestr make:migration create_users_table --create=users
 
 # Run migrations
-orchestr migrate
+npx orchestr migrate
 
 # Rollback last batch
-orchestr migrate:rollback
+npx orchestr migrate:rollback
 
 # Rollback all migrations
-orchestr migrate:reset
+npx orchestr migrate:reset
 
 # Drop all tables and re-run migrations
-orchestr migrate:fresh
+npx orchestr migrate:fresh
 
 # Rollback and re-run all migrations
-orchestr migrate:refresh
+npx orchestr migrate:refresh
 
 # Check migration status
-orchestr migrate:status
+npx orchestr migrate:status
 ```
 
 ### Creating Tables
@@ -310,13 +341,13 @@ Populate your database with test or initial data.
 
 ```bash
 # Create a seeder
-orchestr make:seeder UserSeeder
+npx orchestr make:seeder UserSeeder
 
 # Run all seeders (runs DatabaseSeeder)
-orchestr db:seed
+npx orchestr db:seed
 
 # Run a specific seeder
-orchestr db:seed --class=UserSeeder
+npx orchestr db:seed --class=UserSeeder
 ```
 
 ### Creating Seeders
@@ -350,6 +381,227 @@ export default class DatabaseSeeder extends Seeder {
     await this.callMany([UserSeeder, PostSeeder]);
   }
 }
+```
+
+## Events and Listeners
+
+Laravel-style event system with listeners, subscribers, and automatic discovery.
+
+### Creating Events
+
+Events are simple classes that hold data about something that happened in your application.
+
+```typescript
+import { Event } from '@orchestr-sh/orchestr';
+
+export class UserRegistered extends Event {
+  constructor(public readonly user: User) {
+    super();
+  }
+}
+
+// Create via command
+npx orchestr make:event UserRegistered
+```
+
+### Creating Listeners
+
+Listeners handle events with a `handle` method.
+
+```typescript
+export class SendWelcomeEmail {
+  handle(event: UserRegistered): void {
+    // Send welcome email to event.user
+  }
+}
+
+// Create via command
+npx orchestr make:listener SendWelcomeEmail --event=UserRegistered
+npx orchestr make:listener ProcessOrder --queued  // For queued listeners
+```
+
+### Registering Events and Listeners
+
+Register in your `EventServiceProvider`:
+
+```typescript
+import { EventServiceProvider } from '@orchestr-sh/orchestr';
+
+export class AppEventServiceProvider extends EventServiceProvider {
+  protected listen = {
+    'UserRegistered': [
+      'SendWelcomeEmail',
+      'CreateUserProfile',
+    ],
+    'OrderPlaced': 'SendOrderConfirmation',
+  };
+}
+```
+
+Or use the Event facade to register listeners dynamically:
+
+```typescript
+import { Event } from '@orchestr-sh/orchestr';
+
+// Class-based listener
+Event.listen(UserRegistered, SendWelcomeEmail);
+
+// Closure listener
+Event.listen(UserRegistered, (event) => {
+  console.log(`User registered: ${event.user.email}`);
+});
+
+// Multiple events
+Event.listen(['UserRegistered', 'UserUpdated'], LogUserActivity);
+
+// Wildcard listeners
+Event.listen('user.*', (event) => {
+  // Handles user.registered, user.updated, etc.
+});
+```
+
+### Dispatching Events
+
+```typescript
+import { Event } from '@orchestr-sh/orchestr';
+
+// Dispatch via facade
+Event.dispatch(new UserRegistered(user));
+
+// Static dispatch on event class
+UserRegistered.dispatch(user);
+
+// Conditional dispatch
+UserRegistered.dispatchIf(user.isActive, user);
+UserRegistered.dispatchUnless(user.isAdmin, user);
+
+// Dispatch until first non-null response (halting)
+const result = UserRegistered.until(user);
+if (result === false) {
+  // Listener vetoed the operation
+}
+
+// Queue events for later
+Event.push('user.registered', [user]);
+Event.flush('user.registered'); // Dispatch all queued
+```
+
+### Event Subscribers
+
+Subscribers listen to multiple events in a single class:
+
+```typescript
+import { EventSubscriber, Dispatcher } from '@orchestr-sh/orchestr';
+
+export class UserEventSubscriber implements EventSubscriber {
+  subscribe(events: Dispatcher): void {
+    events.listen('UserRegistered', this.onRegistered.bind(this));
+    events.listen('UserUpdated', this.onUpdated.bind(this));
+    events.listen('user.*', this.logActivity.bind(this));
+  }
+
+  onRegistered(event: UserRegistered): void {
+    // Handle registration
+  }
+
+  onUpdated(event: UserUpdated): void {
+    // Handle update
+  }
+
+  logActivity(event: any): void {
+    // Log any user activity
+  }
+}
+
+// Register in EventServiceProvider
+protected subscribe = [
+  'UserEventSubscriber',
+];
+```
+
+### Model Events
+
+Ensemble models automatically dispatch lifecycle events:
+
+```typescript
+import { Event, ModelCreated, ModelUpdated, ModelDeleting } from '@orchestr-sh/orchestr';
+
+// Listen to model events
+Event.listen(ModelCreated, (event) => {
+  console.log('Model created:', event.model);
+});
+
+Event.listen(ModelDeleting, (event) => {
+  // Prevent deletion by returning false
+  if (event.model.isProtected) {
+    return false;
+  }
+});
+
+// Listen to specific model events using wildcards
+Event.listen('User.*', (event) => {
+  // Handles all User model events
+});
+```
+
+Available model events:
+- `ModelRetrieved` - After a model is retrieved from database
+- `ModelCreating` - Before a model is created (can halt)
+- `ModelCreated` - After a model is created
+- `ModelUpdating` - Before a model is updated (can halt)
+- `ModelUpdated` - After a model is updated
+- `ModelSaving` - Before a model is saved (can halt)
+- `ModelSaved` - After a model is saved
+- `ModelDeleting` - Before a model is deleted (can halt)
+- `ModelDeleted` - After a model is deleted
+
+### Testing Events
+
+Use `Event.fake()` to test event dispatching:
+
+```typescript
+import { Event } from '@orchestr-sh/orchestr';
+
+// Fake all events
+Event.fake();
+
+// Your code that dispatches events
+await userService.register(userData);
+
+// Assert events were dispatched
+Event.assertDispatched(UserRegistered);
+Event.assertDispatched(UserRegistered, (event) => {
+  return event.user.email === 'test@example.com';
+});
+Event.assertDispatchedTimes(UserRegistered, 2);
+Event.assertNotDispatched(UserDeleted);
+Event.assertNothingDispatched();
+
+// Fake specific events only
+Event.fake([UserRegistered, OrderPlaced]);
+
+// Fake all except specific events
+Event.fakeExcept([UserDeleted]);
+
+// Scoped faking
+const [result, fake] = await Event.fakeFor(async (fake) => {
+  await someService.createUser();
+  return 'done';
+});
+fake.assertDispatched(UserRegistered);
+```
+
+### Console Commands
+
+```bash
+# Create event
+orchestr make:event UserRegistered
+orchestr make:event OrderPlaced
+
+# Create listener
+orchestr make:listener SendWelcomeEmail
+orchestr make:listener SendWelcomeEmail --event=UserRegistered
+orchestr make:listener ProcessOrder --queued
 ```
 
 ## Controllers
@@ -579,22 +831,33 @@ table.softDeletes(column)           // deleted_at timestamp
 
 ### CLI Commands
 
+All commands should be run with `npx orchestr` (or just `orchestr` if installed globally):
+
 ```bash
 # Migrations
-orchestr make:migration <name>          # Create migration
-orchestr make:migration <name> --create=<table>  # Create table migration
-orchestr make:migration <name> --table=<table>   # Update table migration
-orchestr migrate                        # Run migrations
-orchestr migrate:rollback               # Rollback last batch
-orchestr migrate:reset                  # Rollback all migrations
-orchestr migrate:refresh                # Reset and re-run migrations
-orchestr migrate:fresh                  # Drop all tables and migrate
-orchestr migrate:status                 # Show migration status
+npx orchestr make:migration <name>          # Create migration
+npx orchestr make:migration <name> --create=<table>  # Create table migration
+npx orchestr make:migration <name> --table=<table>   # Update table migration
+npx orchestr migrate                        # Run migrations
+npx orchestr migrate:rollback               # Rollback last batch
+npx orchestr migrate:reset                  # Rollback all migrations
+npx orchestr migrate:refresh                # Reset and re-run migrations
+npx orchestr migrate:fresh                  # Drop all tables and migrate
+npx orchestr migrate:status                 # Show migration status
 
 # Seeders
-orchestr make:seeder <name>             # Create seeder
-orchestr db:seed                        # Run DatabaseSeeder
-orchestr db:seed --class=<name>         # Run specific seeder
+npx orchestr make:seeder <name>             # Create seeder
+npx orchestr db:seed                        # Run DatabaseSeeder
+npx orchestr db:seed --class=<name>         # Run specific seeder
+
+# Events & Listeners
+npx orchestr make:event <name>              # Create event
+npx orchestr make:listener <name>           # Create listener
+npx orchestr make:listener <name> --event=<EventName>  # Create listener for event
+npx orchestr make:listener <name> --queued  # Create queued listener
+npx orchestr event:list                     # List all registered events
+npx orchestr event:cache                    # Cache discovered events
+npx orchestr event:clear                    # Clear event cache
 ```
 
 ## Features
@@ -610,6 +873,10 @@ orchestr db:seed --class=<name>         # Run specific seeder
 - ✅ Eager/Lazy Loading
 - ✅ Migrations with Schema Builder
 - ✅ Database Seeders
+- ✅ Events & Listeners
+- ✅ Event Subscribers
+- ✅ Model Lifecycle Events
+- ✅ Event Testing (Fakes & Assertions)
 - ✅ Soft Deletes
 - ✅ Attribute Casting
 - ✅ Timestamps
