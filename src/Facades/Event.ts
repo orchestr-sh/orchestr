@@ -330,9 +330,36 @@ class EventFacadeClass extends Facade {
 }
 
 /**
- * Export facade with proper typing
+ * Export facade with Proxy for static method calls
  */
-export const Event = EventFacadeClass as typeof EventFacadeClass & Dispatcher;
+export const Event = new Proxy(EventFacadeClass, {
+  get(target, prop) {
+    // First check if it's a static method on the facade class itself
+    if (prop in target) {
+      const value = (target as any)[prop];
+      if (typeof value === 'function') {
+        return value.bind(target);
+      }
+      return value;
+    }
+
+    // Then try to get from the facade root (the actual Dispatcher instance)
+    try {
+      const root = (target as any).getFacadeRoot();
+      if (root && prop in root) {
+        const value = root[prop];
+        if (typeof value === 'function') {
+          return (...args: any[]) => value.apply(root, args);
+        }
+        return value;
+      }
+    } catch (error) {
+      // Facade root not available yet, that's okay
+    }
+
+    return undefined;
+  },
+}) as unknown as typeof EventFacadeClass & Dispatcher;
 
 /**
  * Re-export EventFake for direct use
