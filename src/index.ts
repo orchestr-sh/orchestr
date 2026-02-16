@@ -31,6 +31,7 @@ export { Config } from './Facades/Config';
 export { Event as EventFacade } from './Facades/Event';
 export { Queue as QueueFacade } from './Facades/Queue';
 export { Bus } from './Facades/Bus';
+export { Cache } from './Facades/Cache';
 
 // Helpers
 export { loadRoutes, base_path, routes_path } from './Support/helpers';
@@ -46,6 +47,7 @@ export { config } from './Support/helpers';
 export { RouteServiceProvider } from './Providers/RouteServiceProvider';
 export { DatabaseServiceProvider } from './Database/DatabaseServiceProvider';
 export { QueueServiceProvider } from './Queue/QueueServiceProvider';
+export { CacheServiceProvider } from './Cache/CacheServiceProvider';
 
 // Database
 export { DatabaseManager } from './Database/DatabaseManager';
@@ -150,6 +152,11 @@ export { QueuePruneBatchesCommand } from './Console/Commands/QueuePruneBatchesCo
 export { QueuePruneFailedCommand } from './Console/Commands/QueuePruneFailedCommand';
 export { MakeJobCommand } from './Console/Commands/MakeJobCommand';
 
+// Console Commands - Cache
+export { CacheClearCommand } from './Console/Commands/CacheClearCommand';
+export { CacheForgetCommand } from './Console/Commands/CacheForgetCommand';
+export { CacheTableCommand } from './Console/Commands/CacheTableCommand';
+
 // Database Types
 export type { DatabaseAdapter, DatabaseConfig, QueryResult } from './Database/Contracts/DatabaseAdapter';
 export type {
@@ -244,6 +251,38 @@ export { WorkerStopping } from './Queue/Events/WorkerStopping';
 // Listener Queue Contract
 export { isShouldQueue } from './Listeners/Contracts/ShouldQueue';
 export type { ShouldQueue } from './Listeners/Contracts/ShouldQueue';
+
+// Cache
+export { CacheManager } from './Cache/CacheManager';
+export type { CacheConfig, StoreConfig, StoreFactory } from './Cache/CacheManager';
+export { Repository as CacheRepository } from './Cache/Repository';
+
+// Cache Contracts
+export type { Store as CacheStore } from './Cache/Contracts/Store';
+export type { RepositoryContract as CacheRepositoryContract } from './Cache/Contracts/Repository';
+export type { LockContract } from './Cache/Contracts/Lock';
+
+// Cache Stores
+export { ArrayStore } from './Cache/Stores/ArrayStore';
+export { FileStore } from './Cache/Stores/FileStore';
+export { DatabaseStore as DatabaseCacheStore } from './Cache/Stores/DatabaseStore';
+export { NullStore as NullCacheStore } from './Cache/Stores/NullStore';
+
+// Cache Locks
+export { Lock as CacheLockBase } from './Cache/Locks/Lock';
+export { CacheLock } from './Cache/Locks/CacheLock';
+export { LockTimeoutException } from './Cache/Locks/LockTimeoutException';
+
+// Cache Tags
+export { TaggedCache } from './Cache/Tags/TaggedCache';
+export { TagSet } from './Cache/Tags/TagSet';
+
+// Cache Events
+export { CacheHit } from './Cache/Events/CacheHit';
+export { CacheMissed } from './Cache/Events/CacheMissed';
+export { KeyWritten } from './Cache/Events/KeyWritten';
+export { KeyForgotten } from './Cache/Events/KeyForgotten';
+export { CacheFlushed } from './Cache/Events/CacheFlushed';
 
 // Types
 export type { HttpMethod, RouteAction, Middleware } from './Routing/Route';
