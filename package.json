@@ -34,17 +34,18 @@
     "prepublishOnly": "npm run build",
     "dev": "tsx watch examples/basic-app/server.ts",
     "prepare": "husky",
-    "lint": "eslint 'src/**/*.ts'",
-    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "lint": "oxlint 'src/**/*.ts' --type-aware --fix && prettier --write 'src/**/*.ts'",
     "format": "prettier --write 'src/**/*.ts'",
     "format:check": "prettier --check 'src/**/*.ts'",
     "test": "vitest run",
+    "test:lint": "oxlint 'src/**/*.ts' --type-aware && prettier --check 'src/**/*.ts'",
+    "test:types": "oxlint 'src/**/*.ts' --type-aware --type-check",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
   "lint-staged": {
     "*.ts": [
-      "eslint --fix",
+      "oxlint --type-aware --fix",
       "prettier --write"
     ]
   },
@@ -74,28 +75,23 @@
   },
   "homepage": "https://github.com/orchestr-sh/orchestr#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "drizzle-orm": ">=0.30.0",
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@types/better-sqlite3": "^7.6.9",
     "@types/node": "^22.10.5",
-    "@typescript-eslint/eslint-plugin": "^8.55.0",
-    "@typescript-eslint/parser": "^8.55.0",
     "@vitest/coverage-v8": "^4.0.18",
-    "eslint": "^9.39.2",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
+    "oxlint": "^1.49.0",
+    "oxlint-tsgolint": "^0.14.2",
     "prettier": "^3.8.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.55.0",
     "vitest": "^4.0.18"
   },
   "peerDependencies": {
