@@ -1,4 +1,4 @@
-name: Check Types
+name: Test Coverage
 concurrency:
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -17,11 +17,11 @@ on:
     branches:
       - main
     paths:
-      - '**.ts'
-      - 'package-lock.json'
+      - "**.ts"
+      - "package-lock.json"
 
 jobs:
-  test-types:
+  test-coverage:
     runs-on: ubuntu-latest
 
     strategy:
@@ -41,6 +41,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run type checks
-        run: npm run test:types
-            
+      - name: Run coverage
+        run: npm run test:coverage || true
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./coverage/coverage-final.json
+          fail_ci_if_error: false

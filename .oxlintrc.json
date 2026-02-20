@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "vitest"],
+  "plugins": ["jsdoc", "typescript", "vitest"],
   "categories": {},
   "rules": {
     "@typescript-eslint/no-explicit-any": "off",
@@ -34,7 +34,9 @@
   "ignorePatterns": [
     "dist/**",
     "node_modules/**",
+    "coverage/**",
     "**/*.js",
-    "**/*.d.ts"
+    "**/*.d.ts",
+    "vitest.config.ts"
   ]
 }
