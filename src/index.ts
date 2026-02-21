@@ -135,6 +135,7 @@ export { MakeSeederCommand } from './Console/Commands/MakeSeederCommand';
 // Console Commands - Events
 export { MakeEventCommand } from './Console/Commands/MakeEventCommand';
 export { MakeListenerCommand } from './Console/Commands/MakeListenerCommand';
+export { MakeControllerCommand } from './Console/Commands/MakeControllerCommand';
 export { EventListCommand } from './Console/Commands/EventListCommand';
 export { EventCacheCommand } from './Console/Commands/EventCacheCommand';
 export { EventClearCommand } from './Console/Commands/EventClearCommand';

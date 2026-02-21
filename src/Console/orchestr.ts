@@ -18,6 +18,7 @@ import { SeedCommand } from './Commands/SeedCommand';
 import { MakeSeederCommand } from './Commands/MakeSeederCommand';
 import { MakeEventCommand } from './Commands/MakeEventCommand';
 import { MakeListenerCommand } from './Commands/MakeListenerCommand';
+import { MakeControllerCommand } from './Commands/MakeControllerCommand';
 import { EventListCommand } from './Commands/EventListCommand';
 import { EventCacheCommand } from './Commands/EventCacheCommand';
 import { EventClearCommand } from './Commands/EventClearCommand';
@@ -41,6 +42,7 @@ class OrchestrKernel extends ConsoleKernel {
       new MakeSeederCommand(this.app),
       new MakeEventCommand(this.app),
       new MakeListenerCommand(this.app),
+      new MakeControllerCommand(this.app),
       new EventListCommand(this.app),
       new EventCacheCommand(this.app),
       new EventClearCommand(this.app),

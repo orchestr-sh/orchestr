@@ -16,6 +16,7 @@ After installation, the `orchestr` command will be available in your project via
 ```bash
 # Run orchestr commands
 npx orchestr make:event UserRegistered
+npx orchestr make:controller UserController
 npx orchestr make:migration create_users_table
 npx orchestr migrate
 
@@ -602,9 +603,22 @@ orchestr make:event OrderPlaced
 orchestr make:listener SendWelcomeEmail
 orchestr make:listener SendWelcomeEmail --event=UserRegistered
 orchestr make:listener ProcessOrder --queued
+
+# Create controller
+orchestr make:controller UserController
+orchestr make:controller Api/UserController --path=app/Http/Controllers
 ```
 
 ## Controllers
+
+Create a new controller with the CLI:
+
+```bash
+npx orchestr make:controller UserController
+npx orchestr make:controller Api/UserController --path=app/Http/Controllers  # Custom path
+```
+
+The command creates a controller class extending the base `Controller` and creates `app/Http/Controllers/Controller.ts` if it does not exist.
 
 ```typescript
 import { Controller, Injectable, ValidateRequest } from '@orchestr-sh/orchestr';
@@ -858,6 +872,10 @@ npx orchestr make:listener <name> --queued  # Create queued listener
 npx orchestr event:list                     # List all registered events
 npx orchestr event:cache                    # Cache discovered events
 npx orchestr event:clear                    # Clear event cache
+
+# Controllers
+npx orchestr make:controller <name>         # Create controller (app/Http/Controllers)
+npx orchestr make:controller <name> --path=<path>  # Create controller in custom directory
 
 # Queue - Jobs
 npx orchestr make:job <name>                # Create job class
