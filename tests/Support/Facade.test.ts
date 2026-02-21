@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Facade, createFacade } from '../../src/Support/Facade';
-import { Application } from '../../src/Foundation/Application';
+import { Facade, createFacade } from '@/Support/Facade';
+import { Application } from '@/Foundation/Application';
 
 class TestService {
   greet(name: string): string {

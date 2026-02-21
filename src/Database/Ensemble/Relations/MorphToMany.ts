@@ -5,8 +5,8 @@
  * Example: Post has many Tags (where Tag can belong to many types via taggables table)
  */
 
-import { Ensemble } from '../Ensemble';
-import { EnsembleBuilder } from '../EnsembleBuilder';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
+import { EnsembleBuilder } from '@/Database/Ensemble/EnsembleBuilder';
 import { BelongsToMany } from './BelongsToMany';
 import { MorphMap } from './MorphMap';
 

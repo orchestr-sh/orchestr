@@ -5,9 +5,9 @@
  * Similar to the Event Dispatchable mixin, but for queue jobs.
  */
 
-import { Facade } from '../../Support/Facade';
-import { PendingDispatch } from '../PendingDispatch';
-import type { QueueManager } from '../QueueManager';
+import { Facade } from '@/Support/Facade';
+import { PendingDispatch } from '@/Queue/PendingDispatch';
+import type { QueueManager } from '@/Queue/QueueManager';
 
 export class JobDispatchable {
   /**

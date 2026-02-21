@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { IncomingMessage } from 'http';
 import { Socket } from 'net';
-import { Request } from '../../src/Routing/Request';
+import { Request } from '@/Routing/Request';
 
 function createMockIncomingMessage(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
   const socket = new Socket();
@@ -40,16 +40,12 @@ describe('Request', () => {
 
   describe('header()', () => {
     it('gets a header value', () => {
-      const req = new Request(
-        createMockIncomingMessage({ headers: { 'content-type': 'application/json' } })
-      );
+      const req = new Request(createMockIncomingMessage({ headers: { 'content-type': 'application/json' } }));
       expect(req.header('content-type')).toBe('application/json');
     });
 
     it('is case-insensitive', () => {
-      const req = new Request(
-        createMockIncomingMessage({ headers: { 'content-type': 'text/html' } })
-      );
+      const req = new Request(createMockIncomingMessage({ headers: { 'content-type': 'text/html' } }));
       expect(req.header('Content-Type')).toBe('text/html');
     });
 
@@ -142,9 +138,7 @@ describe('Request', () => {
 
   describe('ajax()', () => {
     it('returns true for XMLHttpRequest', () => {
-      const req = new Request(
-        createMockIncomingMessage({ headers: { 'x-requested-with': 'XMLHttpRequest' } })
-      );
+      const req = new Request(createMockIncomingMessage({ headers: { 'x-requested-with': 'XMLHttpRequest' } }));
       expect(req.ajax()).toBe(true);
     });
 
@@ -156,9 +150,7 @@ describe('Request', () => {
 
   describe('expectsJson()', () => {
     it('returns true for JSON accept header', () => {
-      const req = new Request(
-        createMockIncomingMessage({ headers: { accept: 'application/json' } })
-      );
+      const req = new Request(createMockIncomingMessage({ headers: { accept: 'application/json' } }));
       expect(req.expectsJson()).toBe(true);
     });
 
@@ -170,9 +162,7 @@ describe('Request', () => {
 
   describe('isJson()', () => {
     it('returns true for JSON content type', () => {
-      const req = new Request(
-        createMockIncomingMessage({ headers: { 'content-type': 'application/json' } })
-      );
+      const req = new Request(createMockIncomingMessage({ headers: { 'content-type': 'application/json' } }));
       expect(req.isJson()).toBe(true);
     });
   });

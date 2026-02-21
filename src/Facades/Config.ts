@@ -1,5 +1,5 @@
-import { Facade } from '../Support/Facade';
-import type { Config as ConfigClass } from '../Foundation/Config/Config';
+import { Facade } from '@/Support/Facade';
+import type { Config as ConfigClass } from '@/Foundation/Config/Config';
 
 /**
  * Config Facade - Static access to configuration

@@ -1,6 +1,6 @@
 import { ServerResponse } from 'http';
-import type { ViewFactory } from '../View/ViewFactory';
-import { getGlobalApp } from '../Support/helpers';
+import type { ViewFactory } from '@/View/ViewFactory';
+import { getGlobalApp } from '@/Support/helpers';
 
 // Lazily resolve the ViewFactory from the container at call time
 function resolveViewFactory(): ViewFactory | null {

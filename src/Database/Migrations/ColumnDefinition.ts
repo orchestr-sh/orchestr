@@ -4,7 +4,7 @@
  * Represents a column definition in a migration
  */
 
-import { ColumnDefinition as IColumnDefinition } from '../Contracts/Schema';
+import { ColumnDefinition as IColumnDefinition } from '@/Database/Contracts/Schema';
 
 export class ColumnDefinition implements IColumnDefinition {
   public name: string;

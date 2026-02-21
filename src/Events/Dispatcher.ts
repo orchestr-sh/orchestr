@@ -1,4 +1,4 @@
-import type { Container } from '../Container/Container';
+import type { Container } from '@/Container/Container';
 import type { DispatcherContract } from './Contracts/Dispatcher';
 import type { Event } from './Event';
 import type { EventListener, EventSubscriber, ListenerInterface } from './types';

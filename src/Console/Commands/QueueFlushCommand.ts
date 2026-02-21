@@ -5,9 +5,9 @@
  * Mirrors Laravel's `php artisan queue:flush`.
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import type { FailedJobProvider } from '../../Queue/Failed/FailedJobProvider';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import type { FailedJobProvider } from '@/Queue/Failed/FailedJobProvider';
 
 export class QueueFlushCommand extends Command {
   signature = 'queue:flush';

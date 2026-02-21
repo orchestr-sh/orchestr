@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { NullStore } from '../../src/Cache/Stores/NullStore';
+import { NullStore } from '@/Cache/Stores/NullStore';
 
 describe('NullStore', () => {
   const store = new NullStore();

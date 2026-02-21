@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { SyncDriver } from '../../src/Queue/Drivers/SyncDriver';
-import { NullDriver } from '../../src/Queue/Drivers/NullDriver';
-import { Job } from '../../src/Queue/Job';
+import { SyncDriver } from '@/Queue/Drivers/SyncDriver';
+import { NullDriver } from '@/Queue/Drivers/NullDriver';
+import { Job } from '@/Queue/Job';
 
 class TestDriverJob extends Job {
   public handled = false;

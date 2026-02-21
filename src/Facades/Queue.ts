@@ -33,8 +33,8 @@
  * ```
  */
 
-import { Facade } from '../Support/Facade';
-import type { QueueManager } from '../Queue/QueueManager';
+import { Facade } from '@/Support/Facade';
+import type { QueueManager } from '@/Queue/QueueManager';
 
 class QueueFacadeClass extends Facade {
   protected static getFacadeAccessor(): string {

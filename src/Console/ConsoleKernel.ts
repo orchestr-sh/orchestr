@@ -5,7 +5,7 @@
  */
 
 import { Command, CommandOptions } from './Command';
-import { Application } from '../Foundation/Application';
+import { Application } from '@/Foundation/Application';
 
 export class ConsoleKernel {
   protected commands: Map<string, Command> = new Map();

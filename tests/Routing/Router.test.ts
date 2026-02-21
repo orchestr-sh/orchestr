@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Router } from '../../src/Routing/Router';
-import { Application } from '../../src/Foundation/Application';
+import { Router } from '@/Routing/Router';
+import { Application } from '@/Foundation/Application';
 
 describe('Router', () => {
   let app: Application;

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Application } from '../../src/Foundation/Application';
-import { ServiceProvider } from '../../src/Foundation/ServiceProvider';
+import { Application } from '@/Foundation/Application';
+import { ServiceProvider } from '@/Foundation/ServiceProvider';
 
 class TestProvider extends ServiceProvider {
   public registered = false;

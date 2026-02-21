@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { setGlobalApp, getGlobalApp, config, base_path, routes_path, resource_path } from '../../src/Support/helpers';
-import { Application } from '../../src/Foundation/Application';
-import { Config } from '../../src/Foundation/Config/Config';
+import { setGlobalApp, getGlobalApp, config, base_path, routes_path, resource_path } from '@/Support/helpers';
+import { Application } from '@/Foundation/Application';
+import { Config } from '@/Foundation/Config/Config';
 
 describe('helpers', () => {
   describe('setGlobalApp() / getGlobalApp()', () => {

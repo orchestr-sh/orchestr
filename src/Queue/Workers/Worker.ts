@@ -8,15 +8,15 @@
  * Mirrors Laravel's Illuminate\Queue\Worker.
  */
 
-import type { QueueManager } from '../QueueManager';
-import type { QueueDriver, QueueDriverJob } from '../Contracts/QueueDriver';
-import type { Job } from '../Job';
-import type { JobMiddleware } from '../Middleware/JobMiddleware';
-import { JobPayload, type JobPayloadData } from '../JobPayload';
+import type { QueueManager } from '@/Queue/QueueManager';
+import type { QueueDriver, QueueDriverJob } from '@/Queue/Contracts/QueueDriver';
+import type { Job } from '@/Queue/Job';
+import type { JobMiddleware } from '@/Queue/Middleware/JobMiddleware';
+import { JobPayload, type JobPayloadData } from '@/Queue/JobPayload';
 import type { WorkerOptions } from './WorkerOptions';
 import { DEFAULT_WORKER_OPTIONS } from './WorkerOptions';
-import type { FailedJobProvider } from '../Failed/FailedJobProvider';
-import type { Application } from '../../Foundation/Application';
+import type { FailedJobProvider } from '@/Queue/Failed/FailedJobProvider';
+import type { Application } from '@/Foundation/Application';
 
 export class Worker {
   protected shouldQuit: boolean = false;

@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import type { LockContract } from '../Contracts/Lock';
+import type { LockContract } from '@/Cache/Contracts/Lock';
 import { LockTimeoutException } from './LockTimeoutException';
 
 export abstract class Lock implements LockContract {

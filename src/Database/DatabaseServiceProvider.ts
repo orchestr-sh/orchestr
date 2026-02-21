@@ -4,7 +4,7 @@
  * Registers database services into the container
  */
 
-import { ServiceProvider } from '../Foundation/ServiceProvider';
+import { ServiceProvider } from '@/Foundation/ServiceProvider';
 import { DatabaseManager } from './DatabaseManager';
 import { DrizzleAdapter } from './Adapters/DrizzleAdapter';
 

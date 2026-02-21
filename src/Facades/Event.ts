@@ -1,8 +1,8 @@
-import { Facade } from '../Support/Facade';
-import type { Dispatcher } from '../Events/Dispatcher';
-import { EventFake } from '../Support/Testing/Fakes/EventFake';
-import type { Event as EventClass } from '../Events/Event';
-import type { EventListener } from '../Events/types';
+import { Facade } from '@/Support/Facade';
+import type { Dispatcher } from '@/Events/Dispatcher';
+import { EventFake } from '@/Support/Testing/Fakes/EventFake';
+import type { Event as EventClass } from '@/Events/Event';
+import type { EventListener } from '@/Events/types';
 
 /**
  * Event Facade
@@ -172,7 +172,7 @@ class EventFacadeClass extends Facade {
         app.instance('events', originalDispatcher);
       } else {
         // Re-register the singleton binding
-        const { Dispatcher } = await import('../Events/Dispatcher');
+        const { Dispatcher } = await import('@/Events/Dispatcher');
         app.singleton('events', (container: any) => new Dispatcher(container));
       }
       this.clearResolvedInstance('events');

@@ -1,5 +1,5 @@
-import { Facade } from '../Support/Facade';
-import { Router } from '../Routing/Router';
+import { Facade } from '@/Support/Facade';
+import { Router } from '@/Routing/Router';
 
 /**
  * Route Facade - Static access to the Router

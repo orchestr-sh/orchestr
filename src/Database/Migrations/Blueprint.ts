@@ -4,7 +4,7 @@
  * Defines a table schema in a migration
  */
 
-import { Blueprint as IBlueprint } from '../Contracts/Schema';
+import { Blueprint as IBlueprint } from '@/Database/Contracts/Schema';
 import { ColumnDefinition } from './ColumnDefinition';
 import { ForeignKeyDefinition } from './ForeignKeyDefinition';
 

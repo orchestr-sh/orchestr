@@ -5,7 +5,7 @@
  * Allows accessing relationships as properties: user.posts instead of user.posts().get()
  */
 
-import { Relation } from '../Relations';
+import { Relation } from '@/Database/Ensemble/Relations';
 
 /**
  * Check if a value is a Relation instance
@@ -237,49 +237,73 @@ export type DynamicRelationAccessor<T> = (() => any) & PromiseLike<T>;
  * const query = post.user(); // Type: BelongsTo<User, Post>
  */
 export type BelongsToAccessor<
-  TRelated extends import('../Ensemble').Ensemble,
-  TParent extends import('../Ensemble').Ensemble,
-> = TRelated | Promise<TRelated | null> | (() => import('../Relations/BelongsTo').BelongsTo<TRelated, TParent>);
-
-export type HasOneAccessor<
-  TRelated extends import('../Ensemble').Ensemble,
-  TParent extends import('../Ensemble').Ensemble,
-> = TRelated | Promise<TRelated | null> | (() => import('../Relations/HasOne').HasOne<TRelated, TParent>);
-
-export type HasManyAccessor<
-  TRelated extends import('../Ensemble').Ensemble,
-  TParent extends import('../Ensemble').Ensemble,
-> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/HasMany').HasMany<TRelated, TParent>);
-
-export type BelongsToManyAccessor<
-  TRelated extends import('../Ensemble').Ensemble,
-  TParent extends import('../Ensemble').Ensemble,
-> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/BelongsToMany').BelongsToMany<TRelated, TParent>);
-
-export type MorphOneAccessor<
-  TRelated extends import('../Ensemble').Ensemble,
-  TParent extends import('../Ensemble').Ensemble,
-> = TRelated | Promise<TRelated | null> | (() => import('../Relations/MorphOne').MorphOne<TRelated, TParent>);
-
-export type MorphManyAccessor<
-  TRelated extends import('../Ensemble').Ensemble,
-  TParent extends import('../Ensemble').Ensemble,
-> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/MorphMany').MorphMany<TRelated, TParent>);
-
-export type MorphToAccessor<TRelated extends import('../Ensemble').Ensemble> =
+  TRelated extends import('@/Database/Ensemble/Ensemble').Ensemble,
+  TParent extends import('@/Database/Ensemble/Ensemble').Ensemble,
+> =
   | TRelated
   | Promise<TRelated | null>
-  | (() => import('../Relations/MorphTo').MorphTo<any>);
+  | (() => import('@/Database/Ensemble/Relations/BelongsTo').BelongsTo<TRelated, TParent>);
+
+export type HasOneAccessor<
+  TRelated extends import('@/Database/Ensemble/Ensemble').Ensemble,
+  TParent extends import('@/Database/Ensemble/Ensemble').Ensemble,
+> =
+  | TRelated
+  | Promise<TRelated | null>
+  | (() => import('@/Database/Ensemble/Relations/HasOne').HasOne<TRelated, TParent>);
+
+export type HasManyAccessor<
+  TRelated extends import('@/Database/Ensemble/Ensemble').Ensemble,
+  TParent extends import('@/Database/Ensemble/Ensemble').Ensemble,
+> =
+  | TRelated[]
+  | Promise<TRelated[]>
+  | (() => import('@/Database/Ensemble/Relations/HasMany').HasMany<TRelated, TParent>);
+
+export type BelongsToManyAccessor<
+  TRelated extends import('@/Database/Ensemble/Ensemble').Ensemble,
+  TParent extends import('@/Database/Ensemble/Ensemble').Ensemble,
+> =
+  | TRelated[]
+  | Promise<TRelated[]>
+  | (() => import('@/Database/Ensemble/Relations/BelongsToMany').BelongsToMany<TRelated, TParent>);
+
+export type MorphOneAccessor<
+  TRelated extends import('@/Database/Ensemble/Ensemble').Ensemble,
+  TParent extends import('@/Database/Ensemble/Ensemble').Ensemble,
+> =
+  | TRelated
+  | Promise<TRelated | null>
+  | (() => import('@/Database/Ensemble/Relations/MorphOne').MorphOne<TRelated, TParent>);
+
+export type MorphManyAccessor<
+  TRelated extends import('@/Database/Ensemble/Ensemble').Ensemble,
+  TParent extends import('@/Database/Ensemble/Ensemble').Ensemble,
+> =
+  | TRelated[]
+  | Promise<TRelated[]>
+  | (() => import('@/Database/Ensemble/Relations/MorphMany').MorphMany<TRelated, TParent>);
+
+export type MorphToAccessor<TRelated extends import('@/Database/Ensemble/Ensemble').Ensemble> =
+  | TRelated
+  | Promise<TRelated | null>
+  | (() => import('@/Database/Ensemble/Relations/MorphTo').MorphTo<any>);
 
 export type MorphToManyAccessor<
-  TRelated extends import('../Ensemble').Ensemble,
-  TParent extends import('../Ensemble').Ensemble,
-> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/MorphToMany').MorphToMany<TRelated, TParent>);
+  TRelated extends import('@/Database/Ensemble/Ensemble').Ensemble,
+  TParent extends import('@/Database/Ensemble/Ensemble').Ensemble,
+> =
+  | TRelated[]
+  | Promise<TRelated[]>
+  | (() => import('@/Database/Ensemble/Relations/MorphToMany').MorphToMany<TRelated, TParent>);
 
 export type MorphedByManyAccessor<
-  TRelated extends import('../Ensemble').Ensemble,
-  TParent extends import('../Ensemble').Ensemble,
-> = TRelated[] | Promise<TRelated[]> | (() => import('../Relations/MorphedByMany').MorphedByMany<TRelated, TParent>);
+  TRelated extends import('@/Database/Ensemble/Ensemble').Ensemble,
+  TParent extends import('@/Database/Ensemble/Ensemble').Ensemble,
+> =
+  | TRelated[]
+  | Promise<TRelated[]>
+  | (() => import('@/Database/Ensemble/Relations/MorphedByMany').MorphedByMany<TRelated, TParent>);
 
 /**
  * Decorator to convert a relationship method into a dynamic property

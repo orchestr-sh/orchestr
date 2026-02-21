@@ -1,10 +1,10 @@
-import { Application } from '../Foundation/Application';
+import { Application } from '@/Foundation/Application';
 import { Route, HttpMethod, RouteAction, Middleware } from './Route';
 import { Request } from './Request';
 import { Response } from './Response';
-import { FormRequest } from '../Foundation/Http/FormRequest';
-import { ValidationException } from '../Foundation/Http/ValidationException';
-import { View } from '../View/View';
+import { FormRequest } from '@/Foundation/Http/FormRequest';
+import { ValidationException } from '@/Foundation/Http/ValidationException';
+import { View } from '@/View/View';
 
 /**
  * Route group attributes

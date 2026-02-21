@@ -4,7 +4,7 @@
  * Dispatched when a job is pushed onto the queue.
  */
 
-import type { Job } from '../Job';
+import type { Job } from '@/Queue/Job';
 
 export class JobQueued {
   constructor(

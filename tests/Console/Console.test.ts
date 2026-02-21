@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Command, CommandOptions } from '../../src/Console/Command';
-import { ConsoleKernel } from '../../src/Console/ConsoleKernel';
-import { Application } from '../../src/Foundation/Application';
+import { Command, CommandOptions } from '@/Console/Command';
+import { ConsoleKernel } from '@/Console/ConsoleKernel';
+import { Application } from '@/Foundation/Application';
 
 class TestCommand extends Command {
   signature = 'test:run {arg}';

@@ -4,7 +4,7 @@
  * Fluent query builder for constructing database queries
  */
 
-import { DatabaseAdapter } from '../Contracts/DatabaseAdapter';
+import { DatabaseAdapter } from '@/Database/Contracts/DatabaseAdapter';
 import {
   QueryBuilderInterface,
   WhereOperator,
@@ -13,7 +13,7 @@ import {
   WhereClause,
   JoinClause,
   OrderByClause,
-} from '../Contracts/QueryBuilderInterface';
+} from '@/Database/Contracts/QueryBuilderInterface';
 import { Expression } from './Expression';
 
 export class Builder<T = any> implements QueryBuilderInterface<T> {

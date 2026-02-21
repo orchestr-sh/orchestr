@@ -5,8 +5,8 @@
  * In Orchestr, your data models are called Ensembles - groups that work in harmony
  */
 
-import { DatabaseManager } from '../DatabaseManager';
-import { Connection } from '../Connection';
+import { DatabaseManager } from '@/Database/DatabaseManager';
+import { Connection } from '@/Database/Connection';
 import { EnsembleBuilder } from './EnsembleBuilder';
 import { HasRelationshipsMixin } from './Concerns/HasRelationships';
 import {
@@ -765,8 +765,8 @@ export abstract class Ensemble extends HasRelationshipsMixin {
     let dispatcher: any;
     try {
       // Import the Dispatcher and get from static resolver if available
-      const { Dispatcher } = await import('../../Events/Dispatcher');
-      const { Facade } = await import('../../Support/Facade');
+      const { Dispatcher } = await import('@/Events/Dispatcher');
+      const { Facade } = await import('@/Support/Facade');
 
       try {
         dispatcher = Facade.getFacadeApplication()?.make?.('events');

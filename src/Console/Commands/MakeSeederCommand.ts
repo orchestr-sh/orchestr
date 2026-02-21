@@ -4,8 +4,8 @@
  * Create a new seeder class
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
 import * as fs from 'fs';
 import * as path from 'path';
 

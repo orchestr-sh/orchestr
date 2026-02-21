@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { View } from '../../src/View/View';
-import type { ViewEngine } from '../../src/View/Engines/ViewEngine';
+import { View } from '@/View/View';
+import type { ViewEngine } from '@/View/Engines/ViewEngine';
 
 const mockEngine: ViewEngine = {
   get: vi.fn(async (path: string, data: Record<string, any>) => {

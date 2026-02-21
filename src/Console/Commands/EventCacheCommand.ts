@@ -4,8 +4,8 @@
  * Discover and cache the application's events and listeners following Laravel's Artisan pattern
  */
 
-import { Command } from '../Command';
-import { Application } from '../../Foundation/Application';
+import { Command } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -22,7 +22,7 @@ export class EventCacheCommand extends Command {
 
     try {
       // Try to dynamically import EventDiscovery (Task 6 dependency)
-      const { EventDiscovery } = await import('../../Support/EventDiscovery');
+      const { EventDiscovery } = await import('@/Support/EventDiscovery');
 
       const discovery = new EventDiscovery(this.app);
       const directories = this.app.getEventDiscoveryPaths();

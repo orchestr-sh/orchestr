@@ -5,8 +5,8 @@
  * Example: Tag has many Posts (where Post morphs to many Tags)
  */
 
-import { Ensemble } from '../Ensemble';
-import { EnsembleBuilder } from '../EnsembleBuilder';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
+import { EnsembleBuilder } from '@/Database/Ensemble/EnsembleBuilder';
 import { MorphToMany } from './MorphToMany';
 import { MorphMap } from './MorphMap';
 

@@ -23,8 +23,8 @@
  * ```
  */
 
-import type { DispatcherContract } from '../../Contracts/Events/Dispatcher';
-import { Facade } from '../../Support/Facade';
+import type { DispatcherContract } from '@/Contracts/Events/Dispatcher';
+import { Facade } from '@/Support/Facade';
 
 /**
  * Dispatchable mixin class

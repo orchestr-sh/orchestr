@@ -5,7 +5,7 @@
  * This is the minimum contract needed for Task 3 implementation
  */
 
-import type { Event } from '../../Events/Event';
+import type { Event } from '@/Events/Event';
 
 /**
  * Event listener type

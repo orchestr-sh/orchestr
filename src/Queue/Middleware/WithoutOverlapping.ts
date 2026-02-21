@@ -16,7 +16,7 @@
  * ```
  */
 
-import type { Job } from '../Job';
+import type { Job } from '@/Queue/Job';
 import type { JobMiddleware } from './JobMiddleware';
 
 // Simple in-memory lock store

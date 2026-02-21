@@ -4,7 +4,7 @@
  * Handles running and rolling back migrations
  */
 
-import { Connection } from '../Connection';
+import { Connection } from '@/Database/Connection';
 import { MigrationRepository } from './MigrationRepository';
 import { Migration } from './Migration';
 import { SchemaBuilder } from './SchemaBuilder';

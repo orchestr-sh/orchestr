@@ -5,9 +5,9 @@
  * Mirrors Laravel's `php artisan cache:forget`.
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import type { CacheManager } from '../../Cache/CacheManager';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import type { CacheManager } from '@/Cache/CacheManager';
 
 export class CacheForgetCommand extends Command {
   signature = 'cache:forget <key> [store]';

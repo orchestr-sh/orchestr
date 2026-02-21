@@ -5,7 +5,7 @@
  * Returning false from a listener will halt the operation
  */
 
-import { Ensemble } from '../Ensemble';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { ModelEvent } from './ModelEvent';
 
 export class ModelCreating<T extends Ensemble = Ensemble> extends ModelEvent<T> {

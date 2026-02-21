@@ -5,10 +5,10 @@
  * Mirrors Laravel's `php artisan queue:retry`.
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import type { QueueManager } from '../../Queue/QueueManager';
-import type { FailedJobProvider } from '../../Queue/Failed/FailedJobProvider';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import type { QueueManager } from '@/Queue/QueueManager';
+import type { FailedJobProvider } from '@/Queue/Failed/FailedJobProvider';
 
 export class QueueRetryCommand extends Command {
   signature = 'queue:retry <id>';

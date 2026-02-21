@@ -14,7 +14,7 @@
  * ```
  */
 
-import type { Store } from '../Contracts/Store';
+import type { Store } from '@/Cache/Contracts/Store';
 
 interface CacheEntry {
   value: any;

@@ -5,10 +5,10 @@
  * Mirrors Laravel's `php artisan queue:work`.
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import type { QueueManager } from '../../Queue/QueueManager';
-import type { Worker } from '../../Queue/Workers/Worker';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import type { QueueManager } from '@/Queue/QueueManager';
+import type { Worker } from '@/Queue/Workers/Worker';
 
 export class QueueWorkCommand extends Command {
   signature = 'queue:work [connection]';

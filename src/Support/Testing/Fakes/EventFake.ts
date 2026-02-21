@@ -1,7 +1,7 @@
-import type { DispatcherContract } from '../../../Events/Contracts/Dispatcher';
-import type { Container } from '../../../Container/Container';
-import type { Event } from '../../../Events/Event';
-import type { EventListener } from '../../../Events/types';
+import type { DispatcherContract } from '@/Events/Contracts/Dispatcher';
+import type { Container } from '@/Container/Container';
+import type { Event } from '@/Events/Event';
+import type { EventListener } from '@/Events/types';
 
 /**
  * Dispatched Event Record

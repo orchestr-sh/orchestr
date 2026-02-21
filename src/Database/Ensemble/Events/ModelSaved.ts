@@ -4,7 +4,7 @@
  * Fired after a model is saved (after insert or update)
  */
 
-import { Ensemble } from '../Ensemble';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { ModelEvent } from './ModelEvent';
 
 export class ModelSaved<T extends Ensemble = Ensemble> extends ModelEvent<T> {

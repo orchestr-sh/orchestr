@@ -19,8 +19,8 @@
  * ```
  */
 
-import { Facade } from '../Support/Facade';
-import type { ViewFactory } from '../View/ViewFactory';
+import { Facade } from '@/Support/Facade';
+import type { ViewFactory } from '@/View/ViewFactory';
 
 class ViewFacadeClass extends Facade {
   protected static getFacadeAccessor(): string {

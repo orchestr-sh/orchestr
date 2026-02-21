@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Route } from '../../src/Routing/Route';
+import { Route } from '@/Routing/Route';
 
 describe('Route', () => {
   describe('constructor', () => {

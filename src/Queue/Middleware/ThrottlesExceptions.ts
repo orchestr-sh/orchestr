@@ -19,7 +19,7 @@
  * ```
  */
 
-import type { Job } from '../Job';
+import type { Job } from '@/Queue/Job';
 import type { JobMiddleware } from './JobMiddleware';
 
 // In-memory exception tracking

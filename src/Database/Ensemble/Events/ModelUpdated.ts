@@ -4,7 +4,7 @@
  * Fired after a model is updated (after update query)
  */
 
-import { Ensemble } from '../Ensemble';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { ModelEvent } from './ModelEvent';
 
 export class ModelUpdated<T extends Ensemble = Ensemble> extends ModelEvent<T> {

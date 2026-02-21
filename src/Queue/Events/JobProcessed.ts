@@ -4,7 +4,7 @@
  * Dispatched after a job has been successfully processed.
  */
 
-import type { Job } from '../Job';
+import type { Job } from '@/Queue/Job';
 
 export class JobProcessed {
   constructor(

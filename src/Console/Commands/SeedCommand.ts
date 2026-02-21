@@ -4,9 +4,9 @@
  * Seed the database with records
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import { SeederRunner } from '../../Database/Seeders/SeederRunner';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import { SeederRunner } from '@/Database/Seeders/SeederRunner';
 
 export class SeedCommand extends Command {
   signature = 'db:seed';

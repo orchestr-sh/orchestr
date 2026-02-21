@@ -4,7 +4,7 @@
  * Dispatched when a job has failed and exceeded its maximum attempts.
  */
 
-import type { Job } from '../Job';
+import type { Job } from '@/Queue/Job';
 
 export class JobFailed {
   constructor(

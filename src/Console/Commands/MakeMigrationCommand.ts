@@ -4,9 +4,9 @@
  * Create a new migration file
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import { MigrationCreator } from '../../Database/Migrations/MigrationCreator';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import { MigrationCreator } from '@/Database/Migrations/MigrationCreator';
 
 export class MakeMigrationCommand extends Command {
   signature = 'make:migration <name>';

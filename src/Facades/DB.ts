@@ -4,8 +4,8 @@
  * Provides static access to the DatabaseManager
  */
 
-import { Facade } from '../Support/Facade';
-import { DatabaseManager } from '../Database/DatabaseManager';
+import { Facade } from '@/Support/Facade';
+import { DatabaseManager } from '@/Database/DatabaseManager';
 
 class DBFacade extends Facade {
   protected static getFacadeAccessor(): string {

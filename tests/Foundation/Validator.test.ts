@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Validator } from '../../src/Foundation/Http/Validator';
+import { Validator } from '@/Foundation/Http/Validator';
 
 describe('Validator', () => {
   describe('required', () => {
@@ -214,18 +214,12 @@ describe('Validator', () => {
 
   describe('confirmed', () => {
     it('passes when confirmation matches', async () => {
-      const v = new Validator(
-        { password: 'secret', password_confirmation: 'secret' },
-        { password: 'confirmed' }
-      );
+      const v = new Validator({ password: 'secret', password_confirmation: 'secret' }, { password: 'confirmed' });
       expect(await v.validate()).toBe(true);
     });
 
     it('fails when confirmation does not match', async () => {
-      const v = new Validator(
-        { password: 'secret', password_confirmation: 'different' },
-        { password: 'confirmed' }
-      );
+      const v = new Validator({ password: 'secret', password_confirmation: 'different' }, { password: 'confirmed' });
       await v.validate();
       expect(v.fails()).toBe(true);
     });
@@ -318,31 +312,20 @@ describe('Validator', () => {
 
   describe('dot notation fields', () => {
     it('validates nested fields', async () => {
-      const v = new Validator(
-        { address: { city: 'NYC' } },
-        { 'address.city': 'required|string' }
-      );
+      const v = new Validator({ address: { city: 'NYC' } }, { 'address.city': 'required|string' });
       expect(await v.validate()).toBe(true);
     });
   });
 
   describe('custom messages', () => {
     it('uses custom message for specific field rule', async () => {
-      const v = new Validator(
-        {},
-        { email: 'required' },
-        { 'email.required': 'Please provide your email.' }
-      );
+      const v = new Validator({}, { email: 'required' }, { 'email.required': 'Please provide your email.' });
       await v.validate();
       expect(v.errors()['email'][0]).toBe('Please provide your email.');
     });
 
     it('uses custom message for rule', async () => {
-      const v = new Validator(
-        {},
-        { email: 'required' },
-        { required: 'This field is mandatory.' }
-      );
+      const v = new Validator({}, { email: 'required' }, { required: 'This field is mandatory.' });
       await v.validate();
       expect(v.errors()['email'][0]).toBe('This field is mandatory.');
     });
@@ -350,12 +333,7 @@ describe('Validator', () => {
 
   describe('custom attributes', () => {
     it('uses custom attribute name in messages', async () => {
-      const v = new Validator(
-        {},
-        { email_address: 'required' },
-        {},
-        { email_address: 'email' }
-      );
+      const v = new Validator({}, { email_address: 'required' }, {}, { email_address: 'email' });
       await v.validate();
       expect(v.errors()['email_address'][0]).toContain('email');
     });
@@ -363,10 +341,7 @@ describe('Validator', () => {
 
   describe('validated()', () => {
     it('returns only validated data', async () => {
-      const v = new Validator(
-        { name: 'John', age: 25, extra: 'ignored' },
-        { name: 'required', age: 'numeric' }
-      );
+      const v = new Validator({ name: 'John', age: 25, extra: 'ignored' }, { name: 'required', age: 'numeric' });
       await v.validate();
       const validated = v.validated();
       expect(validated).toEqual({ name: 'John', age: 25 });
@@ -374,10 +349,7 @@ describe('Validator', () => {
     });
 
     it('excludes fields with errors', async () => {
-      const v = new Validator(
-        { name: '', age: 25 },
-        { name: 'required', age: 'numeric' }
-      );
+      const v = new Validator({ name: '', age: 25 }, { name: 'required', age: 'numeric' });
       await v.validate();
       expect(v.validated()).not.toHaveProperty('name');
       expect(v.validated()).toHaveProperty('age');

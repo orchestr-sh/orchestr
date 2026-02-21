@@ -4,9 +4,9 @@
  * Reset and re-run all migrations
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import { Migrator } from '../../Database/Migrations/Migrator';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import { Migrator } from '@/Database/Migrations/Migrator';
 
 export class MigrateRefreshCommand extends Command {
   signature = 'migrate:refresh';

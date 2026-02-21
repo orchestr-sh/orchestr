@@ -4,7 +4,7 @@
  * Manages the migrations table that tracks which migrations have been run
  */
 
-import { Connection } from '../Connection';
+import { Connection } from '@/Database/Connection';
 
 export interface MigrationData {
   id?: number;

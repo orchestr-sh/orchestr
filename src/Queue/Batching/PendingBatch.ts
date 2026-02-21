@@ -23,9 +23,9 @@
  * ```
  */
 
-import type { Job } from '../Job';
-import type { Application } from '../../Foundation/Application';
-import type { QueueManager } from '../QueueManager';
+import type { Job } from '@/Queue/Job';
+import type { Application } from '@/Foundation/Application';
+import type { QueueManager } from '@/Queue/QueueManager';
 import { Batch } from './Batch';
 
 export class PendingBatch {

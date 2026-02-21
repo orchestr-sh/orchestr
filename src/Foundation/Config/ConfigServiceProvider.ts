@@ -1,5 +1,5 @@
-import { ServiceProvider } from '../ServiceProvider';
-import { Application } from '../Application';
+import { ServiceProvider } from '@/Foundation/ServiceProvider';
+import { Application } from '@/Foundation/Application';
 import { Config } from './Config';
 
 /**
