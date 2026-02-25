@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { JobPayload } from '../../src/Queue/JobPayload';
-import { Job } from '../../src/Queue/Job';
+import { JobPayload } from '@/Queue/JobPayload';
+import { Job } from '@/Queue/Job';
 
 class TestPayloadJob extends Job {
   public tries = 3;

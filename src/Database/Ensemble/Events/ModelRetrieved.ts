@@ -4,7 +4,7 @@
  * Fired when a model is retrieved from the database
  */
 
-import { Ensemble } from '../Ensemble';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { ModelEvent } from './ModelEvent';
 
 export class ModelRetrieved<T extends Ensemble = Ensemble> extends ModelEvent<T> {

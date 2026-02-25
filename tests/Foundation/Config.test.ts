@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Config } from '../../src/Foundation/Config/Config';
+import { Config } from '@/Foundation/Config/Config';
 
 describe('Config', () => {
   let config: Config;

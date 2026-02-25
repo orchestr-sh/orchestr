@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import type { Store } from '../Contracts/Store';
+import type { Store } from '@/Cache/Contracts/Store';
 
 export class TagSet {
   constructor(

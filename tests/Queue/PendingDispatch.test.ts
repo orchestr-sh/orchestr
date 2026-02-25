@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { PendingDispatch } from '../../src/Queue/PendingDispatch';
-import { Job } from '../../src/Queue/Job';
-import { QueueManager } from '../../src/Queue/QueueManager';
-import { NullDriver } from '../../src/Queue/Drivers/NullDriver';
+import { PendingDispatch } from '@/Queue/PendingDispatch';
+import { Job } from '@/Queue/Job';
+import { QueueManager } from '@/Queue/QueueManager';
+import { NullDriver } from '@/Queue/Drivers/NullDriver';
 
 class PendingJob extends Job {
   async handle(): Promise<void> {}

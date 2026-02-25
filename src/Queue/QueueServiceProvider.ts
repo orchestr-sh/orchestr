@@ -5,7 +5,7 @@
  * Mirrors Laravel's Illuminate\Queue\QueueServiceProvider.
  */
 
-import { ServiceProvider } from '../Foundation/ServiceProvider';
+import { ServiceProvider } from '@/Foundation/ServiceProvider';
 import { QueueManager } from './QueueManager';
 import type { QueueConfig } from './QueueManager';
 import { SyncDriver } from './Drivers/SyncDriver';

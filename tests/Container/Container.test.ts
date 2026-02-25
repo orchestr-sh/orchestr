@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Container } from '../../src/Container/Container';
+import { Container } from '@/Container/Container';
 
 describe('Container', () => {
   let container: Container;

@@ -5,7 +5,7 @@
  * Mirrors Laravel's Illuminate\Contracts\Queue\Queue interface.
  */
 
-import type { Job } from '../Job';
+import type { Job } from '@/Queue/Job';
 
 export interface QueueDriverJob {
   id: string;

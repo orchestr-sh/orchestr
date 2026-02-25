@@ -1,5 +1,5 @@
-import type { Event } from '../Event';
-import type { EventListener, EventSubscriber } from '../types';
+import type { Event } from '@/Events/Event';
+import type { EventListener, EventSubscriber } from '@/Events/types';
 
 /**
  * Event Dispatcher Contract

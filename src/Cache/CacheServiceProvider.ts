@@ -5,7 +5,7 @@
  * Mirrors Laravel's Illuminate\Cache\CacheServiceProvider.
  */
 
-import { ServiceProvider } from '../Foundation/ServiceProvider';
+import { ServiceProvider } from '@/Foundation/ServiceProvider';
 import { CacheManager } from './CacheManager';
 import type { CacheConfig } from './CacheManager';
 import { ArrayStore } from './Stores/ArrayStore';

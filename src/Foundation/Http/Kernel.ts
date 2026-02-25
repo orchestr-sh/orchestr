@@ -1,9 +1,9 @@
 import { IncomingMessage, ServerResponse, createServer, Server } from 'http';
-import { Application } from '../Application';
-import { Router } from '../../Routing/Router';
-import { Request } from '../../Routing/Request';
-import { Response } from '../../Routing/Response';
-import { Middleware } from '../../Routing/Route';
+import { Application } from '@/Foundation/Application';
+import { Router } from '@/Routing/Router';
+import { Request } from '@/Routing/Request';
+import { Response } from '@/Routing/Response';
+import { Middleware } from '@/Routing/Route';
 
 /**
  * HTTP Kernel - Handles incoming HTTP requests

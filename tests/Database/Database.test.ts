@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DatabaseManager } from '../../src/Database/DatabaseManager';
-import { Expression, raw } from '../../src/Database/Query/Expression';
-import { EnsembleCollection } from '../../src/Database/Ensemble/EnsembleCollection';
-import { Ensemble } from '../../src/Database/Ensemble/Ensemble';
+import { DatabaseManager } from '@/Database/DatabaseManager';
+import { Expression, raw } from '@/Database/Query/Expression';
+import { EnsembleCollection } from '@/Database/Ensemble/EnsembleCollection';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
 
 // Mock adapter for DatabaseManager tests
 function createMockAdapter() {
@@ -153,10 +153,12 @@ class MockModel extends Ensemble {
 
 describe('EnsembleCollection', () => {
   function createCollection(items: Record<string, any>[]) {
-    return new EnsembleCollection(items.map((i) => {
-      const m = new MockModel(i);
-      return m;
-    }));
+    return new EnsembleCollection(
+      items.map((i) => {
+        const m = new MockModel(i);
+        return m;
+      })
+    );
   }
 
   describe('basic methods', () => {
@@ -171,7 +173,10 @@ describe('EnsembleCollection', () => {
     });
 
     it('first() with callback returns first matching', () => {
-      const col = createCollection([{ id: 1, active: false }, { id: 2, active: true }]);
+      const col = createCollection([
+        { id: 1, active: false },
+        { id: 2, active: true },
+      ]);
       const item = col.first((m) => (m as any).attributes.active === true);
       expect(item!.getKey()).toBe(2);
     });
@@ -203,7 +208,10 @@ describe('EnsembleCollection', () => {
 
   describe('aggregation', () => {
     it('sum() sums a key', () => {
-      const col = createCollection([{ id: 1, price: 10 }, { id: 2, price: 20 }]);
+      const col = createCollection([
+        { id: 1, price: 10 },
+        { id: 2, price: 20 },
+      ]);
       // Need to access via attribute
       expect(col.sum('price' as any)).toBe(0); // sum uses item[key] which is not set on Ensemble
     });

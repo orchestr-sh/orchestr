@@ -31,9 +31,9 @@
  * ```
  */
 
-import { Facade } from '../Support/Facade';
-import type { CacheManager } from '../Cache/CacheManager';
-import type { Repository } from '../Cache/Repository';
+import { Facade } from '@/Support/Facade';
+import type { CacheManager } from '@/Cache/CacheManager';
+import type { Repository } from '@/Cache/Repository';
 
 class CacheFacadeClass extends Facade {
   protected static getFacadeAccessor(): string {

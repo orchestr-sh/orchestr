@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Job } from '../../src/Queue/Job';
+import { Job } from '@/Queue/Job';
 
 class TestJob extends Job {
   constructor(public data: string = 'default') {

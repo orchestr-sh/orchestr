@@ -4,9 +4,9 @@
  * Show the status of each migration
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import { Migrator } from '../../Database/Migrations/Migrator';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import { Migrator } from '@/Database/Migrations/Migrator';
 
 export class MigrateStatusCommand extends Command {
   signature = 'migrate:status';

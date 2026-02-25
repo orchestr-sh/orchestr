@@ -4,8 +4,8 @@
  * List all registered events and their listeners following Laravel's Artisan pattern
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
 
 export class EventListCommand extends Command {
   signature = 'event:list [--event=]';

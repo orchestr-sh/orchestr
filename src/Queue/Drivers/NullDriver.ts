@@ -8,9 +8,9 @@
  * Mirrors Laravel's Illuminate\Queue\NullQueue.
  */
 
-import type { QueueDriver, QueueDriverJob } from '../Contracts/QueueDriver';
-import type { Job } from '../Job';
-import type { QueueConnectionConfig } from '../QueueManager';
+import type { QueueDriver, QueueDriverJob } from '@/Queue/Contracts/QueueDriver';
+import type { Job } from '@/Queue/Job';
+import type { QueueConnectionConfig } from '@/Queue/QueueManager';
 
 export class NullDriver implements QueueDriver {
   protected connectionName: string = 'null';

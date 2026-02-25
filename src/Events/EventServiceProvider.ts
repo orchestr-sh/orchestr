@@ -1,5 +1,5 @@
-import { ServiceProvider } from '../Foundation/ServiceProvider';
-import { Application } from '../Foundation/Application';
+import { ServiceProvider } from '@/Foundation/ServiceProvider';
+import { Application } from '@/Foundation/Application';
 import { Dispatcher } from './Dispatcher';
 import { EventSubscriber } from './types';
 import * as fs from 'fs';
@@ -142,7 +142,7 @@ export abstract class EventServiceProvider extends ServiceProvider {
   protected async discoverEvents(events: Dispatcher): Promise<void> {
     // Import EventDiscovery dynamically to avoid circular dependency
     try {
-      const { EventDiscovery } = await import('../Support/EventDiscovery');
+      const { EventDiscovery } = await import('@/Support/EventDiscovery');
       const discovery = new EventDiscovery(this.app);
 
       const listeners = await discovery.discover(this.discoverEventsWithin());

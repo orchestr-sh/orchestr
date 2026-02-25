@@ -4,9 +4,9 @@
  * Represents a many-to-many relationship
  */
 
-import { Ensemble } from '../Ensemble';
-import { EnsembleBuilder } from '../EnsembleBuilder';
-import { EnsembleCollection } from '../EnsembleCollection';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
+import { EnsembleBuilder } from '@/Database/Ensemble/EnsembleBuilder';
+import { EnsembleCollection } from '@/Database/Ensemble/EnsembleCollection';
 import { Relation } from './Relation';
 
 export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> extends Relation<TRelated, TParent> {

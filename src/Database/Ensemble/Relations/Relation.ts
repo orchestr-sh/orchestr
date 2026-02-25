@@ -4,8 +4,8 @@
  * Base class for all relationship types
  */
 
-import { Ensemble } from '../Ensemble';
-import { EnsembleBuilder } from '../EnsembleBuilder';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
+import { EnsembleBuilder } from '@/Database/Ensemble/EnsembleBuilder';
 
 export abstract class Relation<TRelated extends Ensemble, TParent extends Ensemble = Ensemble> {
   /**
@@ -210,4 +210,4 @@ export abstract class Relation<TRelated extends Ensemble, TParent extends Ensemb
 /**
  * Import EnsembleCollection - imported at bottom to avoid circular dependency
  */
-import { EnsembleCollection } from '../EnsembleCollection';
+import { EnsembleCollection } from '@/Database/Ensemble/EnsembleCollection';

@@ -4,13 +4,13 @@
  * Provides relationship functionality to Ensemble models
  */
 
-import { Ensemble } from '../Ensemble';
-import { EnsembleBuilder } from '../EnsembleBuilder';
-import { Relation } from '../Relations/Relation';
-import { HasOne } from '../Relations/HasOne';
-import { HasMany } from '../Relations/HasMany';
-import { BelongsTo } from '../Relations/BelongsTo';
-import { BelongsToMany } from '../Relations/BelongsToMany';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
+import { EnsembleBuilder } from '@/Database/Ensemble/EnsembleBuilder';
+import { Relation } from '@/Database/Ensemble/Relations/Relation';
+import { HasOne } from '@/Database/Ensemble/Relations/HasOne';
+import { HasMany } from '@/Database/Ensemble/Relations/HasMany';
+import { BelongsTo } from '@/Database/Ensemble/Relations/BelongsTo';
+import { BelongsToMany } from '@/Database/Ensemble/Relations/BelongsToMany';
 
 export interface RelationshipConfig {
   type:
@@ -161,10 +161,10 @@ export abstract class HasRelationshipsMixin {
     type?: string | null,
     id?: string | null,
     localKey?: string
-  ): import('../Relations/MorphOne').MorphOne<TRelated, any> {
+  ): import('@/Database/Ensemble/Relations/MorphOne').MorphOne<TRelated, any> {
     const instance = new related();
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphOne } = require('../Relations/MorphOne');
+    const { MorphOne } = require('@/Database/Ensemble/Relations/MorphOne');
 
     const finalLocalKey = localKey || (this as any).getKeyName();
 
@@ -180,10 +180,10 @@ export abstract class HasRelationshipsMixin {
     type?: string | null,
     id?: string | null,
     localKey?: string
-  ): import('../Relations/MorphMany').MorphMany<TRelated, any> {
+  ): import('@/Database/Ensemble/Relations/MorphMany').MorphMany<TRelated, any> {
     const instance = new related();
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphMany } = require('../Relations/MorphMany');
+    const { MorphMany } = require('@/Database/Ensemble/Relations/MorphMany');
 
     const finalLocalKey = localKey || (this as any).getKeyName();
 
@@ -198,9 +198,9 @@ export abstract class HasRelationshipsMixin {
     type?: string,
     id?: string,
     ownerKey?: string
-  ): import('../Relations/MorphTo').MorphTo<any> {
+  ): import('@/Database/Ensemble/Relations/MorphTo').MorphTo<any> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphTo } = require('../Relations/MorphTo');
+    const { MorphTo } = require('@/Database/Ensemble/Relations/MorphTo');
 
     const finalType = type || `${name}_type`;
     const finalId = id || `${name}_id`;
@@ -222,10 +222,10 @@ export abstract class HasRelationshipsMixin {
     parentKey?: string,
     relatedKey?: string,
     inverse: boolean = false
-  ): import('../Relations/MorphToMany').MorphToMany<TRelated, any> {
+  ): import('@/Database/Ensemble/Relations/MorphToMany').MorphToMany<TRelated, any> {
     const instance = new related();
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphToMany } = require('../Relations/MorphToMany');
+    const { MorphToMany } = require('@/Database/Ensemble/Relations/MorphToMany');
 
     const finalTable = table || `${name}s`;
     const finalForeignPivotKey = foreignPivotKey || `${name}_id`;
@@ -260,10 +260,10 @@ export abstract class HasRelationshipsMixin {
     relatedPivotKey?: string,
     parentKey?: string,
     relatedKey?: string
-  ): import('../Relations/MorphedByMany').MorphedByMany<TRelated, any> {
+  ): import('@/Database/Ensemble/Relations/MorphedByMany').MorphedByMany<TRelated, any> {
     const instance = new related();
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphedByMany } = require('../Relations/MorphedByMany');
+    const { MorphedByMany } = require('@/Database/Ensemble/Relations/MorphedByMany');
 
     const finalTable = table || `${name}s`;
     const finalForeignPivotKey = foreignPivotKey || `${name}_id`;

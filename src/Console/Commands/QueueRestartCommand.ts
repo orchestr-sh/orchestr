@@ -5,8 +5,8 @@
  * Mirrors Laravel's `php artisan queue:restart`.
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
 
 export class QueueRestartCommand extends Command {
   signature = 'queue:restart';

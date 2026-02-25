@@ -5,7 +5,7 @@
  * Maps aliases to model classes for cleaner database storage
  */
 
-import { Ensemble } from '../Ensemble';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
 
 export class MorphMap {
   /**

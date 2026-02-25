@@ -1,0 +1,14 @@
+name: Setup Node
+description: Setup Node for testing
+inputs:
+  node-version:
+    description: 'Node version to setup'
+    required: false
+    default: 'lts/Krypton'
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}

@@ -4,7 +4,7 @@
  * Base class for all database migrations
  */
 
-import { Schema } from '../Contracts/Schema';
+import { Schema } from '@/Database/Contracts/Schema';
 
 export abstract class Migration {
   /**

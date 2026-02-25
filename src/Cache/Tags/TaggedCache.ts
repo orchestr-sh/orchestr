@@ -20,7 +20,7 @@
  * ```
  */
 
-import type { Store } from '../Contracts/Store';
+import type { Store } from '@/Cache/Contracts/Store';
 import { TagSet } from './TagSet';
 
 export class TaggedCache {

@@ -1,4 +1,4 @@
-import { Application } from '../Foundation/Application';
+import { Application } from '@/Foundation/Application';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { dirname } from 'path';
 

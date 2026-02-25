@@ -1,5 +1,5 @@
-import { Request } from '../../Routing/Request';
-import { Response } from '../../Routing/Response';
+import { Request } from '@/Routing/Request';
+import { Response } from '@/Routing/Response';
 import { ValidationException } from './ValidationException';
 import { Validator, ValidationRules } from './Validator';
 

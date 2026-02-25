@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Dispatcher } from '../../src/Events/Dispatcher';
-import { Container } from '../../src/Container/Container';
+import { Dispatcher } from '@/Events/Dispatcher';
+import { Container } from '@/Container/Container';
 
 describe('Dispatcher', () => {
   let container: Container;
@@ -181,7 +181,7 @@ describe('Dispatcher', () => {
       const listener2 = vi.fn();
       dispatcher.subscribe({
         subscribe: () => ({
-          'test': [listener1, listener2],
+          test: [listener1, listener2],
         }),
       });
       dispatcher.dispatch('test');

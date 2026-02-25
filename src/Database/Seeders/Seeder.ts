@@ -4,7 +4,7 @@
  * Base class for all database seeders
  */
 
-import { Connection } from '../Connection';
+import { Connection } from '@/Database/Connection';
 
 export abstract class Seeder {
   /**

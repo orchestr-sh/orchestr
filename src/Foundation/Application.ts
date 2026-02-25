@@ -1,6 +1,6 @@
-import { Container } from '../Container/Container';
+import { Container } from '@/Container/Container';
 import { ServiceProvider } from './ServiceProvider';
-import { setGlobalApp } from '../Support/helpers';
+import { setGlobalApp } from '@/Support/helpers';
 
 /**
  * Application class - Laravel's Illuminate\Foundation\Application

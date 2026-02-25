@@ -8,7 +8,7 @@
  */
 
 import { Lock } from './Lock';
-import type { Store } from '../Contracts/Store';
+import type { Store } from '@/Cache/Contracts/Store';
 
 export class CacheLock extends Lock {
   constructor(

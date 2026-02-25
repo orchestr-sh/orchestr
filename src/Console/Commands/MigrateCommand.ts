@@ -4,9 +4,9 @@
  * Run the database migrations
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import { Migrator } from '../../Database/Migrations/Migrator';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import { Migrator } from '@/Database/Migrations/Migrator';
 
 export class MigrateCommand extends Command {
   signature = 'migrate';

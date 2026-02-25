@@ -4,8 +4,8 @@
  * Extends the query builder to work with Ensemble models
  */
 
-import { Builder as QueryBuilder } from '../Query/Builder';
-import { DatabaseAdapter } from '../Contracts/DatabaseAdapter';
+import { Builder as QueryBuilder } from '@/Database/Query/Builder';
+import { DatabaseAdapter } from '@/Database/Contracts/DatabaseAdapter';
 import { Ensemble } from './Ensemble';
 import { EnsembleCollection } from './EnsembleCollection';
 import { Relation } from './Relations';

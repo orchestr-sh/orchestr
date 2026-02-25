@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import type { QueueManager } from '../QueueManager';
+import type { QueueManager } from '@/Queue/QueueManager';
 
 export interface BatchOptions {
   thenCallbacks: Array<(batch: Batch) => void | Promise<void>>;

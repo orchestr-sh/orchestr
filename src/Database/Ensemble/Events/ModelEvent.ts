@@ -4,7 +4,7 @@
  * Base class for all Ensemble model lifecycle events
  */
 
-import { Ensemble } from '../Ensemble';
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
 
 export abstract class ModelEvent<T extends Ensemble = Ensemble> {
   /**

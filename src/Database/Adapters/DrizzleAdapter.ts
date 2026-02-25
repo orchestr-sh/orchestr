@@ -4,7 +4,7 @@
  * Database adapter implementation using Drizzle ORM
  */
 
-import { DatabaseAdapter, DatabaseConfig, QueryResult } from '../Contracts/DatabaseAdapter';
+import { DatabaseAdapter, DatabaseConfig, QueryResult } from '@/Database/Contracts/DatabaseAdapter';
 
 export class DrizzleAdapter implements DatabaseAdapter {
   protected client: any;

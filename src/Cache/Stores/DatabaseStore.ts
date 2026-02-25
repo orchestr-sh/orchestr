@@ -16,10 +16,10 @@
  * ```
  */
 
-import type { Store } from '../Contracts/Store';
-import type { Application } from '../../Foundation/Application';
-import type { DatabaseManager } from '../../Database/DatabaseManager';
-import type { Connection } from '../../Database/Connection';
+import type { Store } from '@/Cache/Contracts/Store';
+import type { Application } from '@/Foundation/Application';
+import type { DatabaseManager } from '@/Database/DatabaseManager';
+import type { Connection } from '@/Database/Connection';
 
 export class DatabaseStore implements Store {
   protected tableName: string;

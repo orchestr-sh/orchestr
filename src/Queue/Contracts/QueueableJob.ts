@@ -5,7 +5,7 @@
  * Mirrors Laravel's Illuminate\Contracts\Queue\Job interface.
  */
 
-import type { JobMiddleware } from '../Middleware/JobMiddleware';
+import type { JobMiddleware } from '@/Queue/Middleware/JobMiddleware';
 
 export interface QueueableJob {
   /**

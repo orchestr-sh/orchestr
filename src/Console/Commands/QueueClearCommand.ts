@@ -5,9 +5,9 @@
  * Mirrors Laravel's `php artisan queue:clear`.
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import type { QueueManager } from '../../Queue/QueueManager';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import type { QueueManager } from '@/Queue/QueueManager';
 
 export class QueueClearCommand extends Command {
   signature = 'queue:clear [connection]';

@@ -7,9 +7,9 @@
  * Mirrors Laravel's Illuminate\Queue\SyncQueue.
  */
 
-import type { QueueDriver, QueueDriverJob } from '../Contracts/QueueDriver';
-import type { Job } from '../Job';
-import type { QueueConnectionConfig } from '../QueueManager';
+import type { QueueDriver, QueueDriverJob } from '@/Queue/Contracts/QueueDriver';
+import type { Job } from '@/Queue/Job';
+import type { QueueConnectionConfig } from '@/Queue/QueueManager';
 
 export class SyncDriver implements QueueDriver {
   protected connectionName: string = 'sync';

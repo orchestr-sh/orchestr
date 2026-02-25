@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ServerResponse, IncomingMessage } from 'http';
 import { Socket } from 'net';
-import { Response } from '../../src/Routing/Response';
+import { Response } from '@/Routing/Response';
 
 function createMockServerResponse(): ServerResponse {
   const socket = new Socket();
@@ -116,10 +116,7 @@ describe('Response', () => {
   describe('download()', () => {
     it('sends download response', () => {
       response.download(Buffer.from('file content'), 'test.txt');
-      expect(raw.setHeader).toHaveBeenCalledWith(
-        'Content-Disposition',
-        'attachment; filename="test.txt"'
-      );
+      expect(raw.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="test.txt"');
       expect(raw.setHeader).toHaveBeenCalledWith('Content-Type', 'application/octet-stream');
     });
   });
@@ -145,9 +142,7 @@ describe('Response', () => {
       });
       response.send('ok');
 
-      const setCookieCall = (raw.setHeader as any).mock.calls.find(
-        (c: any) => c[0] === 'Set-Cookie'
-      );
+      const setCookieCall = (raw.setHeader as any).mock.calls.find((c: any) => c[0] === 'Set-Cookie');
       const cookieStr = setCookieCall[1][0];
       expect(cookieStr).toContain('Max-Age=3600');
       expect(cookieStr).toContain('Domain=example.com');
@@ -160,9 +155,7 @@ describe('Response', () => {
     it('uses default path=/ when no path specified', () => {
       response.cookie('name', 'value');
       response.send('ok');
-      const setCookieCall = (raw.setHeader as any).mock.calls.find(
-        (c: any) => c[0] === 'Set-Cookie'
-      );
+      const setCookieCall = (raw.setHeader as any).mock.calls.find((c: any) => c[0] === 'Set-Cookie');
       const cookieStr = setCookieCall[1][0];
       expect(cookieStr).toContain('Path=/');
     });

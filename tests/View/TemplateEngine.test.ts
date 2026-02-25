@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { TemplateEngine } from '../../src/View/Engines/TemplateEngine';
+import { TemplateEngine } from '@/View/Engines/TemplateEngine';
 
 describe('TemplateEngine', () => {
   let engine: TemplateEngine;
@@ -70,42 +70,31 @@ describe('TemplateEngine', () => {
 
   describe('@foreach / @endforeach', () => {
     it('iterates over arrays', async () => {
-      const result = await engine.compile(
-        '@foreach(items as item){{ item }}@endforeach',
-        { items: ['a', 'b', 'c'] }
-      );
+      const result = await engine.compile('@foreach(items as item){{ item }}@endforeach', { items: ['a', 'b', 'c'] });
       expect(result).toBe('abc');
     });
 
     it('iterates with key and value', async () => {
-      const result = await engine.compile(
-        '@foreach(items as item, idx){{ idx }}:{{ item }} @endforeach',
-        { items: ['a', 'b'] }
-      );
+      const result = await engine.compile('@foreach(items as item, idx){{ idx }}:{{ item }} @endforeach', {
+        items: ['a', 'b'],
+      });
       expect(result).toBe('0:a 1:b ');
     });
 
     it('handles objects', async () => {
-      const result = await engine.compile(
-        '@foreach(obj as val, key){{ key }}={{ val }} @endforeach',
-        { obj: { x: 1, y: 2 } }
-      );
+      const result = await engine.compile('@foreach(obj as val, key){{ key }}={{ val }} @endforeach', {
+        obj: { x: 1, y: 2 },
+      });
       expect(result).toBe('x=1 y=2 ');
     });
 
     it('handles empty arrays', async () => {
-      const result = await engine.compile(
-        '@foreach(items as item){{ item }}@endforeach',
-        { items: [] }
-      );
+      const result = await engine.compile('@foreach(items as item){{ item }}@endforeach', { items: [] });
       expect(result).toBe('');
     });
 
     it('handles undefined iterable gracefully', async () => {
-      const result = await engine.compile(
-        '@foreach(missing as item){{ item }}@endforeach',
-        {}
-      );
+      const result = await engine.compile('@foreach(missing as item){{ item }}@endforeach', {});
       expect(result).toBe('');
     });
   });

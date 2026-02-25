@@ -1,4 +1,4 @@
-import { Application } from '../Foundation/Application';
+import { Application } from '@/Foundation/Application';
 
 /**
  * Facade - Laravel's Facade base class

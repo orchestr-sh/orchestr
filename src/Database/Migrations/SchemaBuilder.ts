@@ -4,8 +4,8 @@
  * Builds and executes schema migrations with support for multiple database drivers
  */
 
-import { Schema } from '../Contracts/Schema';
-import { Connection } from '../Connection';
+import { Schema } from '@/Database/Contracts/Schema';
+import { Connection } from '@/Database/Connection';
 import { Blueprint } from './Blueprint';
 import { ColumnDefinition } from './ColumnDefinition';
 import { ForeignKeyDefinition } from './ForeignKeyDefinition';

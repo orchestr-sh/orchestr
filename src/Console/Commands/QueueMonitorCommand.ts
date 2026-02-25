@@ -5,9 +5,9 @@
  * Mirrors Laravel's `php artisan queue:monitor`.
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import type { QueueManager } from '../../Queue/QueueManager';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import type { QueueManager } from '@/Queue/QueueManager';
 
 export class QueueMonitorCommand extends Command {
   signature = 'queue:monitor [queues]';

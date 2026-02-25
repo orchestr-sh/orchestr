@@ -1,6 +1,6 @@
-import { ServiceProvider } from '../Foundation/ServiceProvider';
-import { Router } from '../Routing/Router';
-import { Facade } from '../Support/Facade';
+import { ServiceProvider } from '@/Foundation/ServiceProvider';
+import { Router } from '@/Routing/Router';
+import { Facade } from '@/Support/Facade';
 
 /**
  * RouteServiceProvider - Registers the router in the container
@@ -45,7 +45,7 @@ export class RouteServiceProvider extends ServiceProvider {
 
   /**
    * Load routes from a module
-   * Usage: loadRoutesFrom(() => import('../routes/web'))
+   * Usage: loadRoutesFrom(() => import('@/routes/web'))
    */
   protected async loadRoutesFrom(importer: () => Promise<any>): Promise<void> {
     await importer();

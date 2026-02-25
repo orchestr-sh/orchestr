@@ -4,7 +4,7 @@
  * Represents a foreign key constraint in a migration
  */
 
-import { ForeignKeyDefinition as IForeignKeyDefinition } from '../Contracts/Schema';
+import { ForeignKeyDefinition as IForeignKeyDefinition } from '@/Database/Contracts/Schema';
 
 export class ForeignKeyDefinition implements IForeignKeyDefinition {
   public columns: string[];

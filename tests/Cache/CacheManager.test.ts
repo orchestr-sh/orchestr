@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CacheManager } from '../../src/Cache/CacheManager';
-import { ArrayStore } from '../../src/Cache/Stores/ArrayStore';
-import { NullStore } from '../../src/Cache/Stores/NullStore';
+import { CacheManager } from '@/Cache/CacheManager';
+import { ArrayStore } from '@/Cache/Stores/ArrayStore';
+import { NullStore } from '@/Cache/Stores/NullStore';
 
 describe('CacheManager', () => {
   let manager: CacheManager;

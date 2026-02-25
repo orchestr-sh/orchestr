@@ -4,7 +4,7 @@
  * Runs database seeders
  */
 
-import { Connection } from '../Connection';
+import { Connection } from '@/Database/Connection';
 import { Seeder } from './Seeder';
 import * as fs from 'fs';
 import * as path from 'path';

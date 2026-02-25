@@ -5,7 +5,7 @@
  * Command-line interface for Orchestr
  */
 
-import { Application } from '../Foundation/Application';
+import { Application } from '@/Foundation/Application';
 import { ConsoleKernel } from './ConsoleKernel';
 import { MigrateCommand } from './Commands/MigrateCommand';
 import { MigrateRollbackCommand } from './Commands/MigrateRollbackCommand';

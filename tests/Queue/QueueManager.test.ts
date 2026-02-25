@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { QueueManager } from '../../src/Queue/QueueManager';
-import { NullDriver } from '../../src/Queue/Drivers/NullDriver';
-import { SyncDriver } from '../../src/Queue/Drivers/SyncDriver';
-import { Job } from '../../src/Queue/Job';
+import { QueueManager } from '@/Queue/QueueManager';
+import { NullDriver } from '@/Queue/Drivers/NullDriver';
+import { SyncDriver } from '@/Queue/Drivers/SyncDriver';
+import { Job } from '@/Queue/Job';
 
 class SimpleJob extends Job {
   public handled = false;

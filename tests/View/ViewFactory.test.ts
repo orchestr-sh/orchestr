@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ViewFactory } from '../../src/View/ViewFactory';
-import { View } from '../../src/View/View';
-import type { ViewEngine } from '../../src/View/Engines/ViewEngine';
+import { ViewFactory } from '@/View/ViewFactory';
+import { View } from '@/View/View';
+import type { ViewEngine } from '@/View/Engines/ViewEngine';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';

@@ -7,7 +7,7 @@
  * Mirrors Laravel's Illuminate\Cache\NullStore.
  */
 
-import type { Store } from '../Contracts/Store';
+import type { Store } from '@/Cache/Contracts/Store';
 
 export class NullStore implements Store {
   async get<T = any>(_key: string): Promise<T | null> {

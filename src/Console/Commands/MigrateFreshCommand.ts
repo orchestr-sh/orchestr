@@ -4,10 +4,10 @@
  * Drop all tables and re-run all migrations
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
-import { Migrator } from '../../Database/Migrations/Migrator';
-import { SchemaBuilder } from '../../Database/Migrations/SchemaBuilder';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
+import { Migrator } from '@/Database/Migrations/Migrator';
+import { SchemaBuilder } from '@/Database/Migrations/SchemaBuilder';
 
 export class MigrateFreshCommand extends Command {
   signature = 'migrate:fresh';
