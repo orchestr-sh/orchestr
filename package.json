@@ -1,6 +1,6 @@
 {
   "name": "@orchestr-sh/orchestr",
-  "version": "1.9.5",
+  "version": "1.9.6",
   "description": "A 1:1 Laravel replica in TypeScript - Brings Laravel's elegant syntax and architecture to Node.js",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
