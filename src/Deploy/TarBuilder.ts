@@ -38,6 +38,7 @@ export class TarBuilder {
       'yarn.lock',
       'ecosystem.config.js',
       'ecosystem.config.cjs',
+      'dist-entry.js',
     ];
 
     for (const f of optionals) {
