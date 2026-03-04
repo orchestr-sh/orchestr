@@ -22,6 +22,14 @@ import { MakeControllerCommand } from './Commands/MakeControllerCommand';
 import { EventListCommand } from './Commands/EventListCommand';
 import { EventCacheCommand } from './Commands/EventCacheCommand';
 import { EventClearCommand } from './Commands/EventClearCommand';
+import { DeployLoginCommand } from './Commands/DeployLoginCommand';
+import { DeployInitCommand } from './Commands/DeployInitCommand';
+import { DeployServerCommand } from './Commands/DeployServerCommand';
+import { DeployCommand } from './Commands/DeployCommand';
+import { DeployStatusCommand } from './Commands/DeployStatusCommand';
+import { DeployEnvCommand } from './Commands/DeployEnvCommand';
+import { DeployRollbackCommand } from './Commands/DeployRollbackCommand';
+import { DeployProvisionCommand } from './Commands/DeployProvisionCommand';
 
 // Create application instance
 const app = new Application();
@@ -46,6 +54,15 @@ class OrchestrKernel extends ConsoleKernel {
       new EventListCommand(this.app),
       new EventCacheCommand(this.app),
       new EventClearCommand(this.app),
+      // Deploy commands
+      new DeployLoginCommand(),
+      new DeployInitCommand(),
+      new DeployServerCommand(),
+      new DeployCommand(),
+      new DeployStatusCommand(),
+      new DeployEnvCommand(),
+      new DeployRollbackCommand(),
+      new DeployProvisionCommand(),
     ]);
   }
 }

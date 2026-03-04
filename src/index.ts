@@ -183,6 +183,34 @@ export type { CommandOptions } from './Console/Command';
 export type { MigrationOptions } from './Database/Migrations/Migrator';
 export type { MigrationData } from './Database/Migrations/MigrationRepository';
 
+// Deploy Module
+export { CredentialStore } from './Deploy/CredentialStore';
+export type { Credentials } from './Deploy/CredentialStore';
+export { ProjectConfig } from './Deploy/ProjectConfig';
+export type { SymphonyConfig } from './Deploy/ProjectConfig';
+export { SymphonyClient, SymphonyApiError } from './Deploy/SymphonyClient';
+export type { ApiError } from './Deploy/SymphonyClient';
+export { SSHConnection } from './Deploy/SSHConnection';
+export type { SSHConfig } from './Deploy/SSHConnection';
+export { TarBuilder } from './Deploy/TarBuilder';
+export type { TarBuildResult } from './Deploy/TarBuilder';
+export { Deployer } from './Deploy/Deployer';
+export type { ServerConfig, DeployOptions } from './Deploy/Deployer';
+
+// Deploy Commands
+export { DeployLoginCommand } from './Console/Commands/DeployLoginCommand';
+export { DeployInitCommand } from './Console/Commands/DeployInitCommand';
+export { DeployServerCommand } from './Console/Commands/DeployServerCommand';
+export { DeployCommand } from './Console/Commands/DeployCommand';
+export { DeployStatusCommand } from './Console/Commands/DeployStatusCommand';
+export { DeployEnvCommand } from './Console/Commands/DeployEnvCommand';
+export { DeployRollbackCommand } from './Console/Commands/DeployRollbackCommand';
+export { DeployProvisionCommand } from './Console/Commands/DeployProvisionCommand';
+
+// Deploy Module — Phase 3
+export { Provisioner } from './Deploy/Provisioner';
+export type { ProvisionOptions } from './Deploy/Provisioner';
+
 // Events
 export { Event } from './Events/Event';
 export type { EventClass } from './Events/Event';
