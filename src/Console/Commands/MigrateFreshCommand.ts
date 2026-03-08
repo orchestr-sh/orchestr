@@ -20,7 +20,7 @@ export class MigrateFreshCommand extends Command {
   async handle(args: string[], options: CommandOptions): Promise<void> {
     const db = this.app.make('db') as any;
     const connection = db.connection();
-    const migrationPath = options.path || './database/migrations';
+    const migrationPath = options.path || this.app.databasePath('migrations');
     const paths = Array.isArray(migrationPath) ? migrationPath : [migrationPath];
 
     const schema = new SchemaBuilder(connection);

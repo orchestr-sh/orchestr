@@ -25,7 +25,7 @@ export class MakeMigrationCommand extends Command {
       return;
     }
 
-    const migrationPath = options.path || './database/migrations';
+    const migrationPath = (options.path as string) || this.app.databasePath('migrations');
     const table = options.table as string | undefined;
     const create = options.create === true;
 
