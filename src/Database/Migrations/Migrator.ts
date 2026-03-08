@@ -130,6 +130,22 @@ export class Migrator {
   }
 
   /**
+   * Drop all tables in the connected database.
+   *
+   * Unlike reset(), this does not rely on migration records or down() methods.
+   * It queries the database's own schema catalog for every table name and
+   * issues a DROP TABLE IF EXISTS for each one, giving a truly clean slate
+   * regardless of whether migrations were tracked.
+   */
+  async dropAllTables(): Promise<void> {
+    const tables = await this.connection.getTables();
+
+    for (const table of tables) {
+      await this.connection.query(`DROP TABLE IF EXISTS ${table}`);
+    }
+  }
+
+  /**
    * Refresh the database (reset and re-run all migrations)
    */
   async refresh(): Promise<{ rolledBack: string[]; ran: string[] }> {
