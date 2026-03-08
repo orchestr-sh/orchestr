@@ -1,7 +1,4 @@
 name: Tests
-concurrency:
-  cancel-in-progress: true
-  group: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: read
@@ -17,22 +14,23 @@ on:
     branches:
       - main
     paths:
-      - '**.ts'
-      - 'package-lock.json'
+      - "**.ts"
+      - "package-lock.json"
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: true
       matrix:
         node-version: [22.x, 24.x]
 
+    name: Node ${{ matrix.node-version }}
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
+        uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-node
         with:
@@ -43,4 +41,3 @@ jobs:
 
       - name: Run tests
         run: npm run test
-
