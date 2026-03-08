@@ -84,7 +84,7 @@ import { Ensemble } from '@orchestr-sh/orchestr';
 
 export class User extends Ensemble {
   protected table = 'users';
-  protected fillable = ['name', 'email', 'password'];
+  static fillable = ['name', 'email', 'password'];
   protected hidden = ['password'];
 }
 
@@ -102,6 +102,62 @@ await user.save();
 // Delete
 await user.delete();
 ```
+
+### Mass Assignment (fillable / guarded)
+
+Ensembles protect against mass-assignment vulnerabilities the same way Laravel does. You declare which attributes are safe to fill in bulk by setting `fillable`, or which attributes are blocked by setting `guarded`.
+
+#### Recommended: static properties
+
+Declare `fillable` and `guarded` as `static` class properties. This is the cleanest approach because static properties exist on the class itself before any constructor runs, so the values are always available when `fill()` is called during construction.
+
+```typescript
+export class User extends Ensemble {
+  static fillable = ['name', 'email', 'password'];
+}
+
+export class Post extends Ensemble {
+  static guarded = ['id', 'user_id'];
+}
+
+// No constructor needed – mass assignment works immediately
+const user = await User.create({ name: 'Alice', email: 'alice@example.com' });
+```
+
+Setting `static guarded = []` makes all attributes mass-assignable (equivalent to Laravel's "unguarded" model):
+
+```typescript
+export class LogEntry extends Ensemble {
+  static guarded = [];
+}
+```
+
+#### Legacy / fallback: instance properties
+
+Before static properties were supported, the workaround was to declare `protected fillable` as an instance field initialiser and then call `this.fill()` manually in the constructor after `super()` had already run:
+
+```typescript
+// Only needed if you cannot use static properties for some reason.
+export class User extends Ensemble {
+  protected fillable = ['name', 'email', 'password'];
+
+  constructor(attributes: Record<string, any> = {}, fromDatabase = false) {
+    super({}, fromDatabase); // pass empty attrs to super so fill() runs before fillable is set
+    this.fill(attributes);   // re-run fill now that this.fillable is initialised
+  }
+}
+```
+
+This pattern still works but is more verbose. Prefer `static fillable` / `static guarded` for all new models.
+
+#### How resolution works
+
+When `isFillable()` is called, the lookup order is:
+
+1. **`static fillable` on the concrete class** — checked first via `Object.prototype.hasOwnProperty`. If the subclass has defined its own static property it is used as the authoritative allow-list.
+2. **`this.fillable` (instance property)** — the fallback for models that use the constructor-override pattern or that inherit the base class default (`[]`).
+
+The same two-step lookup applies to `guarded`. Models that define neither property behave identically to before: the base-class default of `guarded = ['*']` blocks all mass assignment.
 
 ## Querying
 

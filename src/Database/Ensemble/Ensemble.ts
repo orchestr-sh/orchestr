@@ -48,14 +48,36 @@ export abstract class Ensemble extends HasRelationshipsMixin {
   protected keyType: string = 'int';
 
   /**
-   * The attributes that are mass assignable
+   * The attributes that are mass assignable (instance property).
+   *
+   * Subclasses may also declare `static fillable: string[]` instead.
+   * Static properties are resolved at construction time so they are safe
+   * to use even when a subclass constructor has not yet run its own field
+   * initialisers.
    */
   protected fillable: string[] = [];
 
   /**
-   * The attributes that aren't mass assignable
+   * The attributes that aren't mass assignable (instance property).
+   *
+   * Subclasses may also declare `static guarded: string[]` instead of
+   * (or in addition to) the instance property.
    */
   protected guarded: string[] = ['*'];
+
+  /**
+   * Static fillable list.  Subclasses that declare `static fillable` here
+   * will have those attributes made mass-assignable without needing a
+   * constructor override.
+   */
+  static fillable?: string[];
+
+  /**
+   * Static guarded list.  Subclasses that declare `static guarded` here
+   * will have those attributes protected from mass assignment without
+   * needing a constructor override.
+   */
+  static guarded?: string[];
 
   /**
    * The attributes that should be hidden for serialization
@@ -204,18 +226,47 @@ export abstract class Ensemble extends HasRelationshipsMixin {
   }
 
   /**
-   * Determine if the given attribute may be mass assigned
+   * Determine if the given attribute may be mass assigned.
+   *
+   * Resolution order for `fillable` and `guarded`:
+   *   1. Static property on the concrete class (e.g. `static fillable = [...]`)
+   *      – safe because static properties exist before any constructor runs.
+   *   2. Instance property (`this.fillable` / `this.guarded`) – populated either
+   *      by Ensemble's own field initialiser or by a subclass constructor
+   *      workaround that calls `this.fill()` a second time after `super()`.
+   *
+   * If the concrete class defines `static fillable`, it takes full precedence
+   * over the instance property (matching Laravel's behaviour where a non-empty
+   * fillable list is the authoritative allow-list).
    */
   protected isFillable(key: string): boolean {
-    if (this.fillable.length > 0) {
-      return this.fillable.includes(key);
+    const ctor = this.constructor as typeof Ensemble;
+
+    // Prefer static fillable if the subclass has defined one on itself
+    // (not inherited – check own property to avoid reading Ensemble's
+    //  `undefined` declaration as a truthy value).
+    const staticFillable: string[] | undefined = Object.prototype.hasOwnProperty.call(ctor, 'fillable')
+      ? ctor.fillable
+      : undefined;
+
+    const effectiveFillable: string[] = staticFillable ?? this.fillable;
+
+    if (effectiveFillable.length > 0) {
+      return effectiveFillable.includes(key);
     }
 
-    if (this.guarded.length > 0 && !this.guarded.includes('*')) {
-      return !this.guarded.includes(key);
+    // No fillable list – fall back to guarded logic.
+    const staticGuarded: string[] | undefined = Object.prototype.hasOwnProperty.call(ctor, 'guarded')
+      ? ctor.guarded
+      : undefined;
+
+    const effectiveGuarded: string[] = staticGuarded ?? this.guarded;
+
+    if (effectiveGuarded.length > 0 && !effectiveGuarded.includes('*')) {
+      return !effectiveGuarded.includes(key);
     }
 
-    return this.guarded[0] !== '*';
+    return effectiveGuarded[0] !== '*';
   }
 
   /**
