@@ -323,15 +323,17 @@ npx orchestr migrate:rollback
 # Rollback all migrations
 npx orchestr migrate:reset
 
-# Drop all tables and re-run migrations
+# Drop all tables and re-run migrations (fresh start)
 npx orchestr migrate:fresh
 
-# Rollback and re-run all migrations
+# Rollback and re-run all migrations (uses migration tracking)
 npx orchestr migrate:refresh
 
 # Check migration status
 npx orchestr migrate:status
 ```
+
+> **Note:** `migrate:fresh` drops all tables in the database and re-runs all migrations from scratch, giving you a completely clean slate. Use this for development/testing when you want to start over. `migrate:refresh` is more conservative—it only rolls back and re-runs migrations that the framework knows about. `migrate:reset` rolls back migrations without re-running them.
 
 ### Creating Tables
 

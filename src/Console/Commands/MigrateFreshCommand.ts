@@ -30,10 +30,9 @@ export class MigrateFreshCommand extends Command {
     this.newLine();
 
     try {
-      // Drop all tables
+      // Drop all tables (including the migrations tracking table itself)
       this.info('Dropping all tables...');
-      const repository = migrator.getRepository();
-      await repository.deleteRepository();
+      await migrator.dropAllTables();
       this.newLine();
 
       // Re-run all migrations

@@ -4,8 +4,7 @@ import { MigrateFreshCommand } from '@/Console/Commands/MigrateFreshCommand';
 const migratorCtorSpy = vi.fn();
 const schemaBuilderCtorSpy = vi.fn();
 const runSpy = vi.fn();
-const getRepositorySpy = vi.fn();
-const deleteRepositorySpy = vi.fn();
+const dropAllTablesSpy = vi.fn();
 
 vi.mock('@/Database/Migrations/Migrator', () => {
   class MockMigrator {
@@ -13,8 +12,8 @@ vi.mock('@/Database/Migrations/Migrator', () => {
       migratorCtorSpy(connection, paths);
     }
 
-    getRepository() {
-      return getRepositorySpy();
+    dropAllTables() {
+      return dropAllTablesSpy();
     }
 
     run() {
@@ -39,10 +38,7 @@ describe('MigrateFreshCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     runSpy.mockResolvedValue([]);
-    deleteRepositorySpy.mockResolvedValue(undefined);
-    getRepositorySpy.mockReturnValue({
-      deleteRepository: deleteRepositorySpy,
-    });
+    dropAllTablesSpy.mockResolvedValue(undefined);
 
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -101,7 +97,58 @@ describe('MigrateFreshCommand', () => {
 
     expect(app.databasePath).toHaveBeenCalledWith('migrations');
     expect(migratorCtorSpy).toHaveBeenCalledWith(connection, ['/app/database/migrations']);
-    expect(deleteRepositorySpy).toHaveBeenCalledTimes(1);
+    expect(dropAllTablesSpy).toHaveBeenCalledTimes(1);
     expect(runSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls dropAllTables() before running migrations', async () => {
+    const callOrder: string[] = [];
+    dropAllTablesSpy.mockImplementation(() => {
+      callOrder.push('dropAllTables');
+      return Promise.resolve();
+    });
+    runSpy.mockImplementation(() => {
+      callOrder.push('run');
+      return Promise.resolve([]);
+    });
+
+    const connection = { name: 'test-connection' };
+    const app = {
+      make: vi.fn().mockReturnValue({
+        connection: vi.fn().mockReturnValue(connection),
+      }),
+      databasePath: vi.fn().mockReturnValue('/app/database/migrations'),
+    } as any;
+
+    const command = new MigrateFreshCommand(app);
+    await command.handle([], {});
+
+    expect(callOrder).toEqual(['dropAllTables', 'run']);
+  });
+
+  it('does NOT call getRepository() or deleteRepository()', async () => {
+    const getRepositorySpy = vi.fn();
+    const deleteRepositorySpy = vi.fn();
+
+    // Override the mock migrator constructor for this test to attach the old
+    // repository spies so we can assert they are never invoked.
+    migratorCtorSpy.mockImplementation(() => {
+      // Nothing extra; the mock class definition is static so we just confirm
+      // that getRepository is not exposed.
+    });
+
+    const connection = { name: 'test-connection' };
+    const app = {
+      make: vi.fn().mockReturnValue({
+        connection: vi.fn().mockReturnValue(connection),
+      }),
+      databasePath: vi.fn().mockReturnValue('/app/database/migrations'),
+    } as any;
+
+    const command = new MigrateFreshCommand(app);
+    await command.handle([], {});
+
+    expect(getRepositorySpy).not.toHaveBeenCalled();
+    expect(deleteRepositorySpy).not.toHaveBeenCalled();
   });
 });

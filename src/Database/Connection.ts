@@ -117,6 +117,13 @@ export class Connection {
   }
 
   /**
+   * Get all table names in the connected database
+   */
+  async getTables(): Promise<string[]> {
+    return this.adapter.getTables();
+  }
+
+  /**
    * Get the underlying adapter
    */
   getAdapter(): DatabaseAdapter {
