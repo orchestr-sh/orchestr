@@ -151,6 +151,42 @@ class CreateUserRequest extends FormRequest {
 
 Use it in your controller/handler to validate and access sanitized inputs.
 
+## Auth Validation
+
+Some rules interact with authentication and require app-specific wiring:
+
+- current_password
+  - Recognized as a token; by default it passes until you connect it to your auth system.
+  - Use as a string rule: 
+    ```ts
+    const rules = { current_password: 'current_password' };
+    ```
+  - Integration options:
+    - Prefer user identity checks in `FormRequest.authorize()`.
+    - Or provide a custom invokable rule that verifies the password:
+      ```ts
+      import { BaseRule } from '@/Foundation/Http/Rules';
+      import { Auth } from '@/Auth'; // your auth API
+      class CurrentPasswordRule extends BaseRule {
+        constructor() { super('current_password'); this.invokable = true; }
+        async passes(_attr: string, value: any): Promise<boolean> {
+          const user = Auth.user();
+          if (!user) return false;
+          return Auth.verify(user, String(value));
+        }
+        messageFor(attribute: string) { return `The ${attribute} is incorrect.`; }
+      }
+      const rules = { current_password: [new CurrentPasswordRule()] };
+      ```
+
+- password
+  - Builder: `Rule.password()`; enforcement is application-defined.
+  - Recommended: express policy via built-in tokens (`string|min|max|confirmed|regex`) or a custom invokable rule that centralizes password policy checks.
+
+- can:ability
+  - Builder: `Rule.can('update-post')` returns a token.
+  - Recommended: perform authorization in `FormRequest.authorize()`; use validation for data constraints. If you need field-level gating, implement an invokable rule that queries your Gate/Policy and returns an error message when unauthorized.
+
 ## Error Handling
 
 - `validate()` returns `true/false`
