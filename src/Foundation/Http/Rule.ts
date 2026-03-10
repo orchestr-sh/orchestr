@@ -8,9 +8,7 @@ import {
   ArrayRule,
   ProhibitedIfRule,
   RequiredIfRule,
-  ExcludeRule,
   ExcludeIfRule,
-  ExcludeUnlessRule,
   DateRule,
   AnyOfRule,
   ContainsRule,
@@ -203,13 +201,13 @@ export class Rule {
     return 'active_url';
   }
   static exclude(): RuleReturn {
-    return new ExcludeRule();
+    return 'exclude';
   }
   static excludeIf(field: string, value: string | number | boolean): RuleReturn {
     return new ExcludeIfRule(field, value);
   }
   static excludeUnless(field: string, value: string | number | boolean): RuleReturn {
-    return new ExcludeUnlessRule(field, value);
+    return `exclude_unless:${field},${value}`;
   }
   static anyOf(rules: Array<string | ValidationRuleObject>): RuleReturn {
     return new AnyOfRule(rules);

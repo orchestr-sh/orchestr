@@ -101,6 +101,28 @@ export class Validator {
               break;
             }
           }
+          if (ruleKey === 'exclude_with') {
+            const fields = params
+              .join(':')
+              .split(',')
+              .map((p) => p.trim())
+              .filter((p) => p.length > 0);
+            if (fields.some((f) => this.getFieldValue(f) !== undefined)) {
+              excluded = true;
+              break;
+            }
+          }
+          if (ruleKey === 'exclude_without') {
+            const fields = params
+              .join(':')
+              .split(',')
+              .map((p) => p.trim())
+              .filter((p) => p.length > 0);
+            if (fields.some((f) => this.getFieldValue(f) === undefined)) {
+              excluded = true;
+              break;
+            }
+          }
           const result = await this.validateRule(field, value, ruleKey, params);
           if (!result.passes) {
             this.addError(field, result.message);
@@ -160,6 +182,28 @@ export class Validator {
             const [otherField, expected] = params;
             const ov = this.getFieldValue(otherField);
             if (String(ov) !== expected) {
+              excluded = true;
+              break;
+            }
+          }
+          if (ruleKey === 'exclude_with') {
+            const fields = params
+              .join(':')
+              .split(',')
+              .map((p) => p.trim())
+              .filter((p) => p.length > 0);
+            if (fields.some((f) => this.getFieldValue(f) !== undefined)) {
+              excluded = true;
+              break;
+            }
+          }
+          if (ruleKey === 'exclude_without') {
+            const fields = params
+              .join(':')
+              .split(',')
+              .map((p) => p.trim())
+              .filter((p) => p.length > 0);
+            if (fields.some((f) => this.getFieldValue(f) === undefined)) {
               excluded = true;
               break;
             }
@@ -361,6 +405,36 @@ export class Validator {
           return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
         }
         return { passes: true, message: '' };
+      case 'present_if': {
+        const [otherField, expected] = params;
+        const ov = other(otherField);
+        if (toString(ov) === expected && !isPresent(value)) {
+          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
+        }
+        return { passes: true, message: '' };
+      }
+      case 'present_unless': {
+        const [otherField, expected] = params;
+        const ov = other(otherField);
+        if (toString(ov) !== expected && !isPresent(value)) {
+          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
+        }
+        return { passes: true, message: '' };
+      }
+      case 'present_with': {
+        const fields = listParams;
+        if (fields.some((f) => isPresent(other(f))) && !isPresent(value)) {
+          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
+        }
+        return { passes: true, message: '' };
+      }
+      case 'present_with_all': {
+        const fields = listParams;
+        if (fields.every((f) => isPresent(other(f))) && !isPresent(value)) {
+          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
+        }
+        return { passes: true, message: '' };
+      }
 
       case 'filled':
         if (isPresent(value) && isEmpty(value)) {
@@ -555,6 +629,20 @@ export class Validator {
           };
         }
         return { passes: true, message: '' };
+      case 'required_array_keys': {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          const keys = listParams;
+          const hasAll = keys.every((k) => Object.prototype.hasOwnProperty.call(value, k));
+          if (!hasAll) {
+            return {
+              passes: false,
+              message: this.getMessage(field, rule, `The ${attribute} must contain keys: ${keys.join(', ')}.`),
+            };
+          }
+          return { passes: true, message: '' };
+        }
+        return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be an array.`) };
+      }
 
       case 'confirmed': {
         const confirmationField = `${field}_confirmation`;
@@ -687,6 +775,36 @@ export class Validator {
             return {
               passes: false,
               message: this.getMessage(field, rule, `The ${attribute} must end with one of: ${listParams.join(', ')}.`),
+            };
+          }
+        }
+        return { passes: true, message: '' };
+      case 'doesnt_start_with':
+        if (value) {
+          const s = toString(value);
+          if (listParams.some((p) => s.startsWith(p))) {
+            return {
+              passes: false,
+              message: this.getMessage(
+                field,
+                rule,
+                `The ${attribute} must not start with one of: ${listParams.join(', ')}.`
+              ),
+            };
+          }
+        }
+        return { passes: true, message: '' };
+      case 'doesnt_end_with':
+        if (value) {
+          const s = toString(value);
+          if (listParams.some((p) => s.endsWith(p))) {
+            return {
+              passes: false,
+              message: this.getMessage(
+                field,
+                rule,
+                `The ${attribute} must not end with one of: ${listParams.join(', ')}.`
+              ),
             };
           }
         }
@@ -1070,6 +1188,43 @@ export class Validator {
         if (value && !this.isValidUrl(value)) {
           return { passes: false, message: this.getMessage(field, rule, `The ${attribute} is not a valid URL.`) };
         }
+        return { passes: true, message: '' };
+      case 'missing':
+        if (isPresent(value) && !isEmpty(value)) {
+          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
+        }
+        return { passes: true, message: '' };
+      case 'missing_if': {
+        const [otherField, expected] = params;
+        const ov = other(otherField);
+        if (toString(ov) === expected && isPresent(value) && !isEmpty(value)) {
+          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
+        }
+        return { passes: true, message: '' };
+      }
+      case 'missing_unless': {
+        const [otherField, expected] = params;
+        const ov = other(otherField);
+        if (toString(ov) !== expected && isPresent(value) && !isEmpty(value)) {
+          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
+        }
+        return { passes: true, message: '' };
+      }
+      case 'missing_with': {
+        const fields = listParams;
+        if (fields.some((f) => isPresent(other(f))) && isPresent(value) && !isEmpty(value)) {
+          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
+        }
+        return { passes: true, message: '' };
+      }
+      case 'missing_with_all': {
+        const fields = listParams;
+        if (fields.every((f) => isPresent(other(f))) && isPresent(value) && !isEmpty(value)) {
+          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
+        }
+        return { passes: true, message: '' };
+      }
+      case 'current_password':
         return { passes: true, message: '' };
 
       default:
