@@ -1,83 +1,17 @@
 import type { ValidationRuleObject } from './Validator';
+type RuleReturn = ValidationRuleObject | string;
 import {
-  RequiredRule,
-  StringRule,
   EmailRule,
   NumericRule,
-  IntegerRule,
-  BooleanRule,
-  MinRule,
-  MaxRule,
-  BetweenRule,
-  SizeRule,
   InRule,
   NotInRule,
   ArrayRule,
-  DistinctRule,
-  ConfirmedRule,
-  UrlRule,
-  UuidRule,
-  TimezoneRule,
-  AlphaRule,
-  AlphaNumRule,
-  AlphaDashRule,
-  RegexRule,
-  NotRegexRule,
-  NullableRule,
-  SometimesRule,
-  JsonRule,
-  AsciiRule,
-  DecimalRule,
-  StartsWithRule,
-  EndsWithRule,
-  SameRule,
-  DifferentRule,
-  GtRule,
-  GteRule,
-  LtRule,
-  LteRule,
-  IpRule,
-  Ipv4Rule,
-  Ipv6Rule,
-  MacAddressRule,
-  LowercaseRule,
-  UppercaseRule,
-  InArrayRule,
-  PresentRule,
-  FilledRule,
-  AcceptedRule,
-  AcceptedIfRule,
-  DeclinedRule,
-  DeclinedIfRule,
-  ProhibitedRule,
   ProhibitedIfRule,
-  ProhibitedUnlessRule,
-  ProhibitsRule,
-  FileRule,
-  ImageRule,
-  MimetypesRule,
-  MimesRule,
-  ActiveUrlRule,
   RequiredIfRule,
-  RequiredUnlessRule,
-  RequiredWithRule,
-  RequiredWithAllRule,
-  RequiredWithoutRule,
-  RequiredWithoutAllRule,
   ExcludeRule,
   ExcludeIfRule,
   ExcludeUnlessRule,
   DateRule,
-  DateEqualsRule,
-  AfterRule,
-  AfterOrEqualRule,
-  BeforeRule,
-  BeforeOrEqualRule,
-  DigitsRule,
-  DigitsBetweenRule,
-  MinDigitsRule,
-  MaxDigitsRule,
-  MultipleOfRule,
   AnyOfRule,
   ContainsRule,
   DoesntContainRule,
@@ -92,202 +26,204 @@ import {
 } from './Rules';
 
 export class Rule {
-  static required(): ValidationRuleObject {
-    return new RequiredRule();
+  static required(): RuleReturn {
+    return 'required';
   }
-  static string(): ValidationRuleObject {
-    return new StringRule();
+  static string(): RuleReturn {
+    return 'string';
   }
-  static email(): ValidationRuleObject {
+  static email(): RuleReturn {
     return new EmailRule();
   }
-  static numeric(): ValidationRuleObject {
+  static numeric(): RuleReturn {
     return new NumericRule();
   }
-  static integer(): ValidationRuleObject {
-    return new IntegerRule();
+  static integer(): RuleReturn {
+    return 'integer';
   }
-  static boolean(): ValidationRuleObject {
-    return new BooleanRule();
+  static boolean(): RuleReturn {
+    return 'boolean';
   }
-  static min(n: number): ValidationRuleObject {
-    return new MinRule(n);
+  static min(n: number): RuleReturn {
+    return `min:${n}`;
   }
-  static max(n: number): ValidationRuleObject {
-    return new MaxRule(n);
+  static max(n: number): RuleReturn {
+    return `max:${n}`;
   }
-  static between(min: number, max: number): ValidationRuleObject {
-    return new BetweenRule(min, max);
+  static between(min: number, max: number): RuleReturn {
+    return `between:${min},${max}`;
   }
-  static size(n: number): ValidationRuleObject {
-    return new SizeRule(n);
+  static size(n: number): RuleReturn {
+    return `size:${n}`;
   }
-  static in(values: Array<string | number>): ValidationRuleObject {
+  static in(values: Array<string | number>): RuleReturn {
     return new InRule(values);
   }
-  static notIn(values: Array<string | number>): ValidationRuleObject {
+  static notIn(values: Array<string | number>): RuleReturn {
     return new NotInRule(values);
   }
-  static array(): ValidationRuleObject {
+  static array(): RuleReturn {
     return new ArrayRule();
   }
-  static distinct(): ValidationRuleObject {
-    return new DistinctRule();
+  static distinct(): RuleReturn {
+    return 'distinct';
   }
-  static confirmed(): ValidationRuleObject {
-    return new ConfirmedRule();
+  static confirmed(): RuleReturn {
+    return 'confirmed';
   }
-  static url(): ValidationRuleObject {
-    return new UrlRule();
+  static url(): RuleReturn {
+    return 'url';
   }
-  static uuid(): ValidationRuleObject {
-    return new UuidRule();
+  static uuid(): RuleReturn {
+    return 'uuid';
   }
-  static timezone(): ValidationRuleObject {
-    return new TimezoneRule();
+  static timezone(): RuleReturn {
+    return 'timezone';
   }
-  static alpha(): ValidationRuleObject {
-    return new AlphaRule();
+  static alpha(): RuleReturn {
+    return 'alpha';
   }
-  static alphaNum(): ValidationRuleObject {
-    return new AlphaNumRule();
+  static alphaNum(): RuleReturn {
+    return 'alpha_num';
   }
-  static alphaDash(): ValidationRuleObject {
-    return new AlphaDashRule();
+  static alphaDash(): RuleReturn {
+    return 'alpha_dash';
   }
-  static regex(pattern: string | RegExp): ValidationRuleObject {
-    return new RegexRule(pattern);
+  static regex(pattern: string | RegExp): RuleReturn {
+    const p = typeof pattern === 'string' ? pattern : pattern.source;
+    return `regex:${p}`;
   }
-  static notRegex(pattern: string | RegExp): ValidationRuleObject {
-    return new NotRegexRule(pattern);
+  static notRegex(pattern: string | RegExp): RuleReturn {
+    const p = typeof pattern === 'string' ? pattern : pattern.source;
+    return `not_regex:${p}`;
   }
-  static nullable(): ValidationRuleObject {
-    return new NullableRule();
+  static nullable(): RuleReturn {
+    return 'nullable';
   }
-  static sometimes(): ValidationRuleObject {
-    return new SometimesRule();
+  static sometimes(): RuleReturn {
+    return 'sometimes';
   }
-  static accepted(): ValidationRuleObject {
-    return new AcceptedRule();
+  static accepted(): RuleReturn {
+    return 'accepted';
   }
-  static acceptedIf(field: string, value: string | number | boolean): ValidationRuleObject {
-    return new AcceptedIfRule(field, value);
+  static acceptedIf(field: string, value: string | number | boolean): RuleReturn {
+    return `accepted_if:${field},${value}`;
   }
-  static declined(): ValidationRuleObject {
-    return new DeclinedRule();
+  static declined(): RuleReturn {
+    return 'declined';
   }
-  static declinedIf(field: string, value: string | number | boolean): ValidationRuleObject {
-    return new DeclinedIfRule(field, value);
+  static declinedIf(field: string, value: string | number | boolean): RuleReturn {
+    return `declined_if:${field},${value}`;
   }
-  static present(): ValidationRuleObject {
-    return new PresentRule();
+  static present(): RuleReturn {
+    return 'present';
   }
-  static filled(): ValidationRuleObject {
-    return new FilledRule();
+  static filled(): RuleReturn {
+    return 'filled';
   }
-  static json(): ValidationRuleObject {
-    return new JsonRule();
+  static json(): RuleReturn {
+    return 'json';
   }
-  static ascii(): ValidationRuleObject {
-    return new AsciiRule();
+  static ascii(): RuleReturn {
+    return 'ascii';
   }
-  static decimal(places?: number): ValidationRuleObject {
-    return new DecimalRule(places);
+  static decimal(places?: number): RuleReturn {
+    return places === undefined ? 'decimal' : `decimal:${places}`;
   }
-  static startsWith(values: Array<string>): ValidationRuleObject {
-    return new StartsWithRule(values);
+  static startsWith(values: Array<string>): RuleReturn {
+    return `starts_with:${values.join(',')}`;
   }
-  static endsWith(values: Array<string>): ValidationRuleObject {
-    return new EndsWithRule(values);
+  static endsWith(values: Array<string>): RuleReturn {
+    return `ends_with:${values.join(',')}`;
   }
-  static same(field: string): ValidationRuleObject {
-    return new SameRule(field);
+  static same(field: string): RuleReturn {
+    return `same:${field}`;
   }
-  static different(field: string): ValidationRuleObject {
-    return new DifferentRule(field);
+  static different(field: string): RuleReturn {
+    return `different:${field}`;
   }
-  static gt(fieldOrValue: string | number): ValidationRuleObject {
-    return new GtRule(fieldOrValue);
+  static gt(fieldOrValue: string | number): RuleReturn {
+    return `gt:${fieldOrValue}`;
   }
-  static gte(fieldOrValue: string | number): ValidationRuleObject {
-    return new GteRule(fieldOrValue);
+  static gte(fieldOrValue: string | number): RuleReturn {
+    return `gte:${fieldOrValue}`;
   }
-  static lt(fieldOrValue: string | number): ValidationRuleObject {
-    return new LtRule(fieldOrValue);
+  static lt(fieldOrValue: string | number): RuleReturn {
+    return `lt:${fieldOrValue}`;
   }
-  static lte(fieldOrValue: string | number): ValidationRuleObject {
-    return new LteRule(fieldOrValue);
+  static lte(fieldOrValue: string | number): RuleReturn {
+    return `lte:${fieldOrValue}`;
   }
-  static ip(): ValidationRuleObject {
-    return new IpRule();
+  static ip(): RuleReturn {
+    return 'ip';
   }
-  static ipv4(): ValidationRuleObject {
-    return new Ipv4Rule();
+  static ipv4(): RuleReturn {
+    return 'ipv4';
   }
-  static ipv6(): ValidationRuleObject {
-    return new Ipv6Rule();
+  static ipv6(): RuleReturn {
+    return 'ipv6';
   }
-  static macAddress(): ValidationRuleObject {
-    return new MacAddressRule();
+  static macAddress(): RuleReturn {
+    return 'mac_address';
   }
-  static lowercase(): ValidationRuleObject {
-    return new LowercaseRule();
+  static lowercase(): RuleReturn {
+    return 'lowercase';
   }
-  static uppercase(): ValidationRuleObject {
-    return new UppercaseRule();
+  static uppercase(): RuleReturn {
+    return 'uppercase';
   }
-  static inArray(field: string): ValidationRuleObject {
-    return new InArrayRule(field);
+  static inArray(field: string): RuleReturn {
+    return `in_array:${field}`;
   }
-  static prohibited(): ValidationRuleObject {
-    return new ProhibitedRule();
+  static prohibited(): RuleReturn {
+    return 'prohibited';
   }
-  static prohibitedIf(field: string, value: string | number | boolean): ValidationRuleObject {
+  static prohibitedIf(field: string, value: string | number | boolean): RuleReturn {
     return new ProhibitedIfRule(field, value);
   }
-  static prohibitedUnless(field: string, value: string | number | boolean): ValidationRuleObject {
-    return new ProhibitedUnlessRule(field, value);
+  static prohibitedUnless(field: string, value: string | number | boolean): RuleReturn {
+    return `prohibited_unless:${field},${value}`;
   }
-  static prohibits(...fields: string[]): ValidationRuleObject {
-    return new ProhibitsRule(fields);
+  static prohibits(...fields: string[]): RuleReturn {
+    return `prohibits:${fields.join(',')}`;
   }
-  static file(): ValidationRuleObject {
-    return new FileRule();
+  static file(): RuleReturn {
+    return 'file';
   }
-  static image(): ValidationRuleObject {
-    return new ImageRule();
+  static image(): RuleReturn {
+    return 'image';
   }
-  static mimetypes(types: string[]): ValidationRuleObject {
-    return new MimetypesRule(types);
+  static mimetypes(types: string[]): RuleReturn {
+    return `mimetypes:${types.join(',')}`;
   }
-  static mimes(extensions: string[]): ValidationRuleObject {
-    return new MimesRule(extensions);
+  static mimes(extensions: string[]): RuleReturn {
+    return `mimes:${extensions.join(',')}`;
   }
-  static activeUrl(): ValidationRuleObject {
-    return new ActiveUrlRule();
+  static activeUrl(): RuleReturn {
+    return 'active_url';
   }
-  static exclude(): ValidationRuleObject {
+  static exclude(): RuleReturn {
     return new ExcludeRule();
   }
-  static excludeIf(field: string, value: string | number | boolean): ValidationRuleObject {
+  static excludeIf(field: string, value: string | number | boolean): RuleReturn {
     return new ExcludeIfRule(field, value);
   }
-  static excludeUnless(field: string, value: string | number | boolean): ValidationRuleObject {
+  static excludeUnless(field: string, value: string | number | boolean): RuleReturn {
     return new ExcludeUnlessRule(field, value);
   }
-  static anyOf(rules: Array<string | ValidationRuleObject>): ValidationRuleObject {
+  static anyOf(rules: Array<string | ValidationRuleObject>): RuleReturn {
     return new AnyOfRule(rules);
   }
-  static contains(needle: string): ValidationRuleObject {
+  static contains(needle: string): RuleReturn {
     return new ContainsRule(needle);
   }
-  static doesntContain(needle: string): ValidationRuleObject {
+  static doesntContain(needle: string): RuleReturn {
     return new DoesntContainRule(needle);
   }
-  static enum(values: Array<string | number | boolean>): ValidationRuleObject {
+  static enum(values: Array<string | number | boolean>): RuleReturn {
     return new EnumRule(values);
   }
-  static imageFile(): ValidationRuleObject {
+  static imageFile(): RuleReturn {
     return new ImageFileRule();
   }
   static dimensions(opts: {
@@ -297,73 +233,73 @@ export class Rule {
     maxWidth?: number;
     minHeight?: number;
     maxHeight?: number;
-  }): ValidationRuleObject {
+  }): RuleReturn {
     return new DimensionsRule(opts);
   }
-  static exists(table: string, column?: string): ValidationRuleObject {
+  static exists(table: string, column?: string): RuleReturn {
     return new ExistsRule(table, column);
   }
-  static unique(table: string, column?: string): ValidationRuleObject {
+  static unique(table: string, column?: string): RuleReturn {
     return new UniqueRule(table, column);
   }
-  static databaseRule(rule: string): ValidationRuleObject {
+  static databaseRule(rule: string): RuleReturn {
     return new DatabaseRule(rule);
   }
-  static can(ability: string): ValidationRuleObject {
+  static can(ability: string): RuleReturn {
     return new CanRule(ability);
   }
-  static password(): ValidationRuleObject {
+  static password(): RuleReturn {
     return new PasswordRule();
   }
-  static requiredIf(field: string, value: string | number | boolean): ValidationRuleObject {
+  static requiredIf(field: string, value: string | number | boolean): RuleReturn {
     return new RequiredIfRule(field, value);
   }
-  static requiredUnless(field: string, value: string | number | boolean): ValidationRuleObject {
-    return new RequiredUnlessRule(field, value);
+  static requiredUnless(field: string, value: string | number | boolean): RuleReturn {
+    return `required_unless:${field},${value}`;
   }
-  static requiredWith(...fields: string[]): ValidationRuleObject {
-    return new RequiredWithRule(...fields);
+  static requiredWith(...fields: string[]): RuleReturn {
+    return `required_with:${fields.join(',')}`;
   }
-  static requiredWithAll(...fields: string[]): ValidationRuleObject {
-    return new RequiredWithAllRule(...fields);
+  static requiredWithAll(...fields: string[]): RuleReturn {
+    return `required_with_all:${fields.join(',')}`;
   }
-  static requiredWithout(...fields: string[]): ValidationRuleObject {
-    return new RequiredWithoutRule(...fields);
+  static requiredWithout(...fields: string[]): RuleReturn {
+    return `required_without:${fields.join(',')}`;
   }
-  static requiredWithoutAll(...fields: string[]): ValidationRuleObject {
-    return new RequiredWithoutAllRule(...fields);
+  static requiredWithoutAll(...fields: string[]): RuleReturn {
+    return `required_without_all:${fields.join(',')}`;
   }
-  static date(): ValidationRuleObject {
+  static date(): RuleReturn {
     return new DateRule();
   }
-  static dateEquals(date: string): ValidationRuleObject {
-    return new DateEqualsRule(date);
+  static dateEquals(date: string): RuleReturn {
+    return `date_equals:${date}`;
   }
-  static after(dateOrField: string): ValidationRuleObject {
-    return new AfterRule(dateOrField);
+  static after(dateOrField: string): RuleReturn {
+    return `after:${dateOrField}`;
   }
-  static afterOrEqual(dateOrField: string): ValidationRuleObject {
-    return new AfterOrEqualRule(dateOrField);
+  static afterOrEqual(dateOrField: string): RuleReturn {
+    return `after_or_equal:${dateOrField}`;
   }
-  static before(dateOrField: string): ValidationRuleObject {
-    return new BeforeRule(dateOrField);
+  static before(dateOrField: string): RuleReturn {
+    return `before:${dateOrField}`;
   }
-  static beforeOrEqual(dateOrField: string): ValidationRuleObject {
-    return new BeforeOrEqualRule(dateOrField);
+  static beforeOrEqual(dateOrField: string): RuleReturn {
+    return `before_or_equal:${dateOrField}`;
   }
-  static digits(length: number): ValidationRuleObject {
-    return new DigitsRule(length);
+  static digits(length: number): RuleReturn {
+    return `digits:${length}`;
   }
-  static digitsBetween(min: number, max: number): ValidationRuleObject {
-    return new DigitsBetweenRule(min, max);
+  static digitsBetween(min: number, max: number): RuleReturn {
+    return `digits_between:${min},${max}`;
   }
-  static minDigits(n: number): ValidationRuleObject {
-    return new MinDigitsRule(n);
+  static minDigits(n: number): RuleReturn {
+    return `min_digits:${n}`;
   }
-  static maxDigits(n: number): ValidationRuleObject {
-    return new MaxDigitsRule(n);
+  static maxDigits(n: number): RuleReturn {
+    return `max_digits:${n}`;
   }
-  static multipleOf(n: number): ValidationRuleObject {
-    return new MultipleOfRule(n);
+  static multipleOf(n: number): RuleReturn {
+    return `multiple_of:${n}`;
   }
 }
