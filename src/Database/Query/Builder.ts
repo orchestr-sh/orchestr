@@ -28,6 +28,7 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
   protected _limit?: number;
   protected _offset?: number;
   protected _bindings: any[] = [];
+  protected _returning?: string[];
 
   constructor(protected adapter: DatabaseAdapter) {}
 
@@ -425,26 +426,120 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
   /**
    * Insert a new record
    */
-  async insert(values: Record<string, any> | Record<string, any>[]): Promise<boolean> {
+  insert(values: Record<string, any> | Record<string, any>[]): Promise<boolean> & {
+    returning(columns?: string | string[]): Promise<any | any[]>;
+  } {
+    const returningFn = (columns?: string | string[]) => this.insertReturning(values, columns);
+    const exec = () => this.executeInsert(values);
+    const chain: any = {
+      returning: returningFn,
+      then: (onfulfilled: any, onrejected: any) => exec().then(onfulfilled, onrejected),
+      catch: (onrejected: any) => exec().catch(onrejected),
+      finally: (onfinally: any) => exec().finally(onfinally),
+    };
+    return chain as Promise<boolean> & { returning: typeof returningFn };
+  }
+
+  protected async executeInsert(values: Record<string, any> | Record<string, any>[]): Promise<boolean> {
     if (!this._table) {
       throw new Error('Cannot insert without specifying a table');
     }
 
     const records = Array.isArray(values) ? values : [values];
-
     if (records.length === 0) {
       return true;
     }
 
     const columns = Object.keys(records[0]);
     const placeholders = records.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ');
-
     const bindings = records.flatMap((record) => columns.map((col) => record[col]));
-
     const sql = `INSERT INTO ${this._table} (${columns.join(', ')}) VALUES ${placeholders}`;
-
     await this.adapter.insert(sql, bindings);
     return true;
+  }
+
+  /**
+   * Specify returning columns for insert/update operations
+   */
+  returning(columns?: string | string[]): this {
+    if (!columns) {
+      this._returning = ['*'];
+    } else if (Array.isArray(columns)) {
+      this._returning = columns;
+    } else {
+      this._returning = [columns];
+    }
+    return this;
+  }
+
+  /**
+   * Insert and return selected columns
+   * - Single insert: returns one row (object)
+   * - Bulk insert: returns array of rows
+   * - Fallbacks for drivers without RETURNING (e.g., MySQL)
+   */
+  async insertReturning(
+    values: Record<string, any> | Record<string, any>[],
+    columns?: string | string[]
+  ): Promise<any | any[]> {
+    if (!this._table) {
+      throw new Error('Cannot insert without specifying a table');
+    }
+
+    const records = Array.isArray(values) ? values : [values];
+    if (records.length === 0) {
+      return Array.isArray(values) ? [] : null;
+    }
+
+    const insertCols = Object.keys(records[0]);
+    const placeholders = records.map(() => `(${insertCols.map(() => '?').join(', ')})`).join(', ');
+    const bindings = records.flatMap((record) => insertCols.map((col) => record[col]));
+
+    const retCols =
+      columns === undefined
+        ? this._returning && this._returning.length > 0
+          ? this._returning
+          : ['*']
+        : Array.isArray(columns)
+          ? columns
+          : [columns];
+
+    const sqlWithReturning = `INSERT INTO ${this._table} (${insertCols.join(', ')}) VALUES ${placeholders} RETURNING ${retCols.join(
+      ', '
+    )}`;
+
+    try {
+      const rows = await this.adapter.select<any>(sqlWithReturning, bindings);
+      // Reset returning state after use
+      this._returning = undefined;
+      return records.length === 1 ? (rows[0] ?? null) : rows;
+    } catch (error) {
+      // Fallback for drivers without RETURNING (e.g., MySQL)
+      const sqlNoReturning = `INSERT INTO ${this._table} (${insertCols.join(', ')}) VALUES ${placeholders}`;
+      const insertResult = await this.adapter.insert(sqlNoReturning, bindings);
+
+      // Only supported fallback: single-row insert by primary key ID
+      if (records.length === 1) {
+        const id = insertResult;
+        // If no id is obtainable, return minimal best-effort (null)
+        if (id === undefined || id === null) {
+          this._returning = undefined;
+          return null;
+        }
+
+        const selectCols = retCols.join(', ');
+        const row = await this.adapter.select<any>(`SELECT ${selectCols} FROM ${this._table} WHERE id = ? LIMIT 1`, [
+          id,
+        ]);
+        this._returning = undefined;
+        return row[0] ?? null;
+      }
+
+      // Bulk insert not supported on drivers without RETURNING
+      throw new Error(
+        'returning() is not supported for bulk inserts on this driver. Insert succeeded without returning rows.'
+      );
+    }
   }
 
   /**

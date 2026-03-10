@@ -222,7 +222,22 @@ export interface QueryBuilderInterface<T = any> {
   /**
    * Insert a new record
    */
-  insert(values: Record<string, any> | Record<string, any>[]): Promise<boolean>;
+  insert(
+    values: Record<string, any> | Record<string, any>[]
+  ): Promise<boolean> & { returning(columns?: string | string[]): Promise<any | any[]> };
+
+  /**
+   * Specify returning columns for insert/update operations
+   */
+  returning(columns?: string | string[]): this;
+
+  /**
+   * Insert and return selected columns (object for single, array for bulk)
+   */
+  insertReturning(
+    values: Record<string, any> | Record<string, any>[],
+    columns?: string | string[]
+  ): Promise<any | any[]>;
 
   /**
    * Insert a new record and get the ID
