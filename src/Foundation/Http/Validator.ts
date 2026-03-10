@@ -55,6 +55,7 @@ export class Validator {
       const value = this.getFieldValue(field);
       const hasSometimes = rules.includes('sometimes');
       const hasNullable = rules.includes('nullable');
+      let excluded = false;
 
       if (hasSometimes && value === undefined) {
         continue;
@@ -75,8 +76,31 @@ export class Validator {
       }
 
       for (const item of items) {
+        if (excluded) {
+          break;
+        }
         if (typeof item === 'string') {
           const [ruleKey, ...params] = item.split(':');
+          if (ruleKey === 'exclude') {
+            excluded = true;
+            break;
+          }
+          if (ruleKey === 'exclude_if') {
+            const [otherField, expected] = params;
+            const ov = this.getFieldValue(otherField);
+            if (String(ov) === expected) {
+              excluded = true;
+              break;
+            }
+          }
+          if (ruleKey === 'exclude_unless') {
+            const [otherField, expected] = params;
+            const ov = this.getFieldValue(otherField);
+            if (String(ov) !== expected) {
+              excluded = true;
+              break;
+            }
+          }
           const result = await this.validateRule(field, value, ruleKey, params);
           if (!result.passes) {
             this.addError(field, result.message);
@@ -120,6 +144,26 @@ export class Validator {
         }
         if (typeof item === 'object' && item && 'rule' in item) {
           const [ruleKey, ...params] = String((item as any).rule).split(':');
+          if (ruleKey === 'exclude') {
+            excluded = true;
+            break;
+          }
+          if (ruleKey === 'exclude_if') {
+            const [otherField, expected] = params;
+            const ov = this.getFieldValue(otherField);
+            if (String(ov) === expected) {
+              excluded = true;
+              break;
+            }
+          }
+          if (ruleKey === 'exclude_unless') {
+            const [otherField, expected] = params;
+            const ov = this.getFieldValue(otherField);
+            if (String(ov) !== expected) {
+              excluded = true;
+              break;
+            }
+          }
           const result = await this.validateRule(field, value, ruleKey, params);
           if (!result.passes) {
             this.addError(field, result.message);
@@ -129,7 +173,7 @@ export class Validator {
       }
 
       // If no errors for this field, add to validated data
-      if (!this.errorMessages[field]) {
+      if (!excluded && !this.errorMessages[field]) {
         this.validatedFields[field] = value;
       }
     }

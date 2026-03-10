@@ -64,6 +64,9 @@ import {
   RequiredWithAllRule,
   RequiredWithoutRule,
   RequiredWithoutAllRule,
+  ExcludeRule,
+  ExcludeIfRule,
+  ExcludeUnlessRule,
   DateRule,
   DateEqualsRule,
   AfterRule,
@@ -251,6 +254,15 @@ export class Rule {
   }
   static activeUrl(): ValidationRuleObject {
     return new ActiveUrlRule();
+  }
+  static exclude(): ValidationRuleObject {
+    return new ExcludeRule();
+  }
+  static excludeIf(field: string, value: string | number | boolean): ValidationRuleObject {
+    return new ExcludeIfRule(field, value);
+  }
+  static excludeUnless(field: string, value: string | number | boolean): ValidationRuleObject {
+    return new ExcludeUnlessRule(field, value);
   }
   static requiredIf(field: string, value: string | number | boolean): ValidationRuleObject {
     return new RequiredIfRule(field, value);
