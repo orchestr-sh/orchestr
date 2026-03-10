@@ -78,6 +78,17 @@ import {
   MinDigitsRule,
   MaxDigitsRule,
   MultipleOfRule,
+  AnyOfRule,
+  ContainsRule,
+  DoesntContainRule,
+  EnumRule,
+  ImageFileRule,
+  DimensionsRule,
+  ExistsRule,
+  UniqueRule,
+  DatabaseRule,
+  CanRule,
+  PasswordRule,
 } from './Rules';
 
 export class Rule {
@@ -263,6 +274,46 @@ export class Rule {
   }
   static excludeUnless(field: string, value: string | number | boolean): ValidationRuleObject {
     return new ExcludeUnlessRule(field, value);
+  }
+  static anyOf(rules: Array<string | ValidationRuleObject>): ValidationRuleObject {
+    return new AnyOfRule(rules);
+  }
+  static contains(needle: string): ValidationRuleObject {
+    return new ContainsRule(needle);
+  }
+  static doesntContain(needle: string): ValidationRuleObject {
+    return new DoesntContainRule(needle);
+  }
+  static enum(values: Array<string | number | boolean>): ValidationRuleObject {
+    return new EnumRule(values);
+  }
+  static imageFile(): ValidationRuleObject {
+    return new ImageFileRule();
+  }
+  static dimensions(opts: {
+    width?: number;
+    height?: number;
+    minWidth?: number;
+    maxWidth?: number;
+    minHeight?: number;
+    maxHeight?: number;
+  }): ValidationRuleObject {
+    return new DimensionsRule(opts);
+  }
+  static exists(table: string, column?: string): ValidationRuleObject {
+    return new ExistsRule(table, column);
+  }
+  static unique(table: string, column?: string): ValidationRuleObject {
+    return new UniqueRule(table, column);
+  }
+  static databaseRule(rule: string): ValidationRuleObject {
+    return new DatabaseRule(rule);
+  }
+  static can(ability: string): ValidationRuleObject {
+    return new CanRule(ability);
+  }
+  static password(): ValidationRuleObject {
+    return new PasswordRule();
   }
   static requiredIf(field: string, value: string | number | boolean): ValidationRuleObject {
     return new RequiredIfRule(field, value);
