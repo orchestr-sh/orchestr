@@ -11,6 +11,7 @@ export { FormRequest } from './Foundation/Http/FormRequest';
 export { ValidationException } from './Foundation/Http/ValidationException';
 export { Validator } from './Foundation/Http/Validator';
 export type { ValidationRules, ValidationRule, ValidationRuleObject } from './Foundation/Http/Validator';
+export { Rule } from './Foundation/Http/Rule';
 export { Config as ConfigClass } from './Foundation/Config/Config';
 export { ConfigServiceProvider } from './Foundation/Config/ConfigServiceProvider';
 
