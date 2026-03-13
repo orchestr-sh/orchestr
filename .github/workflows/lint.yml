@@ -4,18 +4,16 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "**.ts"
-      - "package-lock.json"
   pull_request:
     branches:
       - main
     paths:
       - '**.ts'
       - 'package-lock.json'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test-lint:
@@ -41,4 +39,3 @@ jobs:
 
       - name: Run linter
         run: npm run test:lint
-            
