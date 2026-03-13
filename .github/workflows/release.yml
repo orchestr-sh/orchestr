@@ -1,0 +1,154 @@
+name: Release
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: true
+      matrix:
+        node-version: [22.x, 24.x]
+
+    name: Node ${{ matrix.node-version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run test:lint
+
+  coverage:
+    runs-on: ubuntu-latest
+    needs: lint
+
+    strategy:
+      fail-fast: true
+      matrix:
+        node-version: [22.x, 24.x]
+
+    name: Node ${{ matrix.node-version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run coverage
+        run: npm run test:coverage || true
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./coverage/coverage-final.json
+          fail_ci_if_error: false
+
+  types:
+    runs-on: ubuntu-latest
+    needs: [lint, coverage]
+
+    strategy:
+      fail-fast: true
+      matrix:
+        node-version: [22.x, 24.x]
+
+    name: Node ${{ matrix.node-version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run type checks
+        run: npm run test:types
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [lint, coverage, types]
+
+    strategy:
+      fail-fast: true
+      matrix:
+        node-version: [22.x, 24.x]
+
+    name: Node ${{ matrix.node-version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [lint, coverage, types, test]
+
+    name: Publish the package
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: npm
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
+        run: npm audit signatures
+
+      - name: Build the package
+        run: npm run build
+
+      - name: Publish the package
+        run: npx --package semantic-release --package @semantic-release/changelog
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.SEMANTIC_RELEASE_BOT_NPM_TOKEN }}
