@@ -20,9 +20,9 @@
  * ```
  */
 
-import type { Store } from './Contracts/Store';
-import type { RepositoryContract } from './Contracts/Repository';
 import type { LockContract } from './Contracts/Lock';
+import type { RepositoryContract } from './Contracts/Repository';
+import type { Store } from './Contracts/Store';
 import { CacheLock } from './Locks/CacheLock';
 import { TaggedCache } from './Tags/TaggedCache';
 import { TagSet } from './Tags/TagSet';

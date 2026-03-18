@@ -30,11 +30,11 @@
  * ```
  */
 
-import { Facade } from '@/Support/Facade';
-import type { QueueManager } from '@/Queue/QueueManager';
 import type { Job } from '@/Queue/Job';
-import { PendingChain } from '@/Queue/PendingChain';
+import type { QueueManager } from '@/Queue/QueueManager';
 import { PendingBatch } from '@/Queue/Batching/PendingBatch';
+import { PendingChain } from '@/Queue/PendingChain';
+import { Facade } from '@/Support/Facade';
 
 class BusFacadeClass extends Facade {
   protected static getFacadeAccessor(): string {

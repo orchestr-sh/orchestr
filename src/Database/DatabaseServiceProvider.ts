@@ -5,8 +5,8 @@
  */
 
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
-import { DatabaseManager } from './DatabaseManager';
 import { DrizzleAdapter } from './Adapters/DrizzleAdapter';
+import { DatabaseManager } from './DatabaseManager';
 
 export class DatabaseServiceProvider extends ServiceProvider {
   /**

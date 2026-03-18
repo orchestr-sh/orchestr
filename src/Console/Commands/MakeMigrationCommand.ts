@@ -5,8 +5,8 @@
  */
 
 import { Command, CommandOptions } from '@/Console/Command';
-import { Application } from '@/Foundation/Application';
 import { MigrationCreator } from '@/Database/Migrations/MigrationCreator';
+import { Application } from '@/Foundation/Application';
 
 export class MakeMigrationCommand extends Command {
   signature = 'make:migration <name>';

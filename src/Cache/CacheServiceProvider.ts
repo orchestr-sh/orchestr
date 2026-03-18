@@ -6,11 +6,11 @@
  */
 
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
-import { CacheManager } from './CacheManager';
 import type { CacheConfig } from './CacheManager';
+import { CacheManager } from './CacheManager';
 import { ArrayStore } from './Stores/ArrayStore';
-import { FileStore } from './Stores/FileStore';
 import { DatabaseStore } from './Stores/DatabaseStore';
+import { FileStore } from './Stores/FileStore';
 import { NullStore } from './Stores/NullStore';
 
 export class CacheServiceProvider extends ServiceProvider {

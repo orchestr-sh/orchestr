@@ -8,8 +8,8 @@
  */
 
 import { Command, CommandOptions } from '@/Console/Command';
-import { Provisioner } from '@/Deploy/Provisioner';
 import { prompt } from '@/Deploy/prompt';
+import { Provisioner } from '@/Deploy/Provisioner';
 
 export class DeployProvisionCommand extends Command {
   signature = 'deploy:provision';

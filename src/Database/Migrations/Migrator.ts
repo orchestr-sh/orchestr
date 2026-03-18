@@ -4,12 +4,12 @@
  * Handles running and rolling back migrations
  */
 
-import { Connection } from '@/Database/Connection';
-import { MigrationRepository } from './MigrationRepository';
-import { Migration } from './Migration';
-import { SchemaBuilder } from './SchemaBuilder';
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
+import { Connection } from '@/Database/Connection';
+import { Migration } from './Migration';
+import { MigrationRepository } from './MigrationRepository';
+import { SchemaBuilder } from './SchemaBuilder';
 
 export interface MigrationOptions {
   step?: number;

@@ -7,8 +7,8 @@
 
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 
 export interface TarBuildResult {
   path: string;

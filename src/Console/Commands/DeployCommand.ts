@@ -10,10 +10,10 @@ import { execSync } from 'child_process';
 import { unlinkSync } from 'fs';
 import { Command, CommandOptions } from '@/Console/Command';
 import { CredentialStore } from '@/Deploy/CredentialStore';
+import { Deployer } from '@/Deploy/Deployer';
 import { ProjectConfig } from '@/Deploy/ProjectConfig';
 import { SymphonyClient } from '@/Deploy/SymphonyClient';
 import { TarBuilder } from '@/Deploy/TarBuilder';
-import { Deployer } from '@/Deploy/Deployer';
 
 export class DeployCommand extends Command {
   signature = 'deploy';

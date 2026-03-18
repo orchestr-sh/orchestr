@@ -5,10 +5,10 @@
  * Mirrors Laravel's `php artisan make:view`.
  */
 
-import { Command, CommandOptions } from '@/Console/Command';
-import { Application } from '@/Foundation/Application';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
 
 export class MakeViewCommand extends Command {
   signature = 'make:view <name>';

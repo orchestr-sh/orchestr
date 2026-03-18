@@ -12,8 +12,8 @@ import { join } from 'path';
 import { Command, CommandOptions } from '@/Console/Command';
 import { CredentialStore } from '@/Deploy/CredentialStore';
 import { ProjectConfig } from '@/Deploy/ProjectConfig';
-import { SymphonyClient } from '@/Deploy/SymphonyClient';
 import { prompt } from '@/Deploy/prompt';
+import { SymphonyClient } from '@/Deploy/SymphonyClient';
 
 export class DeployEnvCommand extends Command {
   signature = 'deploy:env [action]';

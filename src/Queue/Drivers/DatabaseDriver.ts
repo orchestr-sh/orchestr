@@ -8,13 +8,13 @@
  */
 
 import { randomUUID } from 'crypto';
+import type { Connection } from '@/Database/Connection';
+import type { DatabaseManager } from '@/Database/DatabaseManager';
+import type { Application } from '@/Foundation/Application';
 import type { QueueDriver, QueueDriverJob } from '@/Queue/Contracts/QueueDriver';
 import type { Job } from '@/Queue/Job';
-import { JobPayload } from '@/Queue/JobPayload';
 import type { QueueConnectionConfig } from '@/Queue/QueueManager';
-import type { Application } from '@/Foundation/Application';
-import type { DatabaseManager } from '@/Database/DatabaseManager';
-import type { Connection } from '@/Database/Connection';
+import { JobPayload } from '@/Queue/JobPayload';
 
 export class DatabaseDriver implements QueueDriver {
   protected connectionName: string = 'database';

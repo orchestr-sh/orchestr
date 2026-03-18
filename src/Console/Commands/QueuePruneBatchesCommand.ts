@@ -5,9 +5,9 @@
  * Mirrors Laravel's `php artisan queue:prune-batches`.
  */
 
+import type { DatabaseManager } from '@/Database/DatabaseManager';
 import { Command, CommandOptions } from '@/Console/Command';
 import { Application } from '@/Foundation/Application';
-import type { DatabaseManager } from '@/Database/DatabaseManager';
 
 export class QueuePruneBatchesCommand extends Command {
   signature = 'queue:prune-batches';
