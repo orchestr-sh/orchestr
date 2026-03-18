@@ -1,6 +1,6 @@
 import { IncomingMessage } from 'http';
-import { parse as parseUrl } from 'url';
 import { parse as parseQuery } from 'querystring';
+import { parse as parseUrl } from 'url';
 import { Route } from './Route';
 
 /**

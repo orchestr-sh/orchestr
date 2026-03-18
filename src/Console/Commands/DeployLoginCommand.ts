@@ -8,8 +8,8 @@
 
 import { Command, CommandOptions } from '@/Console/Command';
 import { CredentialStore } from '@/Deploy/CredentialStore';
-import { SymphonyClient } from '@/Deploy/SymphonyClient';
 import { prompt } from '@/Deploy/prompt';
+import { SymphonyClient } from '@/Deploy/SymphonyClient';
 
 const DEFAULT_API = 'https://symphony.orchestr.sh';
 

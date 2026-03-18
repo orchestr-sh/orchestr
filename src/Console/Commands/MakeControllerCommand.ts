@@ -4,10 +4,10 @@
  * Create a new controller class following Laravel's Artisan pattern
  */
 
-import { Command, CommandOptions } from '../Command';
-import { Application } from '../../Foundation/Application';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { Application } from '../../Foundation/Application';
+import { Command, CommandOptions } from '../Command';
 
 export class MakeControllerCommand extends Command {
   signature = 'make:controller <name>';

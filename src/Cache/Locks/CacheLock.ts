@@ -7,8 +7,8 @@
  * Mirrors Laravel's Illuminate\Cache\CacheLock.
  */
 
-import { Lock } from './Lock';
 import type { Store } from '@/Cache/Contracts/Store';
+import { Lock } from './Lock';
 
 export class CacheLock extends Lock {
   constructor(

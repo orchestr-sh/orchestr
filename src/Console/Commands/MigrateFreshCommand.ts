@@ -5,9 +5,9 @@
  */
 
 import { Command, CommandOptions } from '@/Console/Command';
-import { Application } from '@/Foundation/Application';
 import { Migrator } from '@/Database/Migrations/Migrator';
 import { SchemaBuilder } from '@/Database/Migrations/SchemaBuilder';
+import { Application } from '@/Foundation/Application';
 
 export class MigrateFreshCommand extends Command {
   signature = 'migrate:fresh';

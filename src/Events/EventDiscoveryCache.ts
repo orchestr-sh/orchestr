@@ -1,6 +1,6 @@
-import { Application } from '@/Foundation/Application';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { dirname } from 'path';
+import { Application } from '@/Foundation/Application';
 
 /**
  * Cache entry structure for discovered events

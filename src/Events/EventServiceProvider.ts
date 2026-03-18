@@ -1,9 +1,9 @@
-import { ServiceProvider } from '@/Foundation/ServiceProvider';
-import { Application } from '@/Foundation/Application';
-import { Dispatcher } from './Dispatcher';
-import { EventSubscriber } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Application } from '@/Foundation/Application';
+import { ServiceProvider } from '@/Foundation/ServiceProvider';
+import { Dispatcher } from './Dispatcher';
+import { EventSubscriber } from './types';
 
 /**
  * Event Service Provider

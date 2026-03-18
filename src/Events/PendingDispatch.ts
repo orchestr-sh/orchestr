@@ -1,5 +1,5 @@
-import type { Event } from './Event';
 import type { DispatcherContract } from './Contracts/Dispatcher';
+import type { Event } from './Event';
 
 /**
  * Pending Dispatch

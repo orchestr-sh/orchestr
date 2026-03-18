@@ -4,9 +4,9 @@
  * Clear all cached events and listeners following Laravel's Artisan pattern
  */
 
+import * as fs from 'fs/promises';
 import { Command } from '@/Console/Command';
 import { Application } from '@/Foundation/Application';
-import * as fs from 'fs/promises';
 
 export class EventClearCommand extends Command {
   signature = 'event:clear';

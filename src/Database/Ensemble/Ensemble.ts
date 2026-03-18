@@ -5,10 +5,10 @@
  * In Orchestr, your data models are called Ensembles - groups that work in harmony
  */
 
-import { DatabaseManager } from '@/Database/DatabaseManager';
 import { Connection } from '@/Database/Connection';
-import { EnsembleBuilder } from './EnsembleBuilder';
+import { DatabaseManager } from '@/Database/DatabaseManager';
 import { HasRelationshipsMixin } from './Concerns/HasRelationships';
+import { EnsembleBuilder } from './EnsembleBuilder';
 import {
   ModelRetrieved,
   ModelCreating,

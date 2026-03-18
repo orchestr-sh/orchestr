@@ -17,9 +17,9 @@
  */
 
 import type { Store } from '@/Cache/Contracts/Store';
-import type { Application } from '@/Foundation/Application';
-import type { DatabaseManager } from '@/Database/DatabaseManager';
 import type { Connection } from '@/Database/Connection';
+import type { DatabaseManager } from '@/Database/DatabaseManager';
+import type { Application } from '@/Foundation/Application';
 
 export class DatabaseStore implements Store {
   protected tableName: string;

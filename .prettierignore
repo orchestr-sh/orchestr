@@ -1,8 +1,0 @@
-dist
-node_modules
-*.md
-package.json
-package-lock.json
-tsconfig.json
-.eslintrc.json
-.prettierrc.json

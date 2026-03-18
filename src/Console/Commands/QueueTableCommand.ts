@@ -5,10 +5,10 @@
  * Mirrors Laravel's `php artisan queue:table`.
  */
 
-import { Command, CommandOptions } from '@/Console/Command';
-import { Application } from '@/Foundation/Application';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
 
 export class QueueTableCommand extends Command {
   signature = 'queue:table';

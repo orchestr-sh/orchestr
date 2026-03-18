@@ -4,8 +4,8 @@
  * The console kernel handles registration and execution of console commands
  */
 
-import { Command, CommandOptions } from './Command';
 import { Application } from '@/Foundation/Application';
+import { Command, CommandOptions } from './Command';
 
 export class ConsoleKernel {
   protected commands: Map<string, Command> = new Map();

@@ -2,10 +2,10 @@
  * Helper functions - Laravel-style global helpers
  */
 
-import { Application } from '@/Foundation/Application';
 import type { Config as ConfigClass } from '@/Foundation/Config/Config';
-import type { ViewFactory } from '@/View/ViewFactory';
 import type { View } from '@/View/View';
+import type { ViewFactory } from '@/View/ViewFactory';
+import { Application } from '@/Foundation/Application';
 
 // Global application instance for helpers
 let globalApp: Application | null = null;

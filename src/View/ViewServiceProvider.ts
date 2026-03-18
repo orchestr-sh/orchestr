@@ -7,8 +7,8 @@
 
 import { join } from 'path';
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
-import { ViewFactory } from './ViewFactory';
 import { TemplateEngine } from './Engines/TemplateEngine';
+import { ViewFactory } from './ViewFactory';
 
 export interface ViewConfig {
   /**

@@ -6,9 +6,9 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { View } from './View';
-import type { ViewEngine } from './Engines/ViewEngine';
 import type { TemplateEngineResolver } from './Engines/TemplateEngine';
+import type { ViewEngine } from './Engines/ViewEngine';
+import { View } from './View';
 
 export class ViewFactory implements TemplateEngineResolver {
   protected paths: string[];
