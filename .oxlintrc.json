@@ -31,12 +31,5 @@
     "builtin": true
   },
   "globals": {},
-  "ignorePatterns": [
-    "dist/**",
-    "node_modules/**",
-    "coverage/**",
-    "**/*.js",
-    "**/*.d.ts",
-    "vitest.config.ts"
-  ]
+  "ignorePatterns": ["dist/**", "node_modules/**", "coverage/**", "**/*.js", "**/*.d.ts", "vitest.config.ts"]
 }
