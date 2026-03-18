@@ -11,4 +11,5 @@ runs:
     - name: Setup Node
       uses: actions/setup-node@v6
       with:
+        cache: 'npm'
         node-version: ${{ inputs.node-version }}
