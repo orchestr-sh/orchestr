@@ -1,24 +1,26 @@
 {
   "name": "@orchestr-sh/orchestr",
+  "type": "module",
   "version": "1.10.0",
   "description": "A 1:1 Laravel replica in TypeScript - Brings Laravel's elegant syntax and architecture to Node.js",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.js"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
     },
     "./Facades": {
       "types": "./dist/Facades/index.d.ts",
-      "import": "./dist/Facades/index.js",
-      "require": "./dist/Facades/index.js"
+      "import": "./dist/Facades/index.mjs",
+      "require": "./dist/Facades/index.cjs"
     },
     "./Events": {
       "types": "./dist/Events/index.d.ts",
-      "import": "./dist/Events/index.js",
-      "require": "./dist/Events/index.js"
+      "import": "./dist/Events/index.mjs",
+      "require": "./dist/Events/index.cjs"
     }
   },
   "bin": {
@@ -30,7 +32,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && tsc-alias",
+    "build": "tsdown --format esm --format cjs",
     "prepublishOnly": "npm run build",
     "dev": "tsx watch examples/basic-app/server.ts",
     "prepare": "husky",
@@ -82,18 +84,18 @@
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.9",
-    "@types/node": "^22.10.5",
-    "@vitest/coverage-v8": "^4.0.18",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.5.0",
+    "@vitest/coverage-v8": "^4.1.2",
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.7",
-    "oxlint": "^1.51.0",
-    "oxlint-tsgolint": "^0.16.0",
+    "lint-staged": "^16.4.0",
+    "oxlint": "^1.57.0",
+    "oxlint-tsgolint": "^0.18.1",
     "prettier": "^3.8.1",
-    "tsc-alias": "^1.8.16",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
-    "vitest": "^4.0.18"
+    "tsdown": "^0.21.7",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
   },
   "peerDependencies": {
     "drizzle-orm": ">=0.30.0",
