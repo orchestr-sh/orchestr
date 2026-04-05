@@ -21,7 +21,7 @@ jobs:
       matrix:
         node-version: [22.x, 24.x, latest]
 
-    name: Node ${{ matrix.node-version }}
+    name: Lint Node ${{ matrix.node-version }}
 
     steps:
       - name: Checkout code
@@ -46,7 +46,7 @@ jobs:
       matrix:
         node-version: [22.x, 24.x, latest]
 
-    name: Node ${{ matrix.node-version }}
+    name: Coverage Node ${{ matrix.node-version }}
 
     steps:
       - name: Checkout code
@@ -78,7 +78,7 @@ jobs:
       matrix:
         node-version: [22.x, 24.x, latest]
 
-    name: Node ${{ matrix.node-version }}
+    name: Types Node ${{ matrix.node-version }}
 
     steps:
       - name: Checkout code
@@ -103,7 +103,7 @@ jobs:
       matrix:
         node-version: [22.x, 24.x, latest]
 
-    name: Node ${{ matrix.node-version }}
+    name: Test Node ${{ matrix.node-version }}
 
     steps:
       - name: Checkout code
