@@ -63,6 +63,11 @@
       ]
     ]
   },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
   "scripts": {
     "build": "tsdown --format esm --format cjs",
     "prepublishOnly": "npm run build",
@@ -116,6 +121,8 @@
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.4.4",
+    "@commitlint/config-conventional": "^20.4.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.5.0",
     "@vitest/coverage-v8": "^4.1.2",

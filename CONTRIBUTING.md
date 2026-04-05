@@ -97,13 +97,9 @@ Write clear, concise commit messages:
 
 - Use present tense: "Add feature" not "Added feature"
 - Be descriptive: "feat: add job batching to queue system" not "update"
-- Start with a conventional commit type:
-  - `feat:` for new features
-  - `fix:` for bug fixes
-  - `docs:` for documentation
-  - `refactor:` for code restructuring
-  - `test:` for test additions
-  - `chore:` for build/tooling changes
+- Be in the format `<type>[scope?][!]: Add job batching to queue system`
+- Start with a conventional commit type from the allowed type list
+- Breaking changes should include `!` after the allowed commit type e.g. `fix!:`
 
 Example:
 ```
@@ -114,9 +110,35 @@ feat: add queue job batching
 - Include integration tests for batch workflows
 ```
 
-### Pre-commit Hooks
+#### Revert
 
-The project uses **husky** and **lint-staged** to automatically lint and format staged files. Ensure your code passes these checks before committing.
+If the commit reverts a previous commit, it should begin with `revert: `, followed by the header of the reverted commit. In the body it should say: `This reverts commit <hash>.`, where the hash is the SHA of the commit being reverted.
+
+#### Type
+
+The type must be one of the following:
+
+| Type         | Description                                                                                                 |
+| ------------ | ----------------------------------------------------------------------------------------------------------- |
+| **build**    | Changes that affect the build system or external dependencies (example scopes: gulp, broccoli, npm)         |
+| **chore**    | Routine maintenance tasks that do not directly impact the functionality of the application                  |
+| **ci**       | Changes to our CI configuration files and scripts (example scopes: Travis, Circle, BrowserStack, SauceLabs) |
+| **docs**     | Documentation only changes                                                                                  |
+| **feat**     | A new feature                                                                                               |
+| **fix**      | A bug fix                                                                                                   |
+| **perf**     | A code change that improves performance                                                                     |
+| **refactor** | A code change that neither fixes a bug nor adds a feature                                                   |
+| **style**    | Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)      |
+| **test**     | Adding missing tests or correcting existing tests                                                           |
+
+### Git Hooks
+This project uses **husky** to automatically perform tasks during the git hook events.
+
+#### Pre-commit
+- **lint-staged** to automatically lint and format staged files. Ensure your code passes these checks before committing.
+
+#### Commit-msg
+- **commitlint** to automatically check your commit messages follow our CONTRIBUTING guidelines around conventional commits.
 
 ## Testing
 
