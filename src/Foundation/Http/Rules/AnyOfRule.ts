@@ -1,5 +1,5 @@
-import { BaseRule, type ValidationRuleObject } from './Base';
 import { Validator } from '../Validator';
+import { BaseRule, type ValidationRuleObject } from './Base';
 
 export class AnyOfRule extends BaseRule {
   private inner: Array<string | ValidationRuleObject>;

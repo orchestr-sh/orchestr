@@ -6,11 +6,11 @@
 
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { EnsembleBuilder } from '@/Database/Ensemble/EnsembleBuilder';
-import { Relation } from '@/Database/Ensemble/Relations/Relation';
-import { HasOne } from '@/Database/Ensemble/Relations/HasOne';
-import { HasMany } from '@/Database/Ensemble/Relations/HasMany';
 import { BelongsTo } from '@/Database/Ensemble/Relations/BelongsTo';
 import { BelongsToMany } from '@/Database/Ensemble/Relations/BelongsToMany';
+import { HasMany } from '@/Database/Ensemble/Relations/HasMany';
+import { HasOne } from '@/Database/Ensemble/Relations/HasOne';
+import { Relation } from '@/Database/Ensemble/Relations/Relation';
 
 export interface RelationshipConfig {
   type:

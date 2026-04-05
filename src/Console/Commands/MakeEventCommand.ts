@@ -4,10 +4,10 @@
  * Create a new event class following Laravel's Artisan pattern
  */
 
-import { Command, CommandOptions } from '@/Console/Command';
-import { Application } from '@/Foundation/Application';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { Command, CommandOptions } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
 
 export class MakeEventCommand extends Command {
   signature = 'make:event <name>';

@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Application } from '../../src/Foundation/Application';
-import { MakeControllerCommand } from '../../src/Console/Commands/MakeControllerCommand';
 import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MakeControllerCommand } from '../../src/Console/Commands/MakeControllerCommand';
+import { Application } from '../../src/Foundation/Application';
 
 describe('MakeControllerCommand', () => {
   let app: Application;
@@ -74,10 +74,7 @@ describe('MakeControllerCommand', () => {
 
       await command.handle(['ApiUserController'], {});
 
-      const content = readFileSync(
-        join(basePath, 'app', 'Http', 'Controllers', 'ApiUserController.ts'),
-        'utf-8'
-      );
+      const content = readFileSync(join(basePath, 'app', 'Http', 'Controllers', 'ApiUserController.ts'), 'utf-8');
       expect(content).toContain('ApiUserController Controller');
       expect(content).toContain('export class ApiUserController extends Controller');
     });
@@ -104,9 +101,7 @@ describe('MakeControllerCommand', () => {
 
       await command.handle(['UserController'], {});
 
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Controller already exists')
-      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Controller already exists'));
       errorSpy.mockRestore();
     });
 

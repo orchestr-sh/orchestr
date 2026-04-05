@@ -4,10 +4,10 @@
  * Runs database seeders
  */
 
-import { Connection } from '@/Database/Connection';
-import { Seeder } from './Seeder';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Connection } from '@/Database/Connection';
+import { Seeder } from './Seeder';
 
 export class SeederRunner {
   constructor(

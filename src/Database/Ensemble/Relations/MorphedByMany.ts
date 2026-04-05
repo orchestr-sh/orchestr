@@ -7,8 +7,8 @@
 
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { EnsembleBuilder } from '@/Database/Ensemble/EnsembleBuilder';
-import { MorphToMany } from './MorphToMany';
 import { MorphMap } from './MorphMap';
+import { MorphToMany } from './MorphToMany';
 
 export class MorphedByMany<TRelated extends Ensemble, TParent extends Ensemble> extends MorphToMany<TRelated, TParent> {
   /**

@@ -5,8 +5,8 @@
  * Mirrors Laravel's Illuminate\Contracts\Cache\Repository.
  */
 
-import type { Store } from './Store';
 import type { LockContract } from './Lock';
+import type { Store } from './Store';
 
 export interface RepositoryContract extends Store {
   /**

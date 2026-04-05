@@ -34,11 +34,11 @@
     "prepublishOnly": "npm run build",
     "dev": "tsx watch examples/basic-app/server.ts",
     "prepare": "husky",
-    "lint": "oxlint 'src/**/*.ts' --type-aware --fix && prettier --write 'src/**/*.ts'",
-    "format": "prettier --write 'src/**/*.ts'",
-    "format:check": "prettier --check 'src/**/*.ts'",
+    "lint": "oxlint 'src/**/*.ts' --type-aware --fix && oxfmt --write 'src/**/*.ts'",
+    "format": "oxfmt --write 'src/**/*.ts'",
+    "format:check": "oxfmt --check 'src/**/*.ts'",
     "test": "vitest run",
-    "test:lint": "oxlint 'src/**/*.ts' --type-aware && prettier --check 'src/**/*.ts'",
+    "test:lint": "oxlint 'src/**/*.ts' --type-aware && oxfmt --check 'src/**/*.ts'",
     "test:types": "oxlint 'src/**/*.ts' --type-aware --type-check",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -46,7 +46,7 @@
   "lint-staged": {
     "*.ts": [
       "oxlint --type-aware --fix",
-      "prettier --write"
+      "oxfmt --write"
     ]
   },
   "keywords": [
@@ -83,13 +83,13 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.9",
-    "@types/node": "^22.10.5",
+    "@types/node": ">=22.10.5",
     "@vitest/coverage-v8": "^4.0.18",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
-    "oxlint": "^1.51.0",
-    "oxlint-tsgolint": "^0.16.0",
-    "prettier": "^3.8.1",
+    "oxfmt": "^0.41.0",
+    "oxlint": "^1.56.0",
+    "oxlint-tsgolint": "^0.17.0",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",

@@ -6,10 +6,10 @@
  */
 
 import { randomUUID } from 'crypto';
-import type { FailedJobProvider, FailedJobRecord } from './FailedJobProvider';
-import type { Application } from '@/Foundation/Application';
-import type { DatabaseManager } from '@/Database/DatabaseManager';
 import type { Connection } from '@/Database/Connection';
+import type { DatabaseManager } from '@/Database/DatabaseManager';
+import type { Application } from '@/Foundation/Application';
+import type { FailedJobProvider, FailedJobRecord } from './FailedJobProvider';
 
 export class DatabaseFailedJobProvider implements FailedJobProvider {
   protected table: string;

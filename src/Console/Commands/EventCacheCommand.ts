@@ -4,10 +4,10 @@
  * Discover and cache the application's events and listeners following Laravel's Artisan pattern
  */
 
-import { Command } from '@/Console/Command';
-import { Application } from '@/Foundation/Application';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { Command } from '@/Console/Command';
+import { Application } from '@/Foundation/Application';
 
 export class EventCacheCommand extends Command {
   signature = 'event:cache';

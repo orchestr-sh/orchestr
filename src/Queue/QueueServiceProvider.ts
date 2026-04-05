@@ -6,13 +6,13 @@
  */
 
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
-import { QueueManager } from './QueueManager';
 import type { QueueConfig } from './QueueManager';
-import { SyncDriver } from './Drivers/SyncDriver';
 import { DatabaseDriver } from './Drivers/DatabaseDriver';
 import { NullDriver } from './Drivers/NullDriver';
-import { Worker } from './Workers/Worker';
+import { SyncDriver } from './Drivers/SyncDriver';
 import { DatabaseFailedJobProvider } from './Failed/DatabaseFailedJobProvider';
+import { QueueManager } from './QueueManager';
+import { Worker } from './Workers/Worker';
 
 export class QueueServiceProvider extends ServiceProvider {
   /**

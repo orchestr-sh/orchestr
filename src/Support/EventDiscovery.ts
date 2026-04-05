@@ -1,6 +1,6 @@
-import { Application } from '@/Foundation/Application';
 import { readdirSync, statSync } from 'fs';
 import { join, extname } from 'path';
+import { Application } from '@/Foundation/Application';
 import 'reflect-metadata';
 
 /**

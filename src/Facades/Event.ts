@@ -1,8 +1,8 @@
-import { Facade } from '@/Support/Facade';
 import type { Dispatcher } from '@/Events/Dispatcher';
-import { EventFake } from '@/Support/Testing/Fakes/EventFake';
 import type { Event as EventClass } from '@/Events/Event';
 import type { EventListener } from '@/Events/types';
+import { Facade } from '@/Support/Facade';
+import { EventFake } from '@/Support/Testing/Fakes/EventFake';
 
 /**
  * Event Facade

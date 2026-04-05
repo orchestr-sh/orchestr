@@ -5,8 +5,8 @@
  */
 
 import { Command, CommandOptions } from '@/Console/Command';
-import { Application } from '@/Foundation/Application';
 import { Migrator } from '@/Database/Migrations/Migrator';
+import { Application } from '@/Foundation/Application';
 
 export class MigrateStatusCommand extends Command {
   signature = 'migrate:status';

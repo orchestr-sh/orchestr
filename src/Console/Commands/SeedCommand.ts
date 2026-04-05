@@ -5,8 +5,8 @@
  */
 
 import { Command, CommandOptions } from '@/Console/Command';
-import { Application } from '@/Foundation/Application';
 import { SeederRunner } from '@/Database/Seeders/SeederRunner';
+import { Application } from '@/Foundation/Application';
 
 export class SeedCommand extends Command {
   signature = 'db:seed';

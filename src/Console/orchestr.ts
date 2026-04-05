@@ -6,30 +6,30 @@
  */
 
 import { Application } from '@/Foundation/Application';
-import { ConsoleKernel } from './ConsoleKernel';
-import { MigrateCommand } from './Commands/MigrateCommand';
-import { MigrateRollbackCommand } from './Commands/MigrateRollbackCommand';
-import { MigrateResetCommand } from './Commands/MigrateResetCommand';
-import { MigrateRefreshCommand } from './Commands/MigrateRefreshCommand';
-import { MigrateFreshCommand } from './Commands/MigrateFreshCommand';
-import { MigrateStatusCommand } from './Commands/MigrateStatusCommand';
-import { MakeMigrationCommand } from './Commands/MakeMigrationCommand';
-import { SeedCommand } from './Commands/SeedCommand';
-import { MakeSeederCommand } from './Commands/MakeSeederCommand';
-import { MakeEventCommand } from './Commands/MakeEventCommand';
-import { MakeListenerCommand } from './Commands/MakeListenerCommand';
-import { MakeControllerCommand } from './Commands/MakeControllerCommand';
-import { EventListCommand } from './Commands/EventListCommand';
+import { DeployCommand } from './Commands/DeployCommand';
+import { DeployEnvCommand } from './Commands/DeployEnvCommand';
+import { DeployInitCommand } from './Commands/DeployInitCommand';
+import { DeployLoginCommand } from './Commands/DeployLoginCommand';
+import { DeployProvisionCommand } from './Commands/DeployProvisionCommand';
+import { DeployRollbackCommand } from './Commands/DeployRollbackCommand';
+import { DeployServerCommand } from './Commands/DeployServerCommand';
+import { DeployStatusCommand } from './Commands/DeployStatusCommand';
 import { EventCacheCommand } from './Commands/EventCacheCommand';
 import { EventClearCommand } from './Commands/EventClearCommand';
-import { DeployLoginCommand } from './Commands/DeployLoginCommand';
-import { DeployInitCommand } from './Commands/DeployInitCommand';
-import { DeployServerCommand } from './Commands/DeployServerCommand';
-import { DeployCommand } from './Commands/DeployCommand';
-import { DeployStatusCommand } from './Commands/DeployStatusCommand';
-import { DeployEnvCommand } from './Commands/DeployEnvCommand';
-import { DeployRollbackCommand } from './Commands/DeployRollbackCommand';
-import { DeployProvisionCommand } from './Commands/DeployProvisionCommand';
+import { EventListCommand } from './Commands/EventListCommand';
+import { MakeControllerCommand } from './Commands/MakeControllerCommand';
+import { MakeEventCommand } from './Commands/MakeEventCommand';
+import { MakeListenerCommand } from './Commands/MakeListenerCommand';
+import { MakeMigrationCommand } from './Commands/MakeMigrationCommand';
+import { MakeSeederCommand } from './Commands/MakeSeederCommand';
+import { MigrateCommand } from './Commands/MigrateCommand';
+import { MigrateFreshCommand } from './Commands/MigrateFreshCommand';
+import { MigrateRefreshCommand } from './Commands/MigrateRefreshCommand';
+import { MigrateResetCommand } from './Commands/MigrateResetCommand';
+import { MigrateRollbackCommand } from './Commands/MigrateRollbackCommand';
+import { MigrateStatusCommand } from './Commands/MigrateStatusCommand';
+import { SeedCommand } from './Commands/SeedCommand';
+import { ConsoleKernel } from './ConsoleKernel';
 
 // Create application instance
 const app = new Application();
