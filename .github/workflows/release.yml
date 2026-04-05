@@ -1,10 +1,7 @@
 name: Release
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
+  contents: read
 
 on:
   push:
@@ -128,13 +125,19 @@ jobs:
 
     name: Publish the package
 
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-node
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: "lts/*"
 
       - name: Install dependencies
         run: npm ci
@@ -146,7 +149,7 @@ jobs:
         run: npm run build
 
       - name: Publish the package
-        run: npx --package semantic-release --package @semantic-release/changelog
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx --package semantic-release --package @semantic-release/changelog
