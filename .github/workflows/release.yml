@@ -145,9 +145,6 @@ jobs:
       - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
         run: npm audit signatures
 
-      - name: Build the package
-        run: npm run build
-
       - name: Publish the package
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
