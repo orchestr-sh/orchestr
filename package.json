@@ -29,6 +29,38 @@
     "README.md",
     "LICENSE"
   ],
+  "release": {
+    "branches": [
+      "main"
+    ],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      [
+        "@semantic-release/changelog",
+        {
+          "changelogFile": "CHANGELOG.md"
+        }
+      ],
+      "@semantic-release/npm",
+      [
+        "@semantic-release/github",
+        {
+          "assets": [
+            "dist",
+            "docs",
+            "package.json",
+            "package-lock.json",
+            "CODE_OF_CONDUCT.md",
+            "CHANGELOG.md",
+            "CONTRIBUTING.md",
+            "LICENSE",
+            "README.md"
+          ]
+        }
+      ]
+    ]
+  },
   "scripts": {
     "build": "tsc && tsc-alias",
     "prepublishOnly": "npm run build",
