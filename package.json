@@ -24,12 +24,16 @@
     }
   },
   "bin": {
-    "orchestr": "dist/Console/orchestr.js"
+    "orchestr": "dist/Console/orchestr.mjs"
   },
   "files": [
     "dist",
-    "README.md",
-    "LICENSE"
+    "docs",
+    "CODE_OF_CONDUCT.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "README.md"
   ],
   "release": {
     "branches": [
@@ -45,22 +49,8 @@
         }
       ],
       "@semantic-release/npm",
-      [
-        "@semantic-release/github",
-        {
-          "assets": [
-            "dist",
-            "docs",
-            "package.json",
-            "package-lock.json",
-            "CODE_OF_CONDUCT.md",
-            "CHANGELOG.md",
-            "CONTRIBUTING.md",
-            "LICENSE",
-            "README.md"
-          ]
-        }
-      ]
+      "@semantic-release/github",
+      "@semantic-release/git"
     ]
   },
   "commitlint": {

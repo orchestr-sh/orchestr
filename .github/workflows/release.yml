@@ -149,4 +149,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npx --package semantic-release --package @semantic-release/changelog semantic-release
+        run: npx --package semantic-release --package @semantic-release/commit-analyzer --package @semantic-release/npm --package @semantic-release/changelog --package @semantic-release/release-notes-generator --package @semantic-release/github --package @semantic-release/git semantic-release
