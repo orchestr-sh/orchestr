@@ -1,3 +1,10 @@
+## [1.11.1](https://github.com/orchestr-sh/orchestr/compare/v1.11.0...v1.11.1) (2026-04-07)
+
+
+### Bug Fixes
+
+* commit message for release ([#24](https://github.com/orchestr-sh/orchestr/issues/24)) ([accef91](https://github.com/orchestr-sh/orchestr/commit/accef91c66616ebf9e83874b00bb59e46f8fc6ac))
+
 # [1.11.0](https://github.com/orchestr-sh/orchestr/compare/v1.10.0...v1.11.0) (2026-04-07)
 
 
