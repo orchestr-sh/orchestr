@@ -4,7 +4,7 @@ inputs:
   node-version:
     description: 'Node version to setup'
     required: false
-    default: 'lts/Krypton'
+    default: 'lts/*'
 runs:
   using: 'composite'
   steps:
