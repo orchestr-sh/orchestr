@@ -1,7 +1,7 @@
 {
   "name": "@orchestr-sh/orchestr",
   "type": "module",
-  "version": "1.11.1",
+  "version": "1.11.2",
   "description": "A 1:1 Laravel replica in TypeScript - Brings Laravel's elegant syntax and architecture to Node.js",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
