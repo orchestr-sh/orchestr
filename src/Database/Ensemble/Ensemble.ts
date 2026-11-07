@@ -460,6 +460,29 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
   }
 
   /**
+   * Get the data type of the primary key
+   */
+  getKeyType(): string {
+    return this.keyType;
+  }
+
+  /**
+   * Get the name of the route key used for implicit binding
+   * Laravel: getRouteKeyName() - defaults to the primary key
+   */
+  getRouteKeyName(): string {
+    return this.getKeyName();
+  }
+
+  /**
+   * Get the value of the model's route key
+   * Laravel: getRouteKey()
+   */
+  getRouteKey(): any {
+    return this.getAttribute(this.getRouteKeyName());
+  }
+
+  /**
    * Set the connection resolver instance
    */
   static setConnectionResolver(resolver: DatabaseManager): void {

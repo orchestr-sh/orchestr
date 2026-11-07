@@ -16,9 +16,21 @@ export class Route {
   public action: RouteAction;
   public middleware: Middleware[] = [];
   public name?: string;
-  public parameters: Record<string, string> = {};
+  /**
+   * The bound parameters for the route. Raw string values from the URL until
+   * route model binding runs; afterwards resolved bindings (models, explicit
+   * binder results) replace their entries, matching Laravel's
+   * `Route::parameters()` after `substituteBindings()`.
+   */
+  public parameters: Record<string, any> = {};
+  /**
+   * Whether child model bindings on this route are constrained by their parent
+   * Laravel: Route::$scopedBindings
+   */
+  public scopedBindings: boolean = false;
   private compiled?: RegExp;
   private parameterNames: string[] = [];
+  private optionalNames: Set<string> = new Set();
 
   constructor(methods: HttpMethod | HttpMethod[], uri: string, action: RouteAction) {
     this.methods = Array.isArray(methods) ? methods : [methods];
@@ -37,6 +49,13 @@ export class Route {
 
     while ((match = paramPattern.exec(this.uri)) !== null) {
       this.parameterNames.push(match[1]);
+    }
+
+    // Optional parameters (`:id?`) may legitimately be absent from a match
+    const optionalPattern = /:([a-zA-Z_][a-zA-Z0-9_]*)\?/g;
+
+    while ((match = optionalPattern.exec(this.uri)) !== null) {
+      this.optionalNames.add(match[1]);
     }
 
     // Convert Laravel-style parameters to regex
@@ -63,6 +82,9 @@ export class Route {
 
   /**
    * Bind the route parameters from the path
+   *
+   * An optional segment (`:id?`) that matched nothing is left out entirely,
+   * the way Laravel's `Route::parameters()` omits missing optional values.
    */
   bind(path: string): void {
     const match = this.compiled?.exec(path);
@@ -70,7 +92,13 @@ export class Route {
     if (match) {
       this.parameters = {};
       this.parameterNames.forEach((name, index) => {
-        this.parameters[name] = match[index + 1];
+        const value = match[index + 1];
+
+        if (value === '' && this.optionalNames.has(name)) {
+          return;
+        }
+
+        this.parameters[name] = value;
       });
     }
   }
@@ -95,16 +123,29 @@ export class Route {
   }
 
   /**
+   * Enable scoped model binding for this route
+   * Laravel: Route::get('/users/{user}/posts/{post}', ...)->scopeBindings()
+   *
+   * Child bindings resolved after a parent model binding are constrained by
+   * the parent, so a sibling row that exists but does not belong to the
+   * parent yields a ModelNotFoundException.
+   */
+  scopeBindings(): this {
+    this.scopedBindings = true;
+    return this;
+  }
+
+  /**
    * Get the route parameters
    */
-  getParameters(): Record<string, string> {
+  getParameters(): Record<string, any> {
     return this.parameters;
   }
 
   /**
    * Get a specific parameter value
    */
-  parameter(name: string, defaultValue?: string): string | undefined {
+  parameter(name: string, defaultValue?: any): any {
     return this.parameters[name] ?? defaultValue;
   }
 }

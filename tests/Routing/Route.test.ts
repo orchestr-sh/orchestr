@@ -113,4 +113,29 @@ describe('Route', () => {
       expect(result).toBe(route);
     });
   });
+
+  describe('scopeBindings()', () => {
+    it('flags the route for scoped model binding', () => {
+      const route = new Route('GET', '/users/:user/posts/:post', () => {});
+      expect(route.scopedBindings).toBe(false);
+
+      const result = route.scopeBindings();
+
+      expect(route.scopedBindings).toBe(true);
+      expect(result).toBe(route);
+    });
+  });
+
+  describe('parameters after binding', () => {
+    it('can hold resolved (non-string) values', () => {
+      const route = new Route('GET', '/users/:user', () => {});
+      route.bind('/users/1');
+
+      const model = { id: 1, name: 'Ada' };
+      route.parameters.user = model;
+
+      expect(route.getParameters().user).toBe(model);
+      expect(route.parameter('user')).toBe(model);
+    });
+  });
 });

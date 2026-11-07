@@ -24,6 +24,10 @@ export { Route as RouteClass } from './Routing/Route';
 export { Request } from './Routing/Request';
 export { Response } from './Routing/Response';
 export { Controller } from './Routing/Controller';
+export { Action } from './Routing/Action';
+export { RouteResolver } from './Routing/RouteResolver';
+export type { RouteBinder, ActionReflection } from './Routing/RouteResolver';
+export { ModelNotFoundException } from './Routing/ModelNotFoundException';
 
 // Facades
 export { Facade } from './Support/Facade';
