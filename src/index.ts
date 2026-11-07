@@ -36,11 +36,41 @@ export { Cache } from './Facades/Cache';
 export { View as ViewFacade } from './Facades/View';
 
 // Helpers
-export { loadRoutes, base_path, routes_path, resource_path, view } from './Support/helpers';
+export {
+  loadRoutes,
+  base_path,
+  routes_path,
+  resource_path,
+  view,
+  str,
+  arr,
+  data_get,
+  data_set,
+  value,
+  tap,
+  optional,
+  Optional,
+  throw_if,
+  throw_unless,
+  class_basename,
+  snake_case,
+  camel_case,
+  studly_case,
+  kebab_case,
+  title_case,
+  now,
+  today,
+} from './Support/helpers';
 
 // Support Collections
 export { Collection, collect } from './Support/Collection';
 export type { CollectionKey } from './Support/Collection';
+
+// Support Utilities
+export { Str } from './Support/Str';
+export { Arr } from './Support/Arr';
+export type { ArrayLikeOrRecord } from './Support/Arr';
+export { Number } from './Support/Number';
 
 // Decorators
 export { Injectable } from './Support/Injectable';
