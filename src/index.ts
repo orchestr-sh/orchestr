@@ -75,6 +75,7 @@ export { Number } from './Support/Number';
 // Decorators
 export { Injectable } from './Support/Injectable';
 export { ValidateRequest } from './Support/ValidateRequest';
+export { ObservedBy } from './Database/Ensemble/Observers/ObservedBy';
 
 // Helper function for config
 export { config } from './Support/helpers';
@@ -109,6 +110,16 @@ export { Ensemble } from './Database/Ensemble/Ensemble';
 export { EnsembleBuilder } from './Database/Ensemble/EnsembleBuilder';
 export { EnsembleCollection } from './Database/Ensemble/EnsembleCollection';
 export { softDeletes } from './Database/Ensemble/SoftDeletes';
+
+// Ensemble Observers & Scopes
+export { ObserverRegistry, OBSERVER_EVENTS } from './Database/Ensemble/Observers';
+export type {
+  ObserverEvent,
+  ObserverHook,
+  ObserverInstance,
+  ObserverRegistration,
+} from './Database/Ensemble/Observers';
+export type { Scope, GlobalScopeCallback, AnyGlobalScope } from './Database/Ensemble/Scope';
 
 // Ensemble Relations
 export { Relation, HasOne, HasMany, BelongsTo, BelongsToMany } from './Database/Ensemble/Relations';
