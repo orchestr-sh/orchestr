@@ -216,6 +216,113 @@ describe.skipIf(!WITH_BETTER_SQLITE)('DrizzleAdapter parameterized execution (be
     ]);
   });
 
+  it('rolls a nested transaction back to its savepoint, keeping outer writes', async () => {
+    await adapter.transaction(async (tx) => {
+      await tx.insert('INSERT INTO users (name) VALUES (?)', ['outer']);
+
+      try {
+        await tx.transaction(async (inner) => {
+          await inner.insert('INSERT INTO users (name) VALUES (?)', ['inner']);
+          throw new Error('inner failed');
+        });
+      } catch (error: any) {
+        expect(error.message).toBe('inner failed');
+      }
+
+      // The outer transaction survived the inner rollback and is still usable.
+      await tx.insert('INSERT INTO users (name) VALUES (?)', ['after']);
+    });
+
+    const names = (await adapter.select<{ name: string }>('SELECT name FROM users ORDER BY id')).map((r) => r.name);
+    expect(names).toEqual(['outer', 'after']);
+  });
+
+  it('keeps both inner and outer writes when the nested transaction commits', async () => {
+    await adapter.transaction(async (tx) => {
+      await tx.insert('INSERT INTO users (name) VALUES (?)', ['outer']);
+
+      await tx.transaction(async (inner) => {
+        await inner.insert('INSERT INTO users (name) VALUES (?)', ['inner']);
+      });
+    });
+
+    const names = (await adapter.select<{ name: string }>('SELECT name FROM users ORDER BY id')).map((r) => r.name);
+    expect(names).toEqual(['outer', 'inner']);
+  });
+
+  it('tracks the nesting depth and only ends the root transaction on commit', async () => {
+    await adapter.beginTransaction();
+    await adapter.insert('INSERT INTO users (name) VALUES (?)', ['a']);
+    await adapter.beginTransaction();
+    expect((adapter as any).transactionDepth).toBe(2);
+
+    await adapter.rollback();
+    expect((adapter as any).transactionDepth).toBe(1);
+    expect((adapter as any).inTransaction).toBe(true);
+    expect((adapter as any).transactionClient).not.toBeNull();
+
+    await adapter.commit();
+    expect((adapter as any).transactionDepth).toBe(0);
+    expect((adapter as any).inTransaction).toBe(false);
+    expect((adapter as any).transactionClient).toBeNull();
+
+    expect(await adapter.select('SELECT name FROM users')).toEqual([{ name: 'a' }]);
+  });
+
+  it('clears the transaction state when a callback exception reaches the root', async () => {
+    await expect(
+      adapter.transaction(async (tx) => {
+        await tx.transaction(async (inner) => {
+          await inner.insert('INSERT INTO users (name) VALUES (?)', ['gone']);
+          throw new Error('boom');
+        });
+      })
+    ).rejects.toThrow('boom');
+
+    expect((adapter as any).transactionDepth).toBe(0);
+    expect((adapter as any).transactionClient).toBeNull();
+    expect(await adapter.select('SELECT * FROM users')).toEqual([]);
+  });
+
+  it('issues the savepoint statements a nested transaction needs', async () => {
+    const database = (adapter as any).rawClient;
+    const control: string[] = [];
+
+    (adapter as any).rawClient = {
+      prepare(sql: string) {
+        if (/^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)/.test(sql)) {
+          control.push(sql);
+        }
+        return database.prepare(sql);
+      },
+    };
+
+    await adapter.transaction(async (tx) => {
+      try {
+        await tx.transaction(async () => {
+          throw new Error('rollback me');
+        });
+      } catch {
+        // expected
+      }
+
+      await tx.transaction(async () => {
+        // commits: RELEASE SAVEPOINT
+      });
+    });
+
+    (adapter as any).rawClient = database;
+
+    expect(control).toEqual([
+      'BEGIN',
+      'SAVEPOINT trans_1',
+      'ROLLBACK TO trans_1',
+      'SAVEPOINT trans_1',
+      'RELEASE SAVEPOINT trans_1',
+      'COMMIT',
+    ]);
+  });
+
   it('keeps the query builder on the parameterized path', async () => {
     await adapter.insert('INSERT INTO users (name, bio) VALUES (?, ?)', [INJECTION, 'plain']);
     await adapter.insert('INSERT INTO users (name, bio) VALUES (?, ?)', ['grace', '?safe']);
@@ -339,5 +446,212 @@ describe('DrizzleAdapter driver transports', () => {
     const adapter = new DrizzleAdapter({ driver: 'better-sqlite3', database: ':memory:' });
 
     await expect(adapter.query('SELECT 1')).rejects.toThrow('Database not connected');
+  });
+
+  describe('postgres transaction connections', () => {
+    function postgresFixture() {
+      const calls: string[] = [];
+      const release = vi.fn();
+      const reserved = {
+        unsafe: (query: string) => {
+          calls.push(query);
+          return Promise.resolve([]);
+        },
+        release,
+      };
+      const pool = {
+        reserve: vi.fn(async () => reserved),
+        unsafe: vi.fn(() => {
+          calls.push('POOL:LEAK');
+          return Promise.resolve([]);
+        }),
+      };
+      return { calls, release, reserved, pool, adapter: adapterWithClient('postgres', pool) };
+    }
+
+    it('runs the whole transaction on one reserved connection and releases it on commit', async () => {
+      const { calls, release, pool, adapter } = postgresFixture();
+
+      await adapter.transaction(async (tx) => {
+        await tx.insert('INSERT INTO users (name) VALUES (?)', ['ada']);
+        await tx.select('SELECT * FROM users WHERE name = ?', ['ada']);
+      });
+
+      expect(pool.reserve).toHaveBeenCalledTimes(1);
+      expect(calls).toEqual([
+        'BEGIN',
+        'INSERT INTO users (name) VALUES ($1)',
+        'SELECT * FROM users WHERE name = $1',
+        'COMMIT',
+      ]);
+      expect(release).toHaveBeenCalledTimes(1);
+      expect((adapter as any).transactionClient).toBeNull();
+      expect((adapter as any).transactionDepth).toBe(0);
+
+      // After the transaction, queries go back to the pool itself.
+      await adapter.select('SELECT * FROM users');
+      expect(pool.unsafe).toHaveBeenCalledTimes(1);
+    });
+
+    it('rolls back and releases the reserved connection when the callback throws', async () => {
+      const { calls, release, adapter } = postgresFixture();
+
+      await expect(
+        adapter.transaction(async (tx) => {
+          await tx.insert('INSERT INTO users (name) VALUES (?)', ['ada']);
+          throw new Error('boom');
+        })
+      ).rejects.toThrow('boom');
+
+      expect(calls).toEqual(['BEGIN', 'INSERT INTO users (name) VALUES ($1)', 'ROLLBACK']);
+      expect(release).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses savepoints for nesting and holds the connection until the root ends', async () => {
+      const { calls, release, adapter } = postgresFixture();
+
+      await adapter.transaction(async (tx) => {
+        try {
+          await tx.transaction(async () => {
+            throw new Error('inner failed');
+          });
+        } catch {
+          // expected: inner rolls back to the savepoint only
+        }
+
+        await tx.transaction(async () => {
+          // commits: releases the savepoint, keeps the transaction open
+        });
+      });
+
+      expect(calls).toEqual([
+        'BEGIN',
+        'SAVEPOINT trans_1',
+        'ROLLBACK TO trans_1',
+        'SAVEPOINT trans_1',
+        'RELEASE SAVEPOINT trans_1',
+        'COMMIT',
+      ]);
+      expect(release).toHaveBeenCalledTimes(1);
+    });
+
+    it('releases the reserved connection when BEGIN itself fails', async () => {
+      const { release, adapter } = postgresFixture();
+      (adapter as any).rawClient = {
+        reserve: async () => ({
+          unsafe: () => Promise.reject(new Error('no more connections')),
+          release,
+        }),
+      };
+
+      await expect(adapter.beginTransaction()).rejects.toThrow(/no more connections/);
+
+      expect(release).toHaveBeenCalledTimes(1);
+      expect((adapter as any).inTransaction).toBe(false);
+      expect((adapter as any).transactionClient).toBeNull();
+      expect((adapter as any).transactionDepth).toBe(0);
+    });
+
+    it('throws when committing or rolling back without a transaction', async () => {
+      const { adapter, release } = postgresFixture();
+
+      await expect(adapter.commit()).rejects.toThrow('No transaction in progress');
+      await expect(adapter.rollback()).rejects.toThrow('No transaction in progress');
+      expect(release).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('mysql2 transaction connections', () => {
+    function mysqlFixture() {
+      const connection = {
+        beginTransaction: vi.fn(async () => {}),
+        commit: vi.fn(async () => {}),
+        rollback: vi.fn(async () => {}),
+        query: vi.fn(async () => [[], []]),
+        execute: vi.fn(async () => [{ affectedRows: 1, insertId: 7 }, []]),
+        release: vi.fn(),
+      };
+      const pool = {
+        getConnection: vi.fn(async () => connection),
+        execute: vi.fn(async () => [[{ ok: true }], []]),
+        query: vi.fn(),
+      };
+      return { connection, pool, adapter: adapterWithClient('mysql2', pool) };
+    }
+
+    it('checks out a pooled connection, runs everything on it, and releases it on commit', async () => {
+      const { connection, pool, adapter } = mysqlFixture();
+
+      const insertId = await adapter.transaction(async (tx) =>
+        tx.insert('INSERT INTO users (name) VALUES (?)', ['ada'])
+      );
+
+      expect(pool.getConnection).toHaveBeenCalledTimes(1);
+      expect(connection.beginTransaction).toHaveBeenCalledTimes(1);
+      expect(insertId).toBe(7);
+      expect(connection.execute).toHaveBeenCalledWith('INSERT INTO users (name) VALUES (?)', ['ada']);
+      expect(pool.execute).not.toHaveBeenCalled();
+      expect(pool.query).not.toHaveBeenCalled();
+      expect(connection.commit).toHaveBeenCalledTimes(1);
+      expect(connection.release).toHaveBeenCalledTimes(1);
+      expect((adapter as any).transactionClient).toBeNull();
+
+      await adapter.select('SELECT * FROM users');
+      expect(pool.execute).toHaveBeenCalledTimes(1);
+    });
+
+    it('rolls back to savepoints inside nested transactions without touching the root', async () => {
+      const { connection, adapter } = mysqlFixture();
+
+      await adapter.transaction(async (tx) => {
+        try {
+          await tx.transaction(async (inner) => {
+            await inner.insert('INSERT INTO users (name) VALUES (?)', ['inner']);
+            throw new Error('inner failed');
+          });
+        } catch (error: any) {
+          expect(error.message).toBe('inner failed');
+        }
+
+        await tx.insert('INSERT INTO users (name) VALUES (?)', ['outer']);
+      });
+
+      // Savepoint statements go through the text protocol on the checked-out
+      // connection; the connection's rollback()/commit() are never triggered
+      // by the inner failure.
+      expect(connection.query).toHaveBeenCalledWith('SAVEPOINT trans_1');
+      expect(connection.query).toHaveBeenCalledWith('ROLLBACK TO trans_1');
+      expect(connection.rollback).not.toHaveBeenCalled();
+      expect(connection.commit).toHaveBeenCalledTimes(1);
+      expect(connection.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('rolls back the pooled connection when the callback throws', async () => {
+      const { connection, adapter } = mysqlFixture();
+
+      await expect(
+        adapter.transaction(async (tx) => {
+          await tx.insert('INSERT INTO users (name) VALUES (?)', ['ada']);
+          throw new Error('boom');
+        })
+      ).rejects.toThrow('boom');
+
+      expect(connection.rollback).toHaveBeenCalledTimes(1);
+      expect(connection.commit).not.toHaveBeenCalled();
+      expect(connection.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('releases the checked-out connection when BEGIN itself fails', async () => {
+      const { connection, adapter } = mysqlFixture();
+      connection.beginTransaction = vi.fn(async () => {
+        throw new Error('server gone away');
+      });
+
+      await expect(adapter.beginTransaction()).rejects.toThrow('server gone away');
+
+      expect(connection.release).toHaveBeenCalledTimes(1);
+      expect((adapter as any).inTransaction).toBe(false);
+      expect((adapter as any).transactionClient).toBeNull();
+    });
   });
 });
