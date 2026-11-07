@@ -1,278 +1,70 @@
 /**
  * EnsembleCollection Class
  *
- * A collection of Ensemble models
+ * A collection of Ensemble models. All generic collection behaviour is
+ * inherited from the framework's Support Collection; only model-specific
+ * helpers live here. Methods that return new collections preserve this
+ * concrete class at runtime.
  */
 
+import { Collection } from '@/Support/Collection';
 import { Ensemble } from './Ensemble';
 
-export class EnsembleCollection<T extends Ensemble> extends Array<T> {
+export class EnsembleCollection<T extends Ensemble> extends Collection<T> {
   /**
    * Create a new collection
    */
   constructor(items: T[] = []) {
-    super(...items);
-    Object.setPrototypeOf(this, EnsembleCollection.prototype);
-  }
-
-  /**
-   * Get all items in the collection
-   */
-  all(): T[] {
-    return [...this];
-  }
-
-  /**
-   * Get the first item from the collection
-   */
-  first(callback?: (item: T) => boolean): T | undefined {
-    if (callback) {
-      return this.find(callback);
-    }
-    return this[0];
-  }
-
-  /**
-   * Get the last item from the collection
-   */
-  last(callback?: (item: T) => boolean): T | undefined {
-    if (callback) {
-      const filtered = this.filter(callback);
-      return filtered[filtered.length - 1];
-    }
-    return this[this.length - 1];
-  }
-
-  /**
-   * Reject items from the collection using a callback
-   */
-  reject(callback: (item: T, index: number) => boolean): EnsembleCollection<T> {
-    return new EnsembleCollection(this.filter((item, index) => !callback(item, index)));
-  }
-
-  /**
-   * Map the collection and return a new collection
-   */
-  mapIntoCollection<U>(callback: (item: T, index: number) => U): U[] {
-    return this.map((item, index) => callback(item, index));
-  }
-
-  /**
-   * Get a collection with only unique items
-   */
-  unique(key?: keyof T): EnsembleCollection<T> {
-    if (!key) {
-      return new EnsembleCollection([...new Set(this)]);
-    }
-
-    const seen = new Set();
-    const unique: T[] = [];
-
-    for (const item of this) {
-      const value = item[key];
-      if (!seen.has(value)) {
-        seen.add(value);
-        unique.push(item);
-      }
-    }
-
-    return new EnsembleCollection(unique);
+    super(items);
   }
 
   /**
    * Get the collection of items as a plain array
    */
   toArray(): Record<string, any>[] {
-    return this.map((item) => item.toObject());
+    return this.map((item) => (item && typeof item.toObject === 'function' ? item.toObject() : item)).all() as Record<
+      string,
+      any
+    >[];
   }
 
   /**
-   * Get the collection of items as JSON
+   * Map the collection into a plain array of arbitrary values
    */
-  toJSON(): Record<string, any>[] {
-    return this.toArray();
-  }
-
-  /**
-   * Determine if the collection is empty
-   */
-  isEmpty(): boolean {
-    return this.length === 0;
-  }
-
-  /**
-   * Determine if the collection is not empty
-   */
-  isNotEmpty(): boolean {
-    return this.length > 0;
-  }
-
-  /**
-   * Get the sum of the given values
-   */
-  sum(key?: keyof T): number {
-    if (!key) {
-      return 0;
-    }
-
-    return this.reduce((sum, item) => sum + Number(item[key] || 0), 0);
-  }
-
-  /**
-   * Get the average value of a given key
-   */
-  avg(key?: keyof T): number {
-    if (this.isEmpty()) {
-      return 0;
-    }
-
-    return this.sum(key) / this.length;
-  }
-
-  /**
-   * Get the min value of a given key
-   */
-  min(key?: keyof T): number | undefined {
-    if (this.isEmpty() || !key) {
-      return undefined;
-    }
-
-    return Math.min(...this.map((item) => Number(item[key] || 0)));
-  }
-
-  /**
-   * Get the max value of a given key
-   */
-  max(key?: keyof T): number | undefined {
-    if (this.isEmpty() || !key) {
-      return undefined;
-    }
-
-    return Math.max(...this.map((item) => Number(item[key] || 0)));
-  }
-
-  /**
-   * Pluck an attribute from each model
-   */
-  pluck(key: keyof T): any[] {
-    return this.map((item) => item[key]);
+  mapIntoCollection<U>(callback: (item: T, index: number) => U): U[] {
+    return this.map((item, key) => callback(item, Number(key))).all();
   }
 
   /**
    * Get the keys of the collection items
    */
   modelKeys(): any[] {
-    return this.map((item) => item.getKey());
+    return this.map((item) => item.getKey()).all();
   }
 
   /**
-   * Sort the collection by a callback or key
-   */
-  sortBy(keyOrCallback: keyof T | ((a: T, b: T) => number)): EnsembleCollection<T> {
-    const sorted = [...this];
-
-    if (typeof keyOrCallback === 'function') {
-      sorted.sort(keyOrCallback);
-    } else {
-      sorted.sort((a, b) => {
-        const aVal = a[keyOrCallback];
-        const bVal = b[keyOrCallback];
-
-        if (aVal < bVal) return -1;
-        if (aVal > bVal) return 1;
-        return 0;
-      });
-    }
-
-    return new EnsembleCollection(sorted);
-  }
-
-  /**
-   * Sort the collection in descending order
-   */
-  sortByDesc(key: keyof T): EnsembleCollection<T> {
-    return this.sortBy((a, b) => {
-      const aVal = a[key];
-      const bVal = b[key];
-
-      if (aVal < bVal) return 1;
-      if (aVal > bVal) return -1;
-      return 0;
-    });
-  }
-
-  /**
-   * Group the collection by a given key
-   */
-  groupBy(key: keyof T): Record<string, EnsembleCollection<T>> {
-    const groups: Record<string, T[]> = {};
-
-    for (const item of this) {
-      const groupKey = String(item[key]);
-
-      if (!groups[groupKey]) {
-        groups[groupKey] = [];
-      }
-
-      groups[groupKey].push(item);
-    }
-
-    const result: Record<string, EnsembleCollection<T>> = {};
-    for (const [key, items] of Object.entries(groups)) {
-      result[key] = new EnsembleCollection(items);
-    }
-
-    return result;
-  }
-
-  /**
-   * Chunk the collection into smaller collections
+   * Chunk the collection into smaller collections of models
    */
   chunkModels(size: number): EnsembleCollection<T>[] {
-    const chunks: EnsembleCollection<T>[] = [];
-
-    for (let i = 0; i < this.length; i += size) {
-      chunks.push(new EnsembleCollection(this.slice(i, i + size)));
-    }
-
-    return chunks;
+    return this.chunk(size).all() as EnsembleCollection<T>[];
   }
 
   /**
-   * Take the first n items
-   */
-  take(limit: number): EnsembleCollection<T> {
-    return new EnsembleCollection(this.slice(0, limit));
-  }
-
-  /**
-   * Skip the first n items
-   */
-  skip(count: number): EnsembleCollection<T> {
-    return new EnsembleCollection(this.slice(count));
-  }
-
-  /**
-   * Merge the collection with the given items
-   */
-  merge(items: T[]): EnsembleCollection<T> {
-    return new EnsembleCollection([...this, ...items]);
-  }
-
-  /**
-   * Get the collection without the specified items
+   * Get the collection without the specified model keys
    */
   except(keys: any[]): EnsembleCollection<T> {
     const keySet = new Set(keys);
-    return new EnsembleCollection(this.filter((item) => !keySet.has(item.getKey())));
+
+    return this.filter((item) => !keySet.has(item.getKey())) as unknown as EnsembleCollection<T>;
   }
 
   /**
-   * Get only the specified items from the collection
+   * Get only the specified models from the collection
    */
   only(keys: any[]): EnsembleCollection<T> {
     const keySet = new Set(keys);
-    return new EnsembleCollection(this.filter((item) => keySet.has(item.getKey())));
+
+    return this.filter((item) => keySet.has(item.getKey())) as unknown as EnsembleCollection<T>;
   }
 
   /**
@@ -292,36 +84,13 @@ export class EnsembleCollection<T extends Ensemble> extends Array<T> {
       return super.find(keyOrCallback);
     }
 
-    return super.find((item) => item.getKey() === keyOrCallback);
+    return this.first((item) => item.getKey() === keyOrCallback);
   }
 
   /**
-   * Determine if a key exists in the collection
+   * Determine if a model key exists in the collection
    */
   contains(keyOrCallback: any | ((item: T) => boolean)): boolean {
     return this.find(keyOrCallback) !== undefined;
-  }
-
-  /**
-   * Get the items with the specified keys
-   */
-  whereIn(key: keyof T, values: any[]): EnsembleCollection<T> {
-    const valueSet = new Set(values);
-    return new EnsembleCollection(super.filter((item) => valueSet.has(item[key])));
-  }
-
-  /**
-   * Get the items where a key is not in the given values
-   */
-  whereNotIn(key: keyof T, values: any[]): EnsembleCollection<T> {
-    const valueSet = new Set(values);
-    return new EnsembleCollection(super.filter((item) => !valueSet.has(item[key])));
-  }
-
-  /**
-   * Count the number of items in the collection
-   */
-  count(): number {
-    return this.length;
   }
 }
