@@ -1,19 +1,24 @@
+import { HttpException } from '@/Foundation/Exceptions/HttpException';
 import { Validator } from './Validator';
 
 /**
  * ValidationException - Laravel's validation exception
  * Illuminate\Validation\ValidationException
  *
- * Thrown when validation fails, contains error messages
+ * Thrown when validation fails, contains error messages. As a 422
+ * HttpException the exception handler renders its error bag onto the
+ * response.
  */
-export class ValidationException extends Error {
+export class ValidationException extends HttpException {
   private validator: Validator;
-  private status: number = 422;
 
   constructor(validator: Validator, message?: string) {
-    super(message || 'The given data was invalid.');
+    super(422, message || 'The given data was invalid.');
     this.name = 'ValidationException';
     this.validator = validator;
+
+    // Keep instanceof working when the output is down-levelled
+    Object.setPrototypeOf(this, ValidationException.prototype);
 
     // Maintains proper stack trace for where our error was thrown
     if (Error.captureStackTrace) {
@@ -29,15 +34,6 @@ export class ValidationException extends Error {
    */
   errors(): Record<string, string[]> {
     return this.validator.errors();
-  }
-
-  /**
-   * Get the HTTP status code
-   *
-   * @returns {number}
-   */
-  getStatus(): number {
-    return this.status;
   }
 
   /**

@@ -18,10 +18,10 @@ import { DrizzleAdapter } from '@/Database/Adapters/DrizzleAdapter';
 import { DatabaseManager } from '@/Database/DatabaseManager';
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { Application } from '@/Foundation/Application';
+import { ModelNotFoundException } from '@/Foundation/Exceptions/ModelNotFoundException';
 import { FormRequest } from '@/Foundation/Http/FormRequest';
 import { Action } from '@/Routing/Action';
 import { Controller } from '@/Routing/Controller';
-import { ModelNotFoundException } from '@/Routing/ModelNotFoundException';
 import { Request } from '@/Routing/Request';
 import { Response } from '@/Routing/Response';
 import { Route as RouteClass } from '@/Routing/Route';
@@ -354,8 +354,9 @@ describe.skipIf(!WITH_SQLITE)('Route model binding and controller DI', () => {
 
       const res = await dispatch('GET', '/users/999');
 
+      // The shared exception handler renders ModelNotFoundException as 404
       expect(res.status).toBe(404);
-      expect(res.body).toBe('Not Found');
+      expect(res.json().message).toContain('No query results for model [User]');
     });
 
     it('throws ModelNotFoundException carrying the model and id', async () => {

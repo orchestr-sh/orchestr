@@ -1,5 +1,6 @@
 import type { Request } from './Request';
 import { Response } from './Response';
+import { ResponseObject } from './Responses/ResponseObject';
 
 /**
  * Continuation into the rest of the pipeline: the next middleware, or the
@@ -12,16 +13,17 @@ export type NextFunction = () => Promise<void>;
  * HTTP middleware
  * Laravel: middleware classes carried by Illuminate\Pipeline\Pipeline
  *
- * Middleware continues by calling `next()`; returning a Response instead
- * short-circuits the pipeline so the destination and downstream middleware
- * never run. A terminable middleware attaches a `terminate` hook, which the
- * pipeline runs after the response has been sent.
+ * Middleware continues by calling `next()`; returning a Response (or a
+ * ResponseObject such as a JsonResponse) instead short-circuits the pipeline
+ * so the destination and downstream middleware never run. A terminable
+ * middleware attaches a `terminate` hook, which the pipeline runs after the
+ * response has been sent.
  */
 export type Middleware = (
   req: Request,
   res: Response,
   next: NextFunction
-) => void | Response | Promise<void | Response>;
+) => void | Response | ResponseObject | Promise<void | Response | ResponseObject>;
 
 /**
  * Middleware exposing Laravel's terminate-after-response contract
@@ -114,10 +116,17 @@ export class Pipeline {
 
     const outcome = await pipe(this.req, this.res, next);
 
-    if (outcome instanceof Response) {
-      // The middleware returned a response: that is the pipeline's verdict.
-      // Any pending downstream chain is discarded, and an unsent response is
-      // flushed so the caller always ends with a sent response.
+    if (outcome instanceof ResponseObject) {
+      // The middleware returned a response object: that is the pipeline's
+      // verdict. Any pending downstream chain is discarded, and the object
+      // delivers itself onto the transport.
+      if (!this.res.finished) {
+        await outcome.sendTo(this.res);
+      }
+    } else if (outcome instanceof Response) {
+      // The middleware returned the transport response directly: same
+      // short-circuit, and an unsent response is flushed so the caller
+      // always ends with a sent response.
       if (!outcome.finished) {
         outcome.send(undefined);
       }

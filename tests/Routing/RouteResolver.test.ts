@@ -5,10 +5,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { Application } from '@/Foundation/Application';
+import { ModelNotFoundException } from '@/Foundation/Exceptions/ModelNotFoundException';
 import { FormRequest } from '@/Foundation/Http/FormRequest';
 import { Action } from '@/Routing/Action';
 import { Controller } from '@/Routing/Controller';
-import { ModelNotFoundException } from '@/Routing/ModelNotFoundException';
 import { Request } from '@/Routing/Request';
 import { Response } from '@/Routing/Response';
 import { Route } from '@/Routing/Route';
