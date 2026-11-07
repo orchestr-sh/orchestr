@@ -5,6 +5,7 @@
  */
 
 import { ColumnDefinition as IColumnDefinition } from '@/Database/Contracts/Schema';
+import type { Blueprint } from './Blueprint';
 
 export class ColumnDefinition implements IColumnDefinition {
   public name: string;
@@ -24,9 +25,33 @@ export class ColumnDefinition implements IColumnDefinition {
   public isFirst: boolean = false;
   public enumValues?: string[];
 
+  /**
+   * The blueprint the column was declared on. Columns created directly with
+   * `new ColumnDefinition(...)` have none, which only means there is no table
+   * to attach an index or a modification to.
+   */
+  protected owningBlueprint?: Blueprint;
+
   constructor(name: string, type: string) {
     this.name = name;
     this.type = type;
+  }
+
+  /**
+   * Tell the column which blueprint owns it, so modifiers that describe table
+   * level objects (indexes, changes) can register themselves there.
+   */
+  setBlueprint(blueprint: Blueprint): this {
+    this.owningBlueprint = blueprint;
+
+    return this;
+  }
+
+  /**
+   * The blueprint the column belongs to, when there is one.
+   */
+  getBlueprint(): Blueprint | undefined {
+    return this.owningBlueprint;
   }
 
   /**
@@ -56,8 +81,10 @@ export class ColumnDefinition implements IColumnDefinition {
   /**
    * Add a unique constraint
    */
-  unique(): this {
+  unique(indexName?: string): this {
     this.isUnique = true;
+    this.owningBlueprint?.addIndex([this.name], 'unique', indexName ?? this.indexName);
+
     return this;
   }
 
@@ -66,6 +93,8 @@ export class ColumnDefinition implements IColumnDefinition {
    */
   index(indexName?: string): this {
     this.indexName = indexName;
+    this.owningBlueprint?.addIndex([this.name], 'index', indexName);
+
     return this;
   }
 
@@ -74,6 +103,7 @@ export class ColumnDefinition implements IColumnDefinition {
    */
   primary(): this {
     this.isPrimary = true;
+
     return this;
   }
 
@@ -98,6 +128,22 @@ export class ColumnDefinition implements IColumnDefinition {
    */
   first(): this {
     this.isFirst = true;
+    return this;
+  }
+
+  /**
+   * Mark the column as a modification of an existing column instead of a new
+   * one, so `Schema::table()` redefines it rather than adding it.
+   */
+  change(): this {
+    if (!this.owningBlueprint) {
+      throw new Error(
+        `Cannot change column [${this.name}]: the definition does not belong to a blueprint. Declare it inside a Schema::table() callback.`
+      );
+    }
+
+    this.owningBlueprint.change(this);
+
     return this;
   }
 }

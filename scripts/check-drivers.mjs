@@ -20,6 +20,8 @@ const DRIVERS = [
       'tests/Database/Connection.test.ts',
       'tests/Database/DrizzleAdapter.test.ts',
       'tests/Database/Query/Builder/SqliteIntegration.test.ts',
+      'tests/Database/Migrations/MigratorSqlite.test.ts',
+      'tests/Database/Migrations/SchemaBuilderSqlite.test.ts',
     ],
     /**
      * Opening a connection is what proves the compiled binary exists: the JS

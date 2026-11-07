@@ -317,6 +317,21 @@ npx orchestr make:migration create_users_table --create=users
 # Run migrations
 npx orchestr migrate
 
+# Run each migration in its own batch, so it can be rolled back on its own
+npx orchestr migrate --step
+
+# Seed the database once the migrations have run
+npx orchestr migrate --seed
+
+# Run migrations against a production database
+npx orchestr migrate --force
+
+# Preview the SQL without touching the database
+npx orchestr migrate --pretend
+
+# Create only the migrations tracking table
+npx orchestr migrate:install
+
 # Rollback last batch
 npx orchestr migrate:rollback
 
@@ -361,11 +376,14 @@ export default class extends Migration {
 ### Column Types
 
 ```typescript
-table.id()                          // Auto-incrementing big integer
+table.id()                          // Auto-incrementing big integer primary key
+table.increments('id')              // Auto-incrementing integer primary key
+table.bigIncrements('id')           // Auto-incrementing big integer primary key
 table.string('name', 255)           // VARCHAR
 table.text('bio')                   // TEXT
 table.integer('votes')              // INTEGER
 table.bigInteger('amount')          // BIGINT
+table.unsignedBigInteger('user_id') // UNSIGNED BIGINT
 table.decimal('price', 8, 2)        // DECIMAL
 table.boolean('active')             // BOOLEAN
 table.date('birth_date')            // DATE
@@ -374,6 +392,7 @@ table.timestamp('created_at')       // TIMESTAMP
 table.timestamps()                  // created_at & updated_at
 table.json('metadata')              // JSON
 table.uuid('identifier')            // UUID
+table.ulid('sort_key')              // CHAR(26) / VARCHAR(26)
 table.enum('status', ['draft', 'published'])
 ```
 
@@ -385,14 +404,76 @@ table.string('email').unique()
 table.string('email').default('guest@example.com')
 table.integer('votes').unsigned()
 table.string('email').index()
+table.integer('votes').default(0)
+table.timestamp('created_at').default(raw('CURRENT_TIMESTAMP'))
 ```
+
+Default values are escaped by the grammar, so a value containing a quote is safe.
+Raw SQL is only emitted when it is explicitly wrapped: `raw('CURRENT_TIMESTAMP')`.
 
 ### Foreign Keys
 
 ```typescript
+// Declare the column and its constraint in one step.
+table.foreignId('user_id').constrained().cascadeOnDelete();
+
+// Or point it at a model: creates `user_id` referencing `users.id`.
+table.foreignIdFor(User);
+
+// The long form still works.
 table.bigInteger('user_id').unsigned();
 table.foreign('user_id').references('id').on('users').onDelete('cascade');
 ```
+
+### Polymorphic Columns
+
+```typescript
+table.morphs('commentable');        // commentable_type + commentable_id
+table.nullableMorphs('authorable'); // the same pair, nullable
+```
+
+### Modifying and Dropping Things
+
+```typescript
+await schema.table('users', (table) => {
+  table.string('name', 100).nullable().change();  // redefine a column
+  table.renameColumn('login', 'username');
+  table.dropColumn('tmp');
+  table.dropIndex(['name']);                     // or dropIndex('users_name_index')
+  table.dropUnique(['email']);
+  table.dropForeign(['user_id']);
+  table.dropPrimary();
+  table.renameIndex('users_name_index', 'users_handle_index');
+  table.dropTimestamps();
+  table.dropSoftDeletes();
+});
+```
+
+`change()` compiles wherever the driver supports redefining a column in place
+(PostgreSQL). Elsewhere it fails with a clear error rather than emitting SQL the
+driver would reject, as do dropping a primary key or a foreign key on SQLite.
+
+### Switching Foreign Keys Off
+
+```typescript
+await schema.withoutForeignKeyConstraints(async () => {
+  await schema.dropIfExists('posts');
+  await schema.dropIfExists('users');
+});
+```
+
+Constraints are restored even if the callback throws. Dialects without a session
+switch (PostgreSQL) simply run the statements, which is why a PostgreSQL
+`DROP TABLE` cascades.
+
+### Per-driver Grammars
+
+Every dialect decision - column types, auto-increment syntax, default literals,
+identifier quoting, index and foreign key placement, and the catalog queries
+behind `hasTable()`/`hasColumn()` - lives in a schema grammar
+(`SqliteSchemaGrammar`, `PostgresSchemaGrammar`, `MySqlSchemaGrammar`), resolved
+from the connection's configured driver. Adding a driver means adding a grammar,
+not editing the builder.
 
 ## Seeders
 
@@ -835,6 +916,9 @@ schema.dropIfExists(table)          // Drop table if exists
 schema.rename(from, to)             // Rename table
 schema.hasTable(table)              // Check if table exists
 schema.hasColumn(table, column)     // Check if column exists
+schema.disableForeignKeyConstraints() // Switch constraint checking off
+schema.enableForeignKeyConstraints()  // ...and back on
+schema.withoutForeignKeyConstraints(callback) // Run a callback with them off
 ```
 
 ### Blueprint Column Types
@@ -866,6 +950,30 @@ table.enum(column, values)          // ENUM
 table.binary(column)                // BINARY
 table.rememberToken()               // remember_token VARCHAR(100)
 table.softDeletes(column)           // deleted_at timestamp
+table.ulid(column)                  // 26 character identifier
+table.foreignId(column)             // unsigned big integer, for constrained()
+table.foreignIdFor(model, column)   // foreign key column derived from a model
+table.morphs(name)                  // <name>_type + <name>_id
+table.nullableMorphs(name)          // the pair, nullable
+```
+
+### Blueprint Key and Change Methods
+
+```typescript
+table.index(columns, indexName)     // Add an index
+table.unique(columns, indexName)    // Add a unique index
+table.primary(columns)              // Add a composite primary key
+table.foreign(columns, name)        // Add a foreign key constraint
+table.dropColumn(column)            // Drop column(s)
+table.dropTimestamps(column)        // Drop created_at / updated_at
+table.dropSoftDeletes(column)       // Drop deleted_at
+table.dropIndex(columns)            // Drop an index by name or columns
+table.dropUnique(columns)           // Drop a unique index
+table.dropForeign(columns)          // Drop a foreign key
+table.dropPrimary()                 // Drop the primary key
+table.renameIndex(from, to)         // Rename an index
+table.renameColumn(from, to)        // Rename a column
+table.change(column)                // Redefine existing column(s)
 ```
 
 ### Relationship Methods
@@ -913,6 +1021,11 @@ npx orchestr make:migration <name>          # Create migration
 npx orchestr make:migration <name> --create=<table>  # Create table migration
 npx orchestr make:migration <name> --table=<table>   # Update table migration
 npx orchestr migrate                        # Run migrations
+npx orchestr migrate --step                 # Each migration in its own batch
+npx orchestr migrate --seed                 # Seed after migrating
+npx orchestr migrate --force                # Run without the production check
+npx orchestr migrate --pretend              # Show the SQL without running it
+npx orchestr migrate:install                # Create the migration repository
 npx orchestr migrate:rollback               # Rollback last batch
 npx orchestr migrate:reset                  # Rollback all migrations
 npx orchestr migrate:refresh                # Reset and re-run migrations

@@ -17,7 +17,7 @@ export { QueryGrammar, isListOperator } from './QueryGrammar';
 export type { QueryState } from './QueryGrammar';
 export { SqliteGrammar } from './SqliteGrammar';
 export { PostgresGrammar } from './PostgresGrammar';
-export { MySqlGrammar } from './MySqlGrammar';
+export { MySqlGrammar, quoteMySqlLiteral } from './MySqlGrammar';
 
 /**
  * Grammar per driver name, including the aliases `DrizzleAdapter` accepts.
