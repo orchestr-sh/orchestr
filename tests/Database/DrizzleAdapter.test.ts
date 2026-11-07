@@ -6,11 +6,16 @@ const INJECTION = "Robert'); DROP TABLE users;--";
 
 /**
  * better-sqlite3 is an optional dependency (and needs a native build), so the
- * integration suite only runs when the driver is actually installed.
+ * integration suite only runs when the driver is actually installed. The JS
+ * wrapper imports fine even without a compiled binding - `bindings()` only
+ * resolves when a Database is constructed - so probe by opening a real
+ * in-memory connection.
  */
 async function hasBetterSqlite(): Promise<boolean> {
   try {
-    await import('better-sqlite3');
+    const Database = await import('better-sqlite3');
+    const db = new Database.default(':memory:');
+    db.close();
     return true;
   } catch {
     return false;
