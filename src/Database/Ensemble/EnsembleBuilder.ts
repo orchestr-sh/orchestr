@@ -4,6 +4,7 @@
  * Extends the query builder to work with Ensemble models
  */
 
+import type { QueryGrammar } from '@/Database/Query/Grammars';
 import { DatabaseAdapter } from '@/Database/Contracts/DatabaseAdapter';
 import { Builder as QueryBuilder } from '@/Database/Query/Builder';
 import { Ensemble } from './Ensemble';
@@ -21,8 +22,8 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    */
   protected eagerLoad: Record<string, (query: any) => void> = {};
 
-  constructor(adapter: DatabaseAdapter, model: T) {
-    super(adapter);
+  constructor(adapter: DatabaseAdapter, grammar: QueryGrammar, model: T) {
+    super(adapter, grammar);
     this.model = model;
     this.from(model.getTable());
   }
@@ -307,18 +308,8 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    * Clone the query builder
    */
   clone(): EnsembleBuilder<T> {
-    const cloned = new EnsembleBuilder<T>(this.adapter, this.model);
-    cloned._columns = [...this._columns];
-    cloned._distinct = this._distinct;
-    cloned._table = this._table;
-    cloned._wheres = [...this._wheres];
-    cloned._joins = [...this._joins];
-    cloned._orders = [...this._orders];
-    cloned._groups = [...this._groups];
-    cloned._havings = [...this._havings];
-    cloned._limit = this._limit;
-    cloned._offset = this._offset;
-    cloned._bindings = [...this._bindings];
+    const cloned = new EnsembleBuilder<T>(this.adapter, this.grammar, this.model);
+    this.copyStateInto(cloned);
     cloned.eagerLoad = { ...this.eagerLoad };
     return cloned;
   }

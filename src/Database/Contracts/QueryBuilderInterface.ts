@@ -4,6 +4,8 @@
  * Defines the contract for query builders
  */
 
+import type { Expression } from '@/Database/Query/Expression';
+
 export type WhereOperator =
   | '='
   | '!='
@@ -24,7 +26,11 @@ export type OrderDirection = 'asc' | 'desc';
 export type JoinType = 'inner' | 'left' | 'right' | 'cross';
 
 export interface WhereClause {
-  column: string;
+  /**
+   * The column the operator is applied to. A `whereRaw()` clause stores the
+   * raw SQL as an expression here so the grammar can pass it through untouched.
+   */
+  column: string | Expression;
   operator: WhereOperator | string;
   value: any;
   boolean: 'and' | 'or';
@@ -41,6 +47,12 @@ export interface JoinClause {
 export interface OrderByClause {
   column: string;
   direction: OrderDirection;
+}
+
+export interface HavingClause {
+  column: string;
+  operator: string;
+  value: any;
 }
 
 export interface QueryBuilderInterface<T = any> {
@@ -222,9 +234,9 @@ export interface QueryBuilderInterface<T = any> {
   /**
    * Insert a new record
    */
-  insert(
-    values: Record<string, any> | Record<string, any>[]
-  ): Promise<boolean> & { returning(columns?: string | string[]): Promise<any | any[]> };
+  insert(values: Record<string, any> | Record<string, any>[]): Promise<boolean> & {
+    returning(columns?: string | string[], key?: string): Promise<any | any[]>;
+  };
 
   /**
    * Specify returning columns for insert/update operations
@@ -233,10 +245,14 @@ export interface QueryBuilderInterface<T = any> {
 
   /**
    * Insert and return selected columns (object for single, array for bulk)
+   *
+   * `key` names the generated key column used to read the row back on drivers
+   * without `RETURNING` support; dialects with `RETURNING` ignore it.
    */
   insertReturning(
     values: Record<string, any> | Record<string, any>[],
-    columns?: string | string[]
+    columns?: string | string[],
+    key?: string
   ): Promise<any | any[]>;
 
   /**
@@ -263,6 +279,12 @@ export interface QueryBuilderInterface<T = any> {
    * Get the SQL query string
    */
   toSql(): string;
+
+  /**
+   * Get the query with its bindings interpolated in, for debugging only.
+   * The interpolated statement is never executed.
+   */
+  toRawSql(): string;
 
   /**
    * Get the bindings for the query

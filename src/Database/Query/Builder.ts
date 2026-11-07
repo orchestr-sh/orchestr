@@ -1,7 +1,14 @@
 /**
  * Query Builder
  *
- * Fluent query builder for constructing database queries
+ * Fluent query builder for constructing database queries.
+ *
+ * The builder owns query state and the fluent API only. Compiling that state
+ * into SQL is the grammar's job, so a new driver means a new grammar, not a new
+ * branch in here. Bindings are collected per clause (`select`, `join`, `where`,
+ * `having`, `order`) and flattened in SQL order, which keeps raw select
+ * expressions and raw where clauses bound in the order they appear in the
+ * statement.
  */
 
 import { DatabaseAdapter } from '@/Database/Contracts/DatabaseAdapter';
@@ -10,33 +17,75 @@ import {
   WhereOperator,
   OrderDirection,
   JoinType,
+  HavingClause,
   WhereClause,
   JoinClause,
   OrderByClause,
 } from '@/Database/Contracts/QueryBuilderInterface';
 import { Expression } from './Expression';
+import { isListOperator, QueryGrammar, type QueryState } from './Grammars';
+
+/**
+ * The clause a binding belongs to. Flattened in this order so bindings always
+ * line up with the placeholders their clause produced.
+ */
+export type BindingClause = 'select' | 'join' | 'where' | 'having' | 'order';
+
+/**
+ * Order the binding groups are flattened in: the order the clauses appear in
+ * the compiled statement.
+ */
+const BINDING_ORDER: BindingClause[] = ['select', 'join', 'where', 'having', 'order'];
 
 export class Builder<T = any> implements QueryBuilderInterface<T> {
-  protected _columns: string[] = ['*'];
+  protected _columns: (string | Expression)[] = ['*'];
   protected _distinct: boolean = false;
   protected _table?: string;
   protected _wheres: WhereClause[] = [];
   protected _joins: JoinClause[] = [];
   protected _orders: OrderByClause[] = [];
   protected _groups: string[] = [];
-  protected _havings: any[] = [];
+  protected _havings: HavingClause[] = [];
   protected _limit?: number;
   protected _offset?: number;
-  protected _bindings: any[] = [];
   protected _returning?: string[];
+  protected _bindings: Record<BindingClause, any[]> = { select: [], join: [], where: [], having: [], order: [] };
 
-  constructor(protected adapter: DatabaseAdapter) {}
+  constructor(
+    protected adapter: DatabaseAdapter,
+    protected grammar: QueryGrammar
+  ) {}
+
+  /**
+   * Get the grammar that compiles this query
+   */
+  getGrammar(): QueryGrammar {
+    return this.grammar;
+  }
 
   /**
    * Set the columns to be selected
+   *
+   * A single string may list several columns (`select('id, name')`), which is
+   * split so every column is quoted as its own identifier.
    */
   select(...columns: string[]): this {
-    this._columns = columns.length > 0 ? columns : ['*'];
+    const parsed: (string | Expression)[] = [];
+
+    for (const column of columns) {
+      if (typeof column !== 'string') {
+        parsed.push(column);
+        continue;
+      }
+
+      for (const part of column.split(',')) {
+        if (part.trim() !== '') {
+          parsed.push(part.trim());
+        }
+      }
+    }
+
+    this._columns = parsed.length > 0 ? parsed : ['*'];
     return this;
   }
 
@@ -44,8 +93,8 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
    * Add a raw select expression
    */
   selectRaw(sql: string, bindings: any[] = []): this {
-    this._columns.push(new Expression(sql) as any);
-    this._bindings.push(...bindings);
+    this._columns.push(new Expression(sql));
+    this.addBindings(bindings, 'select');
     return this;
   }
 
@@ -69,77 +118,28 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
    * Add a basic where clause
    */
   where(column: string, operator?: WhereOperator | any, value?: any): this {
-    // Handle where(column, value) syntax
-    if (arguments.length === 2) {
-      value = operator;
-      operator = '=';
-    }
-
-    this._wheres.push({
-      column,
-      operator: operator as WhereOperator,
-      value,
-      boolean: 'and',
-    });
-
-    if (value !== undefined && value !== null) {
-      this._bindings.push(value);
-    }
-
-    return this;
+    return this.addWhere('and', column, operator, value, arguments.length);
   }
 
   /**
    * Add an "or where" clause
    */
   orWhere(column: string, operator?: WhereOperator | any, value?: any): this {
-    if (arguments.length === 2) {
-      value = operator;
-      operator = '=';
-    }
-
-    this._wheres.push({
-      column,
-      operator: operator as WhereOperator,
-      value,
-      boolean: 'or',
-    });
-
-    if (value !== undefined && value !== null) {
-      this._bindings.push(value);
-    }
-
-    return this;
+    return this.addWhere('or', column, operator, value, arguments.length);
   }
 
   /**
    * Add a where in clause
    */
   whereIn(column: string, values: any[]): this {
-    this._wheres.push({
-      column,
-      operator: 'in',
-      value: values,
-      boolean: 'and',
-    });
-
-    this._bindings.push(...values);
-    return this;
+    return this.addWhereClause('and', column, 'in', values);
   }
 
   /**
    * Add a where not in clause
    */
   whereNotIn(column: string, values: any[]): this {
-    this._wheres.push({
-      column,
-      operator: 'not in',
-      value: values,
-      boolean: 'and',
-    });
-
-    this._bindings.push(...values);
-    return this;
+    return this.addWhereClause('and', column, 'not in', values);
   }
 
   /**
@@ -174,15 +174,7 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
    * Add a where between clause
    */
   whereBetween(column: string, values: [any, any]): this {
-    this._wheres.push({
-      column,
-      operator: 'between',
-      value: values,
-      boolean: 'and',
-    });
-
-    this._bindings.push(...values);
-    return this;
+    return this.addWhereClause('and', column, 'between', values);
   }
 
   /**
@@ -190,13 +182,14 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
    */
   whereRaw(sql: string, bindings: any[] = []): this {
     this._wheres.push({
-      column: new Expression(sql) as any,
+      column: new Expression(sql),
       operator: 'raw',
       value: null,
       boolean: 'and',
     });
 
-    this._bindings.push(...bindings);
+    this.addBindings(bindings, 'where');
+
     return this;
   }
 
@@ -204,45 +197,21 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
    * Add a join clause
    */
   join(table: string, first: string, operator: string = '=', second?: string): this {
-    this._joins.push({
-      type: 'inner',
-      table,
-      first,
-      operator,
-      second,
-    });
-
-    return this;
+    return this.addJoin('inner', table, first, operator, second);
   }
 
   /**
    * Add a left join clause
    */
   leftJoin(table: string, first: string, operator: string = '=', second?: string): this {
-    this._joins.push({
-      type: 'left',
-      table,
-      first,
-      operator,
-      second,
-    });
-
-    return this;
+    return this.addJoin('left', table, first, operator, second);
   }
 
   /**
    * Add a right join clause
    */
   rightJoin(table: string, first: string, operator: string = '=', second?: string): this {
-    this._joins.push({
-      type: 'right',
-      table,
-      first,
-      operator,
-      second,
-    });
-
-    return this;
+    return this.addJoin('right', table, first, operator, second);
   }
 
   /**
@@ -284,10 +253,10 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
       operator = '=';
     }
 
-    this._havings.push({ column, operator, value });
+    this._havings.push({ column, operator: operator as string, value });
 
-    if (value !== undefined && value !== null) {
-      this._bindings.push(value);
+    if (value !== undefined) {
+      this.addBinding(value, 'having');
     }
 
     return this;
@@ -408,17 +377,20 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
 
   /**
    * Execute an aggregate function
+   *
+   * The aggregate expression and the bindings it joins are transient, so the
+   * query the caller built is left exactly as it was.
    */
   protected async aggregate(func: string, column: string): Promise<any> {
-    const previousColumns = this._columns;
-    const previousBindings = this._bindings.slice();
+    const previousColumns = [...this._columns];
+    const previousSelectBindings = this._bindings.select.slice();
 
-    this.selectRaw(`${func}(${column}) as aggregate`);
+    this.selectRaw(this.grammar.compileAggregate(func, column));
 
     const result = await this.first();
 
     this._columns = previousColumns;
-    this._bindings = previousBindings;
+    this.setBindings(previousSelectBindings, 'select');
 
     return result ? (result as any)['aggregate'] : null;
   }
@@ -427,9 +399,9 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
    * Insert a new record
    */
   insert(values: Record<string, any> | Record<string, any>[]): Promise<boolean> & {
-    returning(columns?: string | string[]): Promise<any | any[]>;
+    returning(columns?: string | string[], key?: string): Promise<any | any[]>;
   } {
-    const returningFn = (columns?: string | string[]) => this.insertReturning(values, columns);
+    const returningFn = (columns?: string | string[], key?: string) => this.insertReturning(values, columns, key);
     const exec = () => this.executeInsert(values);
     const chain: any = {
       returning: returningFn,
@@ -440,6 +412,9 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
     return chain as Promise<boolean> & { returning: typeof returningFn };
   }
 
+  /**
+   * Run a plain insert, with no rows handed back
+   */
   protected async executeInsert(values: Record<string, any> | Record<string, any>[]): Promise<boolean> {
     if (!this._table) {
       throw new Error('Cannot insert without specifying a table');
@@ -450,11 +425,8 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
       return true;
     }
 
-    const columns = Object.keys(records[0]);
-    const placeholders = records.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ');
-    const bindings = records.flatMap((record) => columns.map((col) => record[col]));
-    const sql = `INSERT INTO ${this._table} (${columns.join(', ')}) VALUES ${placeholders}`;
-    await this.adapter.insert(sql, bindings);
+    const sql = this.grammar.compileInsert(this.toQueryState(), records);
+    await this.adapter.insert(sql, this.insertBindings(records));
     return true;
   }
 
@@ -476,11 +448,12 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
    * Insert and return selected columns
    * - Single insert: returns one row (object)
    * - Bulk insert: returns array of rows
-   * - Fallbacks for drivers without RETURNING (e.g., MySQL)
+   * - Drivers without RETURNING (e.g., MySQL) need the key column to read the row back
    */
   async insertReturning(
     values: Record<string, any> | Record<string, any>[],
-    columns?: string | string[]
+    columns?: string | string[],
+    key?: string
   ): Promise<any | any[]> {
     if (!this._table) {
       throw new Error('Cannot insert without specifying a table');
@@ -491,93 +464,128 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
       return Array.isArray(values) ? [] : null;
     }
 
-    const insertCols = Object.keys(records[0]);
-    const placeholders = records.map(() => `(${insertCols.map(() => '?').join(', ')})`).join(', ');
-    const bindings = records.flatMap((record) => insertCols.map((col) => record[col]));
+    const returning = this.resolveReturningColumns(columns);
 
-    const retCols =
-      columns === undefined
-        ? this._returning && this._returning.length > 0
-          ? this._returning
-          : ['*']
-        : Array.isArray(columns)
-          ? columns
-          : [columns];
+    if (this.grammar.supportsReturning()) {
+      try {
+        const sql = this.grammar.compileInsertReturning(this.toQueryState(), records, returning);
+        const rows = await this.adapter.select<any>(sql, this.insertBindings(records));
 
-    const sqlWithReturning = `INSERT INTO ${this._table} (${insertCols.join(', ')}) VALUES ${placeholders} RETURNING ${retCols.join(
-      ', '
-    )}`;
+        this._returning = undefined;
 
-    try {
-      const rows = await this.adapter.select<any>(sqlWithReturning, bindings);
-      // Reset returning state after use
-      this._returning = undefined;
-      return records.length === 1 ? (rows[0] ?? null) : rows;
-    } catch (error) {
-      // Fallback for drivers without RETURNING (e.g., MySQL)
-      const sqlNoReturning = `INSERT INTO ${this._table} (${insertCols.join(', ')}) VALUES ${placeholders}`;
-      const insertResult = await this.adapter.insert(sqlNoReturning, bindings);
-
-      // Only supported fallback: single-row insert by primary key ID
-      if (records.length === 1) {
-        const id = insertResult;
-        // If no id is obtainable, return minimal best-effort (null)
-        if (id === undefined || id === null) {
-          this._returning = undefined;
-          return null;
+        return records.length === 1 ? (rows[0] ?? null) : rows;
+      } catch (error) {
+        // A RETURNING-capable driver that still reports a generated key can
+        // recover by inserting plainly and reading the row back.
+        if (this.grammar.usesLastInsertId()) {
+          return await this.insertAndReadBack(records, returning, key);
         }
 
-        const selectCols = retCols.join(', ');
-        const row = await this.adapter.select<any>(`SELECT ${selectCols} FROM ${this._table} WHERE id = ? LIMIT 1`, [
-          id,
-        ]);
-        this._returning = undefined;
-        return row[0] ?? null;
+        throw error;
       }
+    }
 
-      // Bulk insert not supported on drivers without RETURNING
+    return await this.insertAndReadBack(records, returning, key);
+  }
+
+  /**
+   * Insert without a RETURNING clause and read a single row back by its
+   * generated key. Used for MySQL and for SQLite builds older than 3.35.
+   */
+  protected async insertAndReadBack(records: Record<string, any>[], returning: string[], key?: string): Promise<any> {
+    const sql = this.grammar.compileInsert(this.toQueryState(), records);
+    const generatedKey = await this.adapter.insert(sql, this.insertBindings(records));
+
+    this._returning = undefined;
+
+    if (records.length > 1) {
       throw new Error(
         'returning() is not supported for bulk inserts on this driver. Insert succeeded without returning rows.'
       );
     }
+
+    if (!key) {
+      throw new Error(
+        'Cannot return the inserted row: this driver has no RETURNING support and no key column was configured. ' +
+          'Pass the generated key column, e.g. insert(values).returning(["id"], "id") or insertGetId(values).'
+      );
+    }
+
+    // The driver handed back no generated key, so there is nothing to look the
+    // row up by; report the insert as done without a row rather than guessing.
+    if (generatedKey === undefined || generatedKey === null) {
+      return null;
+    }
+
+    const row = await new Builder<any>(this.adapter, this.grammar)
+      .from(this._table as string)
+      .select(...returning)
+      .where(key, '=', generatedKey)
+      .first();
+
+    return row ?? null;
+  }
+
+  /**
+   * Resolve the columns a returning() call asks for, defaulting to `*`.
+   */
+  protected resolveReturningColumns(columns?: string | string[]): string[] {
+    if (columns === undefined) {
+      return this._returning && this._returning.length > 0 ? this._returning : ['*'];
+    }
+
+    return Array.isArray(columns) ? columns : [columns];
   }
 
   /**
    * Insert a new record and get the ID
+   *
+   * The way the key is read back is a dialect detail: SQLite uses
+   * `lastInsertRowid`, MySQL uses `insertId` (both from the driver result),
+   * PostgreSQL asks for it with `RETURNING`. `sequence` names the key column so
+   * no column name is assumed.
    */
   async insertGetId(values: Record<string, any>, sequence?: string): Promise<any> {
     if (!this._table) {
       throw new Error('Cannot insert without specifying a table');
     }
 
+    if (Array.isArray(values)) {
+      throw new Error('Cannot get the insert ID for more than one record');
+    }
+
     const columns = Object.keys(values);
-    const placeholders = columns.map(() => '?').join(', ');
-    const bindings = columns.map((col) => values[col]);
 
-    const sql = `INSERT INTO ${this._table} (${columns.join(', ')}) VALUES (${placeholders})`;
+    if (columns.length === 0) {
+      throw new Error('Cannot insert a record without any columns');
+    }
 
-    return await this.adapter.insert(sql, bindings);
+    const sql = this.grammar.compileInsertGetId(this.toQueryState(), values, sequence);
+    const bindings = columns.map((column) => values[column]);
+
+    if (this.grammar.usesLastInsertId()) {
+      return await this.adapter.insert(sql, bindings);
+    }
+
+    const rows = await this.adapter.select<any>(sql, bindings);
+    const key = this.grammar.generatedKeyColumn(this.toQueryState(), sequence);
+
+    return rows.length > 0 ? (rows[0][key] ?? null) : null;
   }
 
   /**
    * Update records
+   *
+   * The set bindings come first, then the where bindings: the order the
+   * compiled statement puts its placeholders in.
    */
   async update(values: Record<string, any>): Promise<number> {
     if (!this._table) {
       throw new Error('Cannot update without specifying a table');
     }
 
-    const sets = Object.keys(values)
-      .map((key) => `${key} = ?`)
-      .join(', ');
-
-    const bindings = [...Object.values(values), ...this.getBindings()];
-
-    let sql = `UPDATE ${this._table} SET ${sets}`;
-
-    if (this._wheres.length > 0) {
-      sql += ' WHERE ' + this.compileWheres();
-    }
+    const sql = this.grammar.compileUpdate(this.toQueryState(), values);
+    const bindings = [...Object.values(values), ...this.getBindingsFor(['where'])];
 
     return await this.adapter.update(sql, bindings);
   }
@@ -590,13 +598,9 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
       throw new Error('Cannot delete without specifying a table');
     }
 
-    let sql = `DELETE FROM ${this._table}`;
+    const sql = this.grammar.compileDelete(this.toQueryState());
 
-    if (this._wheres.length > 0) {
-      sql += ' WHERE ' + this.compileWheres();
-    }
-
-    return await this.adapter.delete(sql, this.getBindings());
+    return await this.adapter.delete(sql, this.getBindingsFor(['where']));
   }
 
   /**
@@ -607,145 +611,178 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
       throw new Error('Cannot truncate without specifying a table');
     }
 
-    const sql = `TRUNCATE TABLE ${this._table}`;
-    await this.adapter.query(sql);
+    await this.adapter.query(this.grammar.compileTruncate(this.toQueryState()));
   }
 
   /**
    * Get the SQL query string
    */
   toSql(): string {
-    if (!this._table) {
-      throw new Error('Cannot generate SQL without specifying a table');
-    }
-
-    let sql = 'SELECT ';
-
-    if (this._distinct) {
-      sql += 'DISTINCT ';
-    }
-
-    sql += this.compileColumns();
-    sql += ` FROM ${this._table}`;
-
-    if (this._joins.length > 0) {
-      sql += ' ' + this.compileJoins();
-    }
-
-    if (this._wheres.length > 0) {
-      sql += ' WHERE ' + this.compileWheres();
-    }
-
-    if (this._groups.length > 0) {
-      sql += ' GROUP BY ' + this._groups.join(', ');
-    }
-
-    if (this._havings.length > 0) {
-      sql += ' HAVING ' + this.compileHavings();
-    }
-
-    if (this._orders.length > 0) {
-      sql += ' ORDER BY ' + this.compileOrders();
-    }
-
-    if (this._limit !== undefined) {
-      sql += ` LIMIT ${this._limit}`;
-    }
-
-    if (this._offset !== undefined) {
-      sql += ` OFFSET ${this._offset}`;
-    }
-
-    return sql;
+    return this.grammar.compileSelect(this.toQueryState());
   }
 
   /**
-   * Compile the columns
+   * Get the query with its bindings interpolated in, for debugging only.
+   *
+   * The interpolated statement is never executed: `toSql()` plus
+   * `getBindings()` remain the parameterized pair passed to the driver.
    */
-  protected compileColumns(): string {
-    return this._columns
-      .map((col) => (typeof col === 'object' && col && 'getValue' in col ? (col as Expression).getValue() : col))
-      .join(', ');
+  toRawSql(): string {
+    return this.grammar.substituteBindings(this.toSql(), this.getBindings());
   }
 
   /**
-   * Compile the where clauses
-   */
-  protected compileWheres(): string {
-    return this._wheres
-      .map((where, index) => {
-        const boolean = index === 0 ? '' : ` ${where.boolean.toUpperCase()} `;
-
-        if (where.operator === 'raw') {
-          return (
-            boolean +
-            (typeof where.column === 'object' && where.column && 'getValue' in where.column
-              ? (where.column as Expression).getValue()
-              : where.column)
-          );
-        }
-
-        if (where.operator === 'in' || where.operator === 'not in') {
-          const placeholders = (where.value as any[]).map(() => '?').join(', ');
-          return `${boolean}${where.column} ${where.operator.toUpperCase()} (${placeholders})`;
-        }
-
-        if (where.operator === 'between') {
-          return `${boolean}${where.column} BETWEEN ? AND ?`;
-        }
-
-        if (where.operator === 'is null' || where.operator === 'is not null') {
-          return `${boolean}${where.column} ${where.operator.toUpperCase()}`;
-        }
-
-        return `${boolean}${where.column} ${where.operator} ?`;
-      })
-      .join('');
-  }
-
-  /**
-   * Compile the join clauses
-   */
-  protected compileJoins(): string {
-    return this._joins
-      .map((join) => {
-        const type = join.type.toUpperCase();
-        return `${type} JOIN ${join.table} ON ${join.first} ${join.operator} ${join.second}`;
-      })
-      .join(' ');
-  }
-
-  /**
-   * Compile the order by clauses
-   */
-  protected compileOrders(): string {
-    return this._orders.map((order) => `${order.column} ${order.direction.toUpperCase()}`).join(', ');
-  }
-
-  /**
-   * Compile the having clauses
-   */
-  protected compileHavings(): string {
-    return this._havings
-      .map((having, index) => {
-        const boolean = index === 0 ? '' : ' AND ';
-        return `${boolean}${having.column} ${having.operator} ?`;
-      })
-      .join('');
-  }
-
-  /**
-   * Get the bindings for the query
+   * Get the bindings for the query, flattened in SQL clause order
    */
   getBindings(): any[] {
-    return this._bindings;
+    return this.getBindingsFor(BINDING_ORDER);
+  }
+
+  /**
+   * Get the bindings of the given clauses, each in declaration order
+   */
+  protected getBindingsFor(clauses: BindingClause[]): any[] {
+    return clauses.flatMap((clause) => this._bindings[clause]);
+  }
+
+  /**
+   * Get the bindings grouped by clause. The groups are what keeps raw select,
+   * where and having bindings in the order the compiled statement needs them.
+   */
+  getRawBindings(): Record<BindingClause, any[]> {
+    return {
+      select: [...this._bindings.select],
+      join: [...this._bindings.join],
+      where: [...this._bindings.where],
+      having: [...this._bindings.having],
+      order: [...this._bindings.order],
+    };
+  }
+
+  /**
+   * Replace the bindings of a single clause
+   */
+  protected setBindings(values: any[], clause: BindingClause): void {
+    this._bindings[clause] = [...values];
+  }
+
+  /**
+   * Add a binding for a clause. Callers declare which clause a value belongs to
+   * so the flattened order always matches the compiled statement.
+   */
+  protected addBinding(value: any, clause: BindingClause): void {
+    this._bindings[clause].push(value);
+  }
+
+  /**
+   * Add several bindings for a clause, preserving their order
+   */
+  protected addBindings(values: any[], clause: BindingClause): void {
+    this._bindings[clause].push(...values);
+  }
+
+  /**
+   * The state the grammar compiles from. Column and binding arrays are handed
+   * over by reference because grammars only read them.
+   */
+  protected toQueryState(): QueryState {
+    return {
+      table: this._table,
+      columns: this._columns,
+      distinct: this._distinct,
+      joins: this._joins,
+      wheres: this._wheres,
+      groups: this._groups,
+      havings: this._havings,
+      orders: this._orders,
+      limit: this._limit,
+      offset: this._offset,
+      returning: this._returning,
+    };
+  }
+
+  /**
+   * Add a where clause and the bindings its operator expects
+   */
+  protected addWhereClause(boolean: 'and' | 'or', column: string, operator: string, value?: any): this {
+    this._wheres.push({ column, operator, value, boolean });
+
+    if (isListOperator(operator)) {
+      this.addBindings(this.listValues(value, operator), 'where');
+    } else if (value !== undefined && !this.isNullOperator(operator)) {
+      this.addBinding(value, 'where');
+    }
+
+    return this;
+  }
+
+  /**
+   * Normalise the `where(column, value)` and null-check shorthand forms into a
+   * clause plus the bindings that clause needs.
+   */
+  protected addWhere(boolean: 'and' | 'or', column: string, operator: any, value: any, argCount: number): this {
+    // Handle where(column, value) syntax
+    if (argCount === 2) {
+      value = operator;
+      operator = '=';
+    }
+
+    if (this.isNullOperator(operator)) {
+      this._wheres.push({ column, operator, value: null, boolean });
+      return this;
+    }
+
+    return this.addWhereClause(boolean, column, operator, value);
+  }
+
+  /**
+   * Whether an operator checks for NULL instead of binding a value
+   */
+  protected isNullOperator(operator: any): boolean {
+    return operator === 'is null' || operator === 'is not null';
+  }
+
+  /**
+   * The values a list operator (`in`, `between`) binds
+   */
+  protected listValues(value: any, operator: string): any[] {
+    if (!Array.isArray(value)) {
+      throw new Error(`The "${operator}" operator expects an array of values.`);
+    }
+
+    return value;
+  }
+
+  /**
+   * Add a join clause
+   */
+  protected addJoin(type: JoinType, table: string, first: string, operator: string, second?: string): this {
+    this._joins.push({ type, table, first, operator, second });
+    return this;
+  }
+
+  /**
+   * The bindings an insert of these records needs, column by column
+   */
+  protected insertBindings(records: Record<string, any>[]): any[] {
+    const columns = Object.keys(records[0]);
+    return records.flatMap((record) => columns.map((column) => record[column]));
   }
 
   /**
    * Clone the query builder
    */
   clone(): Builder<T> {
-    const cloned = new Builder<T>(this.adapter);
+    const cloned = new Builder<T>(this.adapter, this.grammar);
+    this.copyStateInto(cloned);
+    return cloned;
+  }
+
+  /**
+   * Copy this builder's state into another one. Subclasses use it to clone
+   * without reaching into each other's private fields.
+   */
+  protected copyStateInto(cloned: Builder<T>): void {
     cloned._columns = [...this._columns];
     cloned._distinct = this._distinct;
     cloned._table = this._table;
@@ -756,7 +793,7 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
     cloned._havings = [...this._havings];
     cloned._limit = this._limit;
     cloned._offset = this._offset;
-    cloned._bindings = [...this._bindings];
-    return cloned;
+    cloned._returning = this._returning ? [...this._returning] : undefined;
+    cloned._bindings = this.getRawBindings();
   }
 }

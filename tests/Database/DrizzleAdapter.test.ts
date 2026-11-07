@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DrizzleAdapter } from '@/Database/Adapters/DrizzleAdapter';
 import { Builder } from '@/Database/Query/Builder';
+import { SqliteGrammar } from '@/Database/Query/Grammars';
 
 const INJECTION = "Robert'); DROP TABLE users;--";
 
@@ -327,7 +328,7 @@ describe.skipIf(!WITH_BETTER_SQLITE)('DrizzleAdapter parameterized execution (be
     await adapter.insert('INSERT INTO users (name, bio) VALUES (?, ?)', [INJECTION, 'plain']);
     await adapter.insert('INSERT INTO users (name, bio) VALUES (?, ?)', ['grace', '?safe']);
 
-    const matched = await new Builder<{ name: string }>(adapter)
+    const matched = await new Builder<{ name: string }>(adapter, new SqliteGrammar())
       .from('users')
       .select('name')
       .where('name', '=', INJECTION)
@@ -335,14 +336,17 @@ describe.skipIf(!WITH_BETTER_SQLITE)('DrizzleAdapter parameterized execution (be
       .get();
     expect(matched.map((row) => row.name).sort()).toEqual([INJECTION, 'grace'].sort());
 
-    const inList = await new Builder<{ name: string }>(adapter)
+    const inList = await new Builder<{ name: string }>(adapter, new SqliteGrammar())
       .from('users')
       .select('name')
       .whereIn('bio', ['?safe', '?danger'])
       .get();
     expect(inList).toEqual([{ name: 'grace' }]);
 
-    const updated = await new Builder(adapter).from('users').where('bio', '=', '?safe').update({ bio: INJECTION });
+    const updated = await new Builder(adapter, new SqliteGrammar())
+      .from('users')
+      .where('bio', '=', '?safe')
+      .update({ bio: INJECTION });
     expect(updated).toBe(1);
 
     const rows = await adapter.select<{ name: string }>('SELECT name FROM users WHERE bio = ?', [INJECTION]);
