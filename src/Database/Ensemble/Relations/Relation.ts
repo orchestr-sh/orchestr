@@ -138,6 +138,30 @@ export abstract class Relation<TRelated extends Ensemble, TParent extends Ensemb
   }
 
   /**
+   * Include trashed rows of the related model in this relation query
+   */
+  withTrashed(): this {
+    this.query.withTrashed();
+    return this;
+  }
+
+  /**
+   * Return only the trashed rows of the related model
+   */
+  onlyTrashed(): this {
+    this.query.onlyTrashed();
+    return this;
+  }
+
+  /**
+   * Exclude trashed rows of the related model, the default
+   */
+  withoutTrashed(): this {
+    this.query.withoutTrashed();
+    return this;
+  }
+
+  /**
    * Get the base query builder driving the Ensemble builder
    */
   getBaseQuery() {

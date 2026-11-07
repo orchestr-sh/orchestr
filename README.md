@@ -219,6 +219,41 @@ await Post.withoutGlobalScope('PublishedScope').get();
 await Post.query().withoutGlobalScopes().get(); // remove all
 ```
 
+### Soft Deletes
+
+Models that should survive deletion opt in with `static softDeletes`. `delete()` then stamps the `deleted_at` column instead of removing the row, and a `SoftDeletingScope` registered on the model keeps trashed rows out of every query — selects, aggregates, eager loads and relationship queries alike. The column is always cast to a `Date`, and a soft delete touches `updated_at` when the model timestamps.
+
+```typescript
+import { SoftDeletingScope } from '@orchestr-sh/orchestr';
+
+class User extends Ensemble {
+  protected static softDeletes = true;
+  static fillable = ['name'];
+}
+
+const user = await User.find(1);
+await user.delete(); // UPDATE users SET deleted_at = ... — the row stays
+
+user.trashed(); // true
+await User.query().get(); // excludes trashed rows
+await User.query().withTrashed().get(); // includes them
+await User.query().onlyTrashed().get(); // only trashed rows
+await User.query().withTrashed().withoutTrashed().get(); // exclude again
+
+await user.restore(); // clears deleted_at; the user is visible again
+await user.forceDelete(); // hard DELETE, removes the row
+
+// Builder-wide operations
+await User.query().restore(); // clear deleted_at on all matching trashed rows
+await User.query().onlyTrashed().forceDelete(); // purge trashed rows
+await User.query().forceDelete(); // purge every matching row, trashed or not
+
+// Eager loads respect the scope too; opt relations into trashed rows:
+await User.query().withTrashedRelations().with('posts.comments').get();
+```
+
+The scope can also be removed like any global scope, e.g. `User.query().withoutGlobalScope(SoftDeletingScope)`, and models expose `getDeletedAtColumn()` / `getQualifiedDeletedAtColumn()` for custom column names via `protected static DELETED_AT`. Soft deletes fire the `deleting`, `softDeleting`, `softDeleted`, `deleted`, `restoring`, `restored`, `forceDeleting` and `forceDeleted` hooks, so observers and listeners can react to or halt each phase. Models without the flag keep plain hard-delete behaviour.
+
 ## Querying
 
 Fluent query builder with chainable methods.
@@ -754,6 +789,9 @@ Available model events:
 - `ModelSaved` - After a model is saved
 - `ModelDeleting` - Before a model is deleted (can halt)
 - `ModelDeleted` - After a model is deleted
+- `ModelSoftDeleting` / `ModelSoftDeleted` - Around a soft delete (soft-deleting models)
+- `ModelRestoring` / `ModelRestored` - Before (can halt) / after a trashed model is restored
+- `ModelForceDeleting` / `ModelForceDeleted` - Before (can halt) / after a hard delete
 
 ### Testing Events
 

@@ -109,7 +109,8 @@ export { DB } from './Facades/DB';
 export { Ensemble } from './Database/Ensemble/Ensemble';
 export { EnsembleBuilder } from './Database/Ensemble/EnsembleBuilder';
 export { EnsembleCollection } from './Database/Ensemble/EnsembleCollection';
-export { softDeletes } from './Database/Ensemble/SoftDeletes';
+export { SoftDeletingScope } from './Database/Ensemble/SoftDeletingScope';
+export { DELETED_AT } from './Database/Ensemble/SoftDeletes';
 
 // Ensemble Observers & Scopes
 export { ObserverRegistry, OBSERVER_EVENTS } from './Database/Ensemble/Observers';

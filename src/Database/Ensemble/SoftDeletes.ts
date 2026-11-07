@@ -1,7 +1,11 @@
 /**
- * SoftDeletes Interface
+ * Soft Deletes Contract
  *
- * Provides soft delete functionality for models
+ * Models opt in with `protected static softDeletes = true`. From then on
+ * `delete()` stamps the `deleted_at` column instead of removing the row, and
+ * queries hide trashed rows through the `SoftDeletingScope`. The interface
+ * documents the contract the `Ensemble` base class provides; import it to
+ * type against soft-deleting models.
  */
 
 export interface SoftDeletes {
@@ -9,6 +13,16 @@ export interface SoftDeletes {
    * Indicates if the model is currently force deleting
    */
   forceDeleting: boolean;
+
+  /**
+   * Determine whether this model soft deletes instead of removing rows
+   */
+  usesSoftDeletes(): boolean;
+
+  /**
+   * Delete the model, soft deleting it when the model is configured to
+   */
+  delete(): Promise<boolean>;
 
   /**
    * Force a hard delete on a soft deleted model
@@ -40,12 +54,3 @@ export interface SoftDeletes {
  * Default deleted at column name
  */
 export const DELETED_AT = 'deleted_at';
-
-/**
- * Placeholder for soft deletes mixin
- * TODO: Implement mixin pattern or use a trait-like approach
- */
-export function softDeletes(): any {
-  console.warn('SoftDeletes mixin not yet implemented. Use interface for type checking.');
-  return {};
-}
