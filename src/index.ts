@@ -20,6 +20,7 @@ export { Container } from './Container/Container';
 
 // Routing
 export { Router } from './Routing/Router';
+export { Pipeline } from './Routing/Pipeline';
 export { Route as RouteClass } from './Routing/Route';
 export { Request } from './Routing/Request';
 export { Response } from './Routing/Response';
@@ -419,6 +420,7 @@ export { TemplateEngine } from './View/Engines/TemplateEngine';
 export type { TemplateEngineResolver } from './View/Engines/TemplateEngine';
 
 // Types
-export type { HttpMethod, RouteAction, Middleware } from './Routing/Route';
+export type { HttpMethod, RouteAction } from './Routing/Route';
+export type { Middleware, MiddlewareArgument, NextFunction, TerminableMiddleware } from './Routing/Pipeline';
 export type { Abstract, Concrete, Binding } from './Container/Container';
 export type { CookieOptions } from './Routing/Response';

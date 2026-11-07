@@ -4,11 +4,13 @@ import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { Application } from '@/Foundation/Application';
 import { ValidationException } from '@/Foundation/Http/ValidationException';
 import { View } from '@/View/View';
+import type { Middleware, MiddlewareArgument } from './Pipeline';
 import { ModelNotFoundException } from './ModelNotFoundException';
+import { Pipeline } from './Pipeline';
 import { Request } from './Request';
 import { buildResourceRoutes, ResourceOptions } from './ResourceRegistrar';
 import { Response } from './Response';
-import { Route, HttpMethod, RouteAction, Middleware } from './Route';
+import { Route, HttpMethod, RouteAction } from './Route';
 import { RouteResolver, RouteBinder } from './RouteResolver';
 import { RouteUrlParameters, UrlGenerator } from './UrlGenerator';
 
@@ -17,7 +19,7 @@ import { RouteUrlParameters, UrlGenerator } from './UrlGenerator';
  */
 export interface RouteGroupAttributes {
   prefix?: string;
-  middleware?: Middleware | Middleware[];
+  middleware?: MiddlewareArgument | MiddlewareArgument[];
   namespace?: string;
   /** Dot-joined prefix applied to every name given to routes in the group */
   name?: string;
@@ -52,6 +54,22 @@ export class Router {
   private namedRoutes: Map<string, Route> = new Map();
   private routeResolver: RouteResolver;
   private urlGenerator: UrlGenerator;
+
+  /**
+   * Named middleware standing in for the function at dispatch time
+   * Laravel: Router::$middlewareAliases
+   */
+  private middlewareAliases: Map<string, Middleware> = new Map();
+  /**
+   * Named middleware groups expanded in declared order
+   * Laravel: Router::$middlewareGroups
+   */
+  private middlewareGroups: Map<string, MiddlewareArgument[]> = new Map();
+  /**
+   * Relative ordering applied to gathered middleware
+   * Laravel: Router::$middlewarePriority
+   */
+  private middlewarePriorityList: MiddlewareArgument[] = [];
 
   /**
    * Laravel resolves Route::current() from the request bound in the
@@ -342,7 +360,7 @@ export class Router {
     for (const group of this.groupStack) {
       if (group.middleware) {
         const middleware = Array.isArray(group.middleware) ? group.middleware : [group.middleware];
-        route.addMiddleware(middleware);
+        route.middleware(middleware);
       }
 
       if (group.scopeBindings) {
@@ -380,6 +398,187 @@ export class Router {
    */
   private hasGroupStack(): boolean {
     return this.groupStack.length > 0;
+  }
+
+  /**
+   * Register a named middleware alias
+   * Laravel: Router::aliasMiddleware()
+   */
+  aliasMiddleware(name: string, middleware: Middleware): this {
+    this.middlewareAliases.set(name, middleware);
+    return this;
+  }
+
+  /**
+   * Get all registered middleware aliases
+   * Laravel: Router::getMiddleware()
+   */
+  getMiddleware(): Record<string, Middleware> {
+    return Object.fromEntries(this.middlewareAliases);
+  }
+
+  /**
+   * Register a middleware group: a named list of middleware that expands in
+   * declared order wherever the group name is referenced
+   * Laravel: Router::middlewareGroup()
+   */
+  middlewareGroup(name: string, middleware: MiddlewareArgument[]): this {
+    this.middlewareGroups.set(name, [...middleware]);
+    return this;
+  }
+
+  /**
+   * Get all registered middleware groups
+   * Laravel: Router::getMiddlewareGroups()
+   */
+  getMiddlewareGroups(): Record<string, MiddlewareArgument[]> {
+    return Object.fromEntries(this.middlewareGroups);
+  }
+
+  /**
+   * Add middleware to the start of a group, creating it when missing
+   * Laravel: Router::prependMiddlewareToGroup()
+   */
+  prependMiddlewareToGroup(name: string, ...middleware: MiddlewareArgument[]): this {
+    this.middlewareGroups.set(name, [...middleware, ...(this.middlewareGroups.get(name) ?? [])]);
+    return this;
+  }
+
+  /**
+   * Add middleware to the end of a group, creating it when missing
+   * Laravel: Router::appendMiddlewareToGroup()
+   */
+  appendMiddlewareToGroup(name: string, ...middleware: MiddlewareArgument[]): this {
+    this.middlewareGroups.set(name, [...(this.middlewareGroups.get(name) ?? []), ...middleware]);
+    return this;
+  }
+
+  /**
+   * Set the relative priority ordering for gathered middleware
+   * Laravel: Router::middlewarePriority()
+   */
+  middlewarePriority(middleware: MiddlewareArgument[]): this {
+    this.middlewarePriorityList = [...middleware];
+    return this;
+  }
+
+  /**
+   * Resolve middleware references into executable functions: alias names
+   * resolve to their middleware, group names expand to their members in
+   * declared order (recursively), and functions pass through untouched.
+   * Excluded names/functions are dropped from the expansion, so
+   * withoutMiddleware('auth') removes that middleware wherever it came from.
+   * Laravel: Router::resolveMiddleware() / MiddlewareNameResolver::resolve()
+   */
+  resolveMiddleware(middleware: MiddlewareArgument[], excluded: MiddlewareArgument[] = []): Middleware[] {
+    return this.sortMiddleware(this.flattenMiddleware(middleware, excluded, new Set()));
+  }
+
+  /**
+   * Expand every name in the list into its middleware, in order
+   */
+  private flattenMiddleware(
+    middleware: MiddlewareArgument[],
+    excluded: MiddlewareArgument[],
+    visitingGroups: Set<string>
+  ): Middleware[] {
+    const flattened: Middleware[] = [];
+
+    for (const entry of middleware) {
+      if (typeof entry === 'function') {
+        if (!excluded.includes(entry)) {
+          flattened.push(entry);
+        }
+        continue;
+      }
+
+      // Excluding a name removes the alias or the whole group expansion
+      if (excluded.includes(entry)) {
+        continue;
+      }
+
+      const group = this.middlewareGroups.get(entry);
+
+      if (group) {
+        if (visitingGroups.has(entry)) {
+          throw new Error(`Middleware group [${entry}] references itself.`);
+        }
+
+        visitingGroups.add(entry);
+        flattened.push(...this.flattenMiddleware(group, excluded, visitingGroups));
+        visitingGroups.delete(entry);
+        continue;
+      }
+
+      const alias = this.middlewareAliases.get(entry);
+
+      if (!alias) {
+        throw new Error(`Middleware [${entry}] is not registered as an alias or a group.`);
+      }
+
+      flattened.push(alias);
+    }
+
+    return flattened;
+  }
+
+  /**
+   * Order middleware by the registered priority map. Port of Laravel's
+   * Illuminate\Routing\SortedMiddleware: each pass moves the first
+   * out-of-priority-order middleware above the last prioritized one seen,
+   * then re-runs until stable; middleware without a priority entry keep
+   * their relative positions.
+   */
+  private sortMiddleware(middleware: Middleware[]): Middleware[] {
+    const priority = this.flattenMiddleware(this.middlewarePriorityList, [], new Set());
+    let lastIndex = 0;
+    let lastPriorityIndex: number | undefined;
+
+    for (let index = 0; index < middleware.length; index++) {
+      const priorityIndex = priority.indexOf(middleware[index]);
+
+      if (priorityIndex !== -1) {
+        // This middleware outranks the last prioritized one we saw, so move
+        // it above that one and re-sort from scratch
+        if (lastPriorityIndex !== undefined && priorityIndex < lastPriorityIndex) {
+          return this.sortMiddleware(this.moveMiddleware(middleware, index, lastIndex));
+        }
+
+        lastIndex = index;
+        lastPriorityIndex = priorityIndex;
+      }
+    }
+
+    return this.uniqueMiddleware(middleware);
+  }
+
+  /**
+   * Splice a middleware into a new position, removing its old entry
+   * Laravel: SortedMiddleware::moveMiddleware()
+   */
+  private moveMiddleware(middleware: Middleware[], from: number, to: number): Middleware[] {
+    const moved = [...middleware];
+    const [entry] = moved.splice(from, 1);
+    moved.splice(to, 0, entry);
+    return moved;
+  }
+
+  /**
+   * Middleware registered more than once (e.g. by a group and by name) only
+   * run once, keeping their first position
+   * Laravel: Router::uniqueMiddleware()
+   */
+  private uniqueMiddleware(middleware: Middleware[]): Middleware[] {
+    const seen = new Set<Middleware>();
+
+    return middleware.filter((entry) => {
+      if (seen.has(entry)) {
+        return false;
+      }
+
+      seen.add(entry);
+      return true;
+    });
   }
 
   /**
@@ -491,7 +690,9 @@ export class Router {
         req.params = route.getParameters();
 
         // Run through middleware pipeline
-        await this.runMiddleware(route, req, res, async () => {
+        const pipeline = new Pipeline(req, res);
+
+        await pipeline.through(this.resolveMiddleware(route.middlewareList, route.excludedMiddleware)).run(async () => {
           // Execute the route action
           await this.runRoute(route, req, res);
         });
@@ -527,30 +728,6 @@ export class Router {
     }
 
     res.status(405).send('Method Not Allowed');
-  }
-
-  /**
-   * Run the route middleware pipeline
-   */
-  private async runMiddleware(
-    route: Route,
-    req: Request,
-    res: Response,
-    finalHandler: () => Promise<void>
-  ): Promise<void> {
-    const middleware = [...route.middleware];
-
-    const runNext = async (index: number): Promise<void> => {
-      if (index >= middleware.length) {
-        await finalHandler();
-        return;
-      }
-
-      const currentMiddleware = middleware[index];
-      await currentMiddleware(req, res, () => runNext(index + 1));
-    };
-
-    await runNext(0);
   }
 
   /**
