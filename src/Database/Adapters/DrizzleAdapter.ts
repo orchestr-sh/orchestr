@@ -34,6 +34,12 @@ export class DrizzleAdapter implements DatabaseAdapter {
   protected connected: boolean = false;
   protected inTransaction: boolean = false;
   protected transactionClient: any;
+  /**
+   * Nesting level of the transaction stack: 0 means no transaction, 1 is the
+   * root transaction, and anything deeper is backed by a savepoint. Shared by
+   * every driver so nesting behaves identically regardless of the pool.
+   */
+  protected transactionDepth: number = 0;
 
   constructor(protected config: DatabaseConfig) {}
 
@@ -149,6 +155,9 @@ export class DrizzleAdapter implements DatabaseAdapter {
     this.connected = false;
     this.client = null;
     this.rawClient = null;
+    this.transactionClient = null;
+    this.inTransaction = false;
+    this.transactionDepth = 0;
   }
 
   /**
@@ -193,50 +202,96 @@ export class DrizzleAdapter implements DatabaseAdapter {
   }
 
   /**
-   * Begin a transaction
+   * Begin a transaction.
+   *
+   * The outermost call pins a dedicated connection (for pooled Postgres/MySQL
+   * drivers) and issues `BEGIN` on it, then every later statement runs on that
+   * pinned client until the transaction ends. Nested calls open a savepoint
+   * (`SAVEPOINT trans_N`) instead of a second `BEGIN`, so an inner rollback
+   * only undoes the work done since that savepoint.
    */
   async beginTransaction(): Promise<void> {
     this.ensureConnected();
 
-    if (this.inTransaction) {
-      throw new Error('Transaction already in progress');
+    if (this.transactionDepth === 0) {
+      await this.beginRootTransaction();
+      return;
     }
 
-    this.inTransaction = true;
-
-    // For now, we'll use simple BEGIN/COMMIT/ROLLBACK
-    // In a more sophisticated implementation, we'd use Drizzle's transaction API
-    await this.query('BEGIN');
+    await this.executeTransactionControl(`SAVEPOINT ${this.savepointName(this.transactionDepth)}`);
+    this.transactionDepth += 1;
   }
 
   /**
-   * Commit a transaction
+   * Commit a transaction.
+   *
+   * At nesting levels deeper than one this releases the innermost savepoint
+   * (`RELEASE SAVEPOINT trans_N`) and keeps the outer transaction open; only
+   * the root commit persists the work and gives the pinned connection back.
    */
   async commit(): Promise<void> {
     if (!this.inTransaction) {
       throw new Error('No transaction in progress');
     }
 
-    await this.query('COMMIT');
+    if (this.transactionDepth > 1) {
+      await this.executeTransactionControl(`RELEASE SAVEPOINT ${this.savepointName(this.transactionDepth - 1)}`);
+      this.transactionDepth -= 1;
+      return;
+    }
+
+    const client = this.transactionClient;
+
+    if (this.isMysql()) {
+      await client.commit();
+    } else {
+      await this.executeTransactionControl('COMMIT');
+    }
+
+    this.transactionDepth = 0;
     this.inTransaction = false;
     this.transactionClient = null;
+    await this.releaseTransactionClient(client);
   }
 
   /**
-   * Rollback a transaction
+   * Rollback a transaction.
+   *
+   * Inside a nested transaction this rolls back to the innermost savepoint
+   * (`ROLLBACK TO trans_N`) without touching the outer transaction; a root
+   * rollback discards everything and releases the pinned connection.
    */
   async rollback(): Promise<void> {
     if (!this.inTransaction) {
       throw new Error('No transaction in progress');
     }
 
-    await this.query('ROLLBACK');
+    if (this.transactionDepth > 1) {
+      await this.executeTransactionControl(`ROLLBACK TO ${this.savepointName(this.transactionDepth - 1)}`);
+      this.transactionDepth -= 1;
+      return;
+    }
+
+    const client = this.transactionClient;
+
+    if (this.isMysql()) {
+      await client.rollback();
+    } else {
+      await this.executeTransactionControl('ROLLBACK');
+    }
+
+    this.transactionDepth = 0;
     this.inTransaction = false;
     this.transactionClient = null;
+    await this.releaseTransactionClient(client);
   }
 
   /**
-   * Execute a callback within a transaction
+   * Execute a callback within a transaction.
+   *
+   * Re-entrant: calling this inside another transaction opens a savepoint, so
+   * a failure in the inner callback rolls back only the inner work while the
+   * outer transaction stays usable.
    */
   async transaction<T>(callback: (adapter: DatabaseAdapter) => Promise<T>): Promise<T> {
     await this.beginTransaction();
@@ -249,6 +304,110 @@ export class DrizzleAdapter implements DatabaseAdapter {
       await this.rollback();
       throw error;
     }
+  }
+
+  /**
+   * Start the root transaction: pin a connection, store it as the transaction
+   * client, then issue `BEGIN` on exactly that client.
+   */
+  protected async beginRootTransaction(): Promise<void> {
+    const client = await this.acquireTransactionClient();
+
+    this.transactionClient = client;
+    this.inTransaction = true;
+    this.transactionDepth = 1;
+
+    try {
+      if (this.isMysql()) {
+        await client.beginTransaction();
+      } else {
+        await this.executeTransactionControl('BEGIN');
+      }
+    } catch (error) {
+      this.transactionDepth = 0;
+      this.inTransaction = false;
+      this.transactionClient = null;
+      await this.releaseTransactionClient(client);
+      throw error;
+    }
+  }
+
+  /**
+   * Reserve the connection that will carry the transaction.
+   *
+   * - better-sqlite3 owns a single connection: the raw client doubles as the
+   *   transaction client and there is nothing to reserve.
+   * - postgres.js: `reserve()` hands back a dedicated connection from the pool.
+   * - mysql2: `getConnection()` checks a pooled connection out.
+   */
+  protected async acquireTransactionClient(): Promise<any> {
+    switch (this.config.driver) {
+      case 'postgres':
+        return this.rawClient.reserve();
+      case 'mysql':
+      case 'mysql2':
+        return this.rawClient.getConnection();
+      default:
+        return this.rawClient;
+    }
+  }
+
+  /**
+   * Give a pinned transaction connection back to its pool. The SQLite raw
+   * client is shared with normal execution, so it is never released here.
+   */
+  protected async releaseTransactionClient(client: any): Promise<void> {
+    if (!client || client === this.rawClient) {
+      return;
+    }
+
+    switch (this.config.driver) {
+      case 'postgres':
+        await client.release?.();
+        break;
+      case 'mysql':
+      case 'mysql2':
+        client.release?.();
+        break;
+    }
+  }
+
+  /**
+   * Name of the savepoint at the given transaction level. The first nested
+   * transaction is `trans_1`, the second `trans_2`, and so on.
+   */
+  protected savepointName(level: number): string {
+    return `trans_${level}`;
+  }
+
+  /**
+   * Run a transaction-control statement (`BEGIN`, `COMMIT`, `ROLLBACK`,
+   * `SAVEPOINT ...`) on the client that carries the transaction.
+   *
+   * Postgres and SQLite take the normal parameterized path with no bindings.
+   * MySQL does not accept every transaction-control command through its
+   * prepared-statement protocol, so savepoints go through the text protocol.
+   */
+  protected async executeTransactionControl(sql: string): Promise<void> {
+    if (!this.isMysql()) {
+      await this.execute(sql, [], 'all');
+      return;
+    }
+
+    const client = this.transactionClient ?? this.rawClient;
+
+    try {
+      await client.query(sql);
+    } catch (error: any) {
+      throw new Error(`Query failed: ${error?.message || error}\nSQL: ${sql}`, { cause: error });
+    }
+  }
+
+  /**
+   * Whether the configured driver is one of the MySQL variants.
+   */
+  protected isMysql(): boolean {
+    return this.config.driver === 'mysql' || this.config.driver === 'mysql2';
   }
 
   /**
