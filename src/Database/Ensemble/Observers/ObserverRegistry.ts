@@ -29,6 +29,8 @@ export const OBSERVER_EVENTS = [
   'saved',
   'deleting',
   'deleted',
+  'softDeleting',
+  'softDeleted',
   'restoring',
   'restored',
   'forceDeleting',
