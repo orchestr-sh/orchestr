@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Router } from '@/Routing/Router';
 import { Application } from '@/Foundation/Application';
+import { Router } from '@/Routing/Router';
 
 describe('Router', () => {
   let app: Application;
@@ -137,6 +137,47 @@ describe('Router', () => {
       router.get('/a', () => {});
       router.post('/b', () => {});
       expect(router.getRoutes()).toHaveLength(2);
+    });
+  });
+
+  describe('route binding', () => {
+    it('exposes the shared route resolver', () => {
+      expect(router.getRouteResolver()).toBeDefined();
+      expect(router.getRouteResolver()).toBe(router.getRouteResolver());
+    });
+
+    it('bind() registers an explicit substitution applied on dispatch', async () => {
+      router.bind('token', (value) => `bound:${value}`);
+      router.get('/tokens/:token', () => {});
+
+      const route = router.findRoute('GET', '/tokens/xyz')!;
+      await router.getRouteResolver().substituteBindings(route);
+
+      expect(route.parameters.token).toBe('bound:xyz');
+    });
+
+    it('model() rejects non-model classes', () => {
+      expect(() => router.model('thing', String as never)).toThrow(/Ensemble model class/);
+    });
+
+    it('scopeBindings() flags the most recently registered route', () => {
+      const route = router.get('/users/:user/posts/:post', () => {});
+      router.scopeBindings();
+      expect(route.scopedBindings).toBe(true);
+    });
+
+    it('scopeBindings() inside a group applies to routes registered afterwards', () => {
+      let scoped: any;
+      let unscoped: any;
+
+      router.group({ prefix: 'api' }, () => {
+        unscoped = router.get('/before', () => {});
+        router.scopeBindings();
+        scoped = router.get('/users/:user/posts/:post', () => {});
+      });
+
+      expect(scoped.scopedBindings).toBe(true);
+      expect(unscoped.scopedBindings).toBe(false);
     });
   });
 });

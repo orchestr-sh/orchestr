@@ -915,6 +915,63 @@ export class UserController extends Controller {
 }
 ```
 
+## Route Model Binding
+
+Controller actions receive their arguments resolved by the shared `RouteResolver`
+(`design:paramtypes` metadata plus parameter-name reflection). Decorate an action
+with `@Action()` (or `@ValidateRequest()` when it takes a `FormRequest`) so
+TypeScript emits the metadata; parameters are then resolved in any order:
+
+- `Request` / `Response` - the current request/response objects
+- `FormRequest` subclasses - instantiated and validated (422/403 responses preserved)
+- Route parameters by name - raw strings, or resolved models once bound
+- Ensemble models type-hinted with a matching parameter name - implicit binding
+- Container-resolvable services
+
+```typescript
+import { Controller, Injectable, Action, Request, Response } from '@orchestr-sh/orchestr';
+
+@Injectable()
+export class UserController extends Controller {
+  @Action()
+  async show(request: Request, user: User) {
+    // GET /users/1 => user is a User instance loaded by primary key
+    return { name: user.getAttribute('name') };
+  }
+}
+
+Route.get('/users/:user', [UserController, 'show']);
+```
+
+Missing models throw `ModelNotFoundException`, which dispatch answers with a 404.
+
+```typescript
+// Explicit bindings
+Route.bind('token', (value) => ApiToken.findByValue(value));
+Route.model('page', Page); // GET /pages/:orchestr => resolved by Page's route key
+
+// Custom route key used by implicit binding
+export class Page extends Ensemble {
+  getRouteKeyName(): string {
+    return 'slug';
+  }
+}
+
+// Scoped bindings: constrain the child binding by its parent
+Route.get('/users/:user/posts/:post', [PostController, 'show']).scopeBindings();
+// ...or for a whole group
+Route.group({ prefix: 'api' }, () => {
+  Route.scopeBindings();
+  Route.get('/users/:user/posts/:post', [PostController, 'show']);
+});
+```
+
+String actions (`'UserController@show'`) resolve the controller from the container,
+so `'UserController'` must be bound (e.g. `app.bind('UserController', UserController)`).
+Once bound, `request.route('user')`, `request.routeParam('user')` and the matched
+`route.parameters` all return the same resolved value, and `request.route()` returns
+the matched `Route` instance.
+
 ## Configuration
 
 ### Database Setup

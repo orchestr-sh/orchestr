@@ -1,10 +1,12 @@
+import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { Application } from '@/Foundation/Application';
-import { FormRequest } from '@/Foundation/Http/FormRequest';
 import { ValidationException } from '@/Foundation/Http/ValidationException';
 import { View } from '@/View/View';
+import { ModelNotFoundException } from './ModelNotFoundException';
 import { Request } from './Request';
 import { Response } from './Response';
 import { Route, HttpMethod, RouteAction, Middleware } from './Route';
+import { RouteResolver, RouteBinder } from './RouteResolver';
 
 /**
  * Route group attributes
@@ -13,6 +15,8 @@ export interface RouteGroupAttributes {
   prefix?: string;
   middleware?: Middleware | Middleware[];
   namespace?: string;
+  /** Apply scoped model binding to every route registered in the group */
+  scopeBindings?: boolean;
 }
 
 /**
@@ -24,9 +28,48 @@ export class Router {
   private routes: Route[] = [];
   private groupStack: RouteGroupAttributes[] = [];
   private namedRoutes: Map<string, Route> = new Map();
+  private routeResolver: RouteResolver;
 
   constructor(app: Application) {
     this.app = app;
+    this.routeResolver = new RouteResolver(app);
+  }
+
+  /**
+   * Get the route resolver shared by binding and controller reflection
+   */
+  getRouteResolver(): RouteResolver {
+    return this.routeResolver;
+  }
+
+  /**
+   * Register an explicit binding for a route parameter
+   * Laravel: Route::bind('user', fn ($value) => ...)
+   */
+  bind(key: string, callback: RouteBinder): void {
+    this.routeResolver.bind(key, callback);
+  }
+
+  /**
+   * Register an explicit model binding for a route parameter
+   * Laravel: Route::model('user', User::class)
+   */
+  model(key: string, ModelClass: typeof Ensemble): void {
+    this.routeResolver.model(key, ModelClass);
+  }
+
+  /**
+   * Enable scoped bindings for the current group or the last registered route
+   * Laravel: Route::scopeBindings()
+   */
+  scopeBindings(): this {
+    if (this.hasGroupStack()) {
+      this.groupStack[this.groupStack.length - 1].scopeBindings = true;
+    } else if (this.routes.length > 0) {
+      this.routes[this.routes.length - 1].scopeBindings();
+    }
+
+    return this;
   }
 
   /**
@@ -136,6 +179,10 @@ export class Router {
         const middleware = Array.isArray(group.middleware) ? group.middleware : [group.middleware];
         route.addMiddleware(middleware);
       }
+
+      if (group.scopeBindings) {
+        route.scopeBindings();
+      }
     }
   }
 
@@ -183,17 +230,25 @@ export class Router {
       return;
     }
 
-    // Store the route on the request
-    req.route = route;
-    req.params = route.getParameters();
-
     try {
+      // Resolve route bindings: Route::bind / Route::model / implicit models
+      await this.routeResolver.substituteBindings(route);
+
+      // Store the route on the request
+      req.setRoute(route);
+      req.params = route.getParameters();
+
       // Run through middleware pipeline
       await this.runMiddleware(route, req, res, async () => {
         // Execute the route action
         await this.runRoute(route, req, res);
       });
     } catch (error) {
+      if (error instanceof ModelNotFoundException) {
+        res.status(404).send('Not Found');
+        return;
+      }
+
       res.status(500).send(error instanceof Error ? error.message : 'Internal Server Error');
     }
   }
@@ -235,10 +290,10 @@ export class Router {
       result = await action(req, res);
     } else if (Array.isArray(action)) {
       // Controller tuple: [ControllerClass, 'method']
-      result = await this.callControllerTuple(action, req, res);
+      result = await this.callControllerTuple(action, route, req, res);
     } else if (typeof action === 'string') {
       // Controller@method string
-      result = await this.callControllerAction(action, req, res);
+      result = await this.callControllerAction(action, route, req, res);
     }
 
     // If the handler returned a value and response wasn't sent, send it
@@ -259,6 +314,7 @@ export class Router {
    */
   private async callControllerTuple(
     action: [new (...args: any[]) => any, string],
+    route: Route,
     req: Request,
     res: Response
   ): Promise<any> {
@@ -272,81 +328,84 @@ export class Router {
       throw new Error(`Method [${methodName}] does not exist on controller [${ControllerClass.name}].`);
     }
 
-    // Check if the method expects a FormRequest as first parameter
-    const paramTypes = Reflect.getMetadata('design:paramtypes', ControllerClass.prototype, methodName);
-
-    if (paramTypes && paramTypes.length > 0) {
-      const firstParamType = paramTypes[0];
-
-      // Check if first parameter is a FormRequest subclass
-      if (this.isFormRequestClass(firstParamType)) {
-        try {
-          // Create an instance of the FormRequest and validate it
-          // Use 'any' to bypass abstract class check - we know it's a concrete subclass at runtime
-          const formRequestInstance = new (firstParamType as any)(req);
-          await formRequestInstance.validate();
-
-          // Call the controller method with the validated FormRequest
-          return await (controller as any)[methodName](formRequestInstance, res);
-        } catch (error) {
-          // If validation failed, send error response
-          if (error instanceof ValidationException) {
-            res.status(422).json({
-              message: 'The given data was invalid.',
-              errors: error.errors(),
-            });
-            return;
-          }
-
-          // If authorization failed, send error response
-          if (error instanceof Error && error.message === 'This action is unauthorized.') {
-            res.status(403).json({
-              message: 'This action is unauthorized.',
-            });
-            return;
-          }
-
-          throw error;
-        }
-      }
-    }
-
-    // Call the controller method with regular Request
-    return await (controller as any)[methodName](req, res);
+    return this.callController(controller, ControllerClass.prototype, methodName, route, req, res);
   }
 
   /**
-   * Check if a class is a FormRequest subclass
-   */
-  private isFormRequestClass(cls: any): cls is typeof FormRequest {
-    if (!cls || typeof cls !== 'function') {
-      return false;
-    }
-
-    // Check if it's FormRequest itself or extends FormRequest
-    let current = cls;
-    while (current) {
-      if (current === FormRequest) {
-        return true;
-      }
-      current = Object.getPrototypeOf(current);
-    }
-
-    return false;
-  }
-
-  /**
-   * Call a controller action
+   * Call a controller action given as a 'Controller@method' string,
+   * resolving the controller from the container.
    * Laravel: 'UserController@index'
    */
-  private async callControllerAction(action: string, req: Request, res: Response): Promise<any> {
-    const [controllerName, methodName] = action.split('@');
+  private async callControllerAction(action: string, route: Route, req: Request, res: Response): Promise<any> {
+    const separator = action.lastIndexOf('@');
+    const controllerName = separator === -1 ? action : action.slice(0, separator);
+    const methodName = separator === -1 ? '' : action.slice(separator + 1);
 
-    // This would normally resolve the controller from the container
-    // For now, throw an error indicating controllers need to be registered
-    throw new Error(
-      `Controller action [${action}] not yet implemented. ` + `Use closures or register controllers in the container.`
-    );
+    if (!methodName) {
+      throw new Error(`Malformed controller action [${action}]. Expected the 'Controller@method' format.`);
+    }
+
+    // Resolve the controller from the container
+    let controller: any;
+    try {
+      controller = this.app.make<any>(controllerName);
+    } catch (error) {
+      throw new Error(
+        `Controller [${controllerName}] is not resolvable from the container. Bind it, or use the ` +
+          `[ControllerClass, 'method'] tuple syntax. Original error: ` +
+          `${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    if (typeof controller?.[methodName] !== 'function') {
+      throw new Error(`Method [${methodName}] does not exist on controller [${controllerName}].`);
+    }
+
+    return this.callController(controller, Object.getPrototypeOf(controller), methodName, route, req, res);
+  }
+
+  /**
+   * Resolve an action's dependencies through the shared route resolver and
+   * invoke it.
+   *
+   * FormRequest validation failures keep their historical HTTP behaviour:
+   * a failed validation answers 422 with the error bag, a denial answers 403.
+   */
+  private async callController(
+    controller: any,
+    prototype: any,
+    methodName: string,
+    route: Route,
+    req: Request,
+    res: Response
+  ): Promise<any> {
+    const reflection = this.routeResolver.reflectMethod(prototype, methodName);
+
+    let args: any[];
+    try {
+      args = await this.routeResolver.resolveArguments(reflection, route.getParameters(), req, res);
+    } catch (error) {
+      // If validation failed, send error response
+      if (error instanceof ValidationException) {
+        res.status(422).json({
+          message: 'The given data was invalid.',
+          errors: error.errors(),
+        });
+        return;
+      }
+
+      // If authorization failed, send error response
+      if (error instanceof Error && error.message === 'This action is unauthorized.') {
+        res.status(403).json({
+          message: 'This action is unauthorized.',
+        });
+        return;
+      }
+
+      throw error;
+    }
+
+    return await controller[methodName](...args);
   }
 
   /**

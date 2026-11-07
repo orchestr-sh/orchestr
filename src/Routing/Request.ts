@@ -16,7 +16,8 @@ export class Request {
   public params: Record<string, any> = {};
   public headers: Record<string, string | string[] | undefined>;
   public body: any = {};
-  public route?: Route;
+
+  private matchedRoute?: Route;
 
   private bodyParsed: boolean = false;
 
@@ -161,11 +162,40 @@ export class Request {
   }
 
   /**
-   * Get the route parameter
-   * Laravel: $request->route('id')
+   * Get the route handling the request, or one of its bound parameters
+   * Laravel: $request->route(), $request->route('id')
+   *
+   * Called with a key it returns the resolved route parameter - the raw URL
+   * segment before binding, the bound model or explicit binder result after.
    */
-  routeParam(key: string, defaultValue?: string): string | undefined {
+  route(): Route | undefined;
+  route(key: string, defaultValue?: any): any;
+  route(key?: string, defaultValue?: any): any {
+    if (key === undefined) {
+      return this.matchedRoute;
+    }
+
+    if (this.matchedRoute) {
+      return this.matchedRoute.parameter(key, defaultValue);
+    }
+
     return this.params[key] ?? defaultValue;
+  }
+
+  /**
+   * Record the route that matched this request
+   * Laravel: $request->setRouteResolver(fn () => $route)
+   */
+  setRoute(route: Route): void {
+    this.matchedRoute = route;
+  }
+
+  /**
+   * Get the route parameter
+   * Laravel: $request->route('id') - kept as the explicit alias of route()
+   */
+  routeParam(key: string, defaultValue?: any): any {
+    return this.route(key, defaultValue);
   }
 
   /**
