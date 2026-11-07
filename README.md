@@ -972,6 +972,97 @@ Once bound, `request.route('user')`, `request.routeParam('user')` and the matche
 `route.parameters` all return the same resolved value, and `request.route()` returns
 the matched `Route` instance.
 
+## Routing
+
+### Parameters & constraints
+
+Parameters use the `:name` syntax. Append `?` to make a segment optional, and
+constrain values with `where()` (per route) or `pattern()` (global, honoured by
+routes compiled before *and* after registration):
+
+```typescript
+Route.get('/users/:id?', () => {}); // matches /users and /users/1
+
+Route.get('/users/:id', showUser).where('id', '\\d+'); // /users/abc never matches
+Route.where('id', '\\d+'); // shorthand: constrains the most recently registered route
+
+Route.get('/pages/:slug', showPage); // Route::pattern applies too
+Route.pattern('slug', '[a-z\\-]+'); // global constraint by parameter name
+```
+
+Matching normalizes trailing slashes (`/users/` === `/users`) and bound
+parameter values are URL-decoded.
+
+### Named routes & URL generation
+
+```typescript
+const user = Route.get('/users/:id', showUser);
+Route.name('users.show', user);
+
+Route.url('users.show', { id: 1 }); // '/users/1'
+Route.url('users.show', { id: 1, page: 2 }); // '/users/1?page=2' - unused params become the query string
+route('users.show', { id: 1 }); // global helper, resolves the router from the container
+```
+
+Route models (anything with `getRouteKey()`) and scalars work as parameter
+values too: `route('users.show', user)` or `route('users.show', 1)`. Groups can
+prefix names and pin hosts; generated URLs include the domain:
+
+```typescript
+Route.group({ prefix: 'api', name: 'v1', domain: 'acme.example.com' }, () => {
+  const users = Route.get('/users/:id', showUser);
+  Route.name('users.show', users); // 'v1.users.show'
+});
+
+route('v1.users.show', { id: 1 }); // 'http://acme.example.com/api/users/1'
+```
+
+### Resource routes
+
+`Route.resource()` registers the seven conventional CRUD routes
+(`users.index`, `users.create`, `users.store`, `users.show`, `users.edit`,
+`users.update`, `users.destroy`); `Route.apiResource()` skips `create`/`edit`:
+
+```typescript
+Route.resource('users', UserController); // /users, /users/create, /users/:user, ...
+Route.apiResource('users', UserController);
+
+Route.resource('users', UserController, { only: ['index', 'show'] });
+Route.resource('users', UserController, { except: ['edit'] });
+Route.resource('photos', PhotoController, { names: { index: 'thumbnails' } }); // photos.thumbnails
+Route.resource('users', UserController, { parameters: { user: 'uuid' } }); // /users/:uuid
+
+// Nested via dot notation; shallow drops the parent segments on item routes
+Route.resource('users.posts', PostController); // GET /users/:user/posts/:post
+Route.resource('users.posts', PostController, { shallow: true }); // GET /posts/:post
+```
+
+### View, redirect & fallback routes
+
+```typescript
+Route.view('/welcome', 'welcome', { name: 'Ada' }); // renders through the View facade
+Route.redirect('/here', '/there', 301);
+Route.fallback((req, res) => res.status(404).send('Page not found')); // last-resort GET|HEAD route
+```
+
+### Method handling
+
+- A path that exists but not for the request verb answers **405** with an
+  `Allow` header listing the registered verbs.
+- **OPTIONS** to an existing path answers **204** with the same `Allow` header
+  (register an `OPTIONS` verb explicitly to handle preflights yourself).
+
+### Current route & request-scoped parameters
+
+```typescript
+Route.current(); // the Route instance serving the request (null outside dispatch)
+Route.currentRouteName(); // its name, if any
+```
+
+Parameter binding is request-scoped: the matched registration is cloned per
+dispatch, so concurrent requests to `/users/:id` each keep their own parameter
+values and the shared route is never mutated.
+
 ## Configuration
 
 ### Database Setup
