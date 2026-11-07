@@ -1,8 +1,9 @@
 import { IncomingMessage, ServerResponse, createServer, Server } from 'http';
+import type { Middleware, MiddlewareArgument } from '@/Routing/Pipeline';
 import { Application } from '@/Foundation/Application';
+import { Pipeline } from '@/Routing/Pipeline';
 import { Request } from '@/Routing/Request';
 import { Response } from '@/Routing/Response';
-import { Middleware } from '@/Routing/Route';
 import { Router } from '@/Routing/Router';
 
 /**
@@ -12,7 +13,7 @@ import { Router } from '@/Routing/Router';
 export class Kernel {
   protected app: Application;
   protected router: Router;
-  protected middleware: Middleware[] = [];
+  protected middleware: MiddlewareArgument[] = [];
   protected server?: Server;
 
   constructor(app: Application) {
@@ -45,28 +46,11 @@ export class Kernel {
    * Send the request through the router
    */
   private async sendRequestThroughRouter(request: Request, response: Response): Promise<void> {
-    await this.runMiddleware(request, response, async () => {
+    const pipeline = new Pipeline(request, response);
+
+    await pipeline.through(this.router.resolveMiddleware(this.middleware)).run(async () => {
       await this.router.dispatch(request, response);
     });
-  }
-
-  /**
-   * Run global middleware
-   */
-  private async runMiddleware(request: Request, response: Response, finalHandler: () => Promise<void>): Promise<void> {
-    const middleware = [...this.middleware];
-
-    const runNext = async (index: number): Promise<void> => {
-      if (index >= middleware.length) {
-        await finalHandler();
-        return;
-      }
-
-      const currentMiddleware = middleware[index];
-      await currentMiddleware(request, response, () => runNext(index + 1));
-    };
-
-    await runNext(0);
   }
 
   /**
@@ -84,10 +68,70 @@ export class Kernel {
   }
 
   /**
-   * Add global middleware
+   * Add global middleware to the Kernel's stack; the stack runs once around
+   * every request instead of middleware being declared per route. Entries are
+   * middleware functions or registered alias/group names.
+   * Laravel: Kernel::$middleware
    */
-  public use(middleware: Middleware): this {
-    this.middleware.push(middleware);
+  public use(middleware: MiddlewareArgument | MiddlewareArgument[]): this {
+    const middlewares = Array.isArray(middleware) ? middleware : [middleware];
+    this.middleware.push(...middlewares);
+    return this;
+  }
+
+  /**
+   * The Kernel's global middleware stack, in registration order
+   */
+  public getMiddleware(): MiddlewareArgument[] {
+    return [...this.middleware];
+  }
+
+  /**
+   * Register a named middleware alias usable by global middleware, route
+   * groups and ->middleware('name')
+   * Laravel: Router::aliasMiddleware() (synced from the Kernel)
+   */
+  public middlewareAlias(name: string, middleware: Middleware): this {
+    this.router.aliasMiddleware(name, middleware);
+    return this;
+  }
+
+  /**
+   * Register a named group of middleware that expands wherever the group
+   * name is referenced
+   * Laravel: Router::middlewareGroup() (synced from the Kernel)
+   */
+  public middlewareGroup(name: string, middleware: MiddlewareArgument[]): this {
+    this.router.middlewareGroup(name, middleware);
+    return this;
+  }
+
+  /**
+   * Set the relative ordering used to sort gathered middleware
+   * Laravel: Router::middlewarePriority() (synced from the Kernel)
+   */
+  public middlewarePriority(middleware: MiddlewareArgument[]): this {
+    this.router.middlewarePriority(middleware);
+    return this;
+  }
+
+  /**
+   * Add middleware to the start of a middleware group, creating the group
+   * when it does not exist yet
+   * Laravel: Router::prependMiddlewareToGroup()
+   */
+  public prependMiddlewareToGroup(name: string, ...middleware: MiddlewareArgument[]): this {
+    this.router.prependMiddlewareToGroup(name, ...middleware);
+    return this;
+  }
+
+  /**
+   * Add middleware to the end of a middleware group, creating the group when
+   * it does not exist yet
+   * Laravel: Router::appendMiddlewareToGroup()
+   */
+  public appendMiddlewareToGroup(name: string, ...middleware: MiddlewareArgument[]): this {
+    this.router.appendMiddlewareToGroup(name, ...middleware);
     return this;
   }
 

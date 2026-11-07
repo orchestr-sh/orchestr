@@ -142,7 +142,7 @@ describe('Router', () => {
         router.get('/protected', () => {});
       });
       const route = router.findRoute('GET', '/protected');
-      expect(route!.middleware).toContain(middleware);
+      expect(route!.middlewareList).toContain(middleware);
     });
 
     it('applies array middleware to routes', () => {
@@ -152,8 +152,8 @@ describe('Router', () => {
         router.get('/test', () => {});
       });
       const route = router.findRoute('GET', '/test');
-      expect(route!.middleware).toContain(mw1);
-      expect(route!.middleware).toContain(mw2);
+      expect(route!.middlewareList).toContain(mw1);
+      expect(route!.middlewareList).toContain(mw2);
     });
 
     it('supports nested groups', () => {
@@ -493,7 +493,7 @@ describe('Router', () => {
       expect(users!.uri).toBe('/api/users/:id');
       expect(users!.name).toBe('v1.users.show');
       expect(users!.domain).toBe('example.com');
-      expect(users!.middleware).toContain(mw);
+      expect(users!.middlewareList).toContain(mw);
 
       expect(router.findRoute('GET', '/api/users/1', 'example.com')).not.toBeNull();
       expect(router.findRoute('GET', '/api/users/1', 'other.com')).toBeNull();

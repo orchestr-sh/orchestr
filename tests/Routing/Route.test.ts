@@ -80,28 +80,45 @@ describe('Route', () => {
     });
   });
 
-  describe('addMiddleware()', () => {
+  describe('middleware()', () => {
     it('adds a single middleware', () => {
       const route = new Route('GET', '/test', () => {});
       const mw = vi.fn();
-      route.addMiddleware(mw);
-      expect(route.middleware).toContain(mw);
+      route.middleware(mw);
+      expect(route.middlewareList).toContain(mw);
     });
 
     it('adds array of middleware', () => {
       const route = new Route('GET', '/test', () => {});
       const mw1 = vi.fn();
       const mw2 = vi.fn();
-      route.addMiddleware([mw1, mw2]);
-      expect(route.middleware).toContain(mw1);
-      expect(route.middleware).toContain(mw2);
+      route.middleware([mw1, mw2]);
+      expect(route.middlewareList).toContain(mw1);
+      expect(route.middlewareList).toContain(mw2);
+    });
+
+    it('records alias and group names for dispatch-time resolution', () => {
+      const route = new Route('GET', '/test', () => {});
+      route.middleware('auth').middleware(['web', 'throttle']);
+      expect(route.middlewareList).toEqual(['auth', 'web', 'throttle']);
     });
 
     it('returns the route for chaining', () => {
       const route = new Route('GET', '/test', () => {});
-      const middleware = vi.fn();
-      const result = route.addMiddleware(middleware);
+      const result = route.middleware(vi.fn() as any);
       expect(result).toBe(route);
+    });
+  });
+
+  describe('withoutMiddleware()', () => {
+    it('records excluded middleware by name and reference', () => {
+      const route = new Route('GET', '/test', () => {});
+      const mw = vi.fn();
+
+      const result = route.withoutMiddleware('auth').withoutMiddleware([mw, 'web']);
+
+      expect(result).toBe(route);
+      expect(route.excludedMiddleware).toEqual(['auth', mw, 'web']);
     });
   });
 
@@ -356,7 +373,7 @@ describe('Route', () => {
       original.domain = 'example.com';
       original.scopeBindings();
       original.isFallback = false;
-      original.addMiddleware(mw);
+      original.middleware(mw).withoutMiddleware('auth');
 
       const copy = original.clone();
 
@@ -364,10 +381,13 @@ describe('Route', () => {
       expect(copy.methods).toEqual(['GET', 'HEAD']);
       expect(copy.domain).toBe('example.com');
       expect(copy.scopedBindings).toBe(true);
-      expect(copy.middleware).toEqual([mw]);
+      expect(copy.middlewareList).toEqual([mw]);
+      expect(copy.excludedMiddleware).toEqual(['auth']);
 
-      copy.addMiddleware(vi.fn() as any);
-      expect(original.middleware).toHaveLength(1);
+      copy.middleware(vi.fn() as any);
+      copy.withoutMiddleware('web');
+      expect(original.middlewareList).toHaveLength(1);
+      expect(original.excludedMiddleware).toEqual(['auth']);
     });
   });
 });

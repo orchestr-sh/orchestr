@@ -1,9 +1,9 @@
-import { Request } from './Request';
-import { Response } from './Response';
+import type { MiddlewareArgument } from './Pipeline';
+
+export type { Middleware, MiddlewareArgument } from './Pipeline';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
 export type RouteAction = ((...args: any[]) => any) | string | [new (...args: any[]) => any, string];
-export type Middleware = (req: Request, res: Response, next: () => void) => void | Promise<void>;
 
 /**
  * Escape a literal string for safe embedding inside a RegExp
@@ -26,7 +26,19 @@ export class Route {
   public uri: string;
   public methods: HttpMethod[];
   public action: RouteAction;
-  public middleware: Middleware[] = [];
+  /**
+   * Middleware registered on the route in registration order. Entries are
+   * middleware functions, alias names or group names; names are resolved by
+   * the Router when the route is dispatched.
+   * Laravel: Route::$action['middleware']
+   */
+  public middlewareList: MiddlewareArgument[] = [];
+  /**
+   * Middleware names/functions removed from this route's pipeline at
+   * dispatch time
+   * Laravel: Route::$action['excludedMiddleware']
+   */
+  public excludedMiddleware: MiddlewareArgument[] = [];
   public name?: string;
   /**
    * The bound parameters for this route instance. Raw string values from the
@@ -401,7 +413,8 @@ export class Route {
    */
   clone(): Route {
     const route = new Route(this.methods, this.uri, this.action);
-    route.middleware = [...this.middleware];
+    route.middlewareList = [...this.middlewareList];
+    route.excludedMiddleware = [...this.excludedMiddleware];
     route.name = this.name;
     route.wheres = { ...this.wheres };
     route.domain = this.domain;
@@ -413,12 +426,24 @@ export class Route {
   }
 
   /**
-   * Add middleware to the route
+   * Add middleware to the route, in registration order. Accepts middleware
+   * functions as well as alias/group names resolved at dispatch.
    * Laravel: Route::middleware('auth')
    */
-  addMiddleware(middleware: Middleware | Middleware[]): this {
+  middleware(middleware: MiddlewareArgument | MiddlewareArgument[]): this {
     const middlewares = Array.isArray(middleware) ? middleware : [middleware];
-    this.middleware.push(...middlewares);
+    this.middlewareList.push(...middlewares);
+    return this;
+  }
+
+  /**
+   * Exclude middleware from this route's pipeline by alias/group name or by
+   * the middleware function itself
+   * Laravel: Route::withoutMiddleware('auth')
+   */
+  withoutMiddleware(middleware: MiddlewareArgument | MiddlewareArgument[]): this {
+    const middlewares = Array.isArray(middleware) ? middleware : [middleware];
+    this.excludedMiddleware.push(...middlewares);
     return this;
   }
 
