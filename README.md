@@ -943,7 +943,7 @@ export class UserController extends Controller {
 Route.get('/users/:user', [UserController, 'show']);
 ```
 
-Missing models throw `ModelNotFoundException`, which dispatch answers with a 404.
+Missing models throw `ModelNotFoundException`, which the exception handler renders as a 404.
 
 ```typescript
 // Explicit bindings
@@ -1062,6 +1062,35 @@ Route.currentRouteName(); // its name, if any
 Parameter binding is request-scoped: the matched registration is cloned per
 dispatch, so concurrent requests to `/users/:id` each keep their own parameter
 values and the shared route is never mutated.
+
+## Exception Handling
+
+One `Handler` (bound in the container as `'exceptions'`) reports and renders
+every error raised by the HTTP Kernel and the Router:
+
+```typescript
+import { abort, abort_if, abort_unless, AuthenticationException } from '@orchestr-sh/orchestr';
+
+Route.get('/posts/:id', (req) => {
+  abort_if(!req.user, 401); // throws AuthenticationException
+  abort_unless(req.userCan('view'), 403); // throws AccessDeniedHttpException
+  abort(404, 'Post not found'); // throws NotFoundHttpException
+});
+```
+
+Rendering is negotiated: JSON `{ message, errors? }` when the request expects
+JSON or is served under the `api` prefix, and an HTML error page when the
+client accepts `text/html` (stack traces appear only when `app.isDebug()`).
+Status codes come from the exception hierarchy in `Foundation/Exceptions` -
+`HttpException` (with custom headers), `NotFoundHttpException`,
+`AccessDeniedHttpException` (403), `AuthenticationException` (401),
+`ModelNotFoundException` (404) and `ValidationException` (422 with the error
+bag). Add custom formats without touching the handler:
+
+```typescript
+kernel.getExceptionHandler().addRenderer(new MyXmlRenderer());
+kernel.getExceptionHandler().dontReport([AuthenticationException]);
+```
 
 ## Configuration
 
@@ -2108,6 +2137,7 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Service Container & Dependency Injection
 - ✅ Configuration System
 - ✅ HTTP Router & Middleware
+- ✅ Exception Handling (abort, HttpExceptions, JSON/HTML rendering)
 - ✅ Controllers with DI
 - ✅ FormRequest Validation
 - ✅ Query Builder

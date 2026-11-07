@@ -1,12 +1,14 @@
+import { HttpException } from './HttpException';
+
 /**
  * ModelNotFoundException - thrown when route model binding cannot locate a record
  * Laravel: Illuminate\Database\Eloquent\ModelNotFoundException
  *
  * Thrown by the route resolver during implicit/explicit model binding when no
- * row matches the route parameter. The exception-handler ticket renders it as
- * a 404 response; until that lands the Router maps it to a plain 404 itself.
+ * row matches the route parameter. As a 404 HttpException the exception
+ * handler renders it as a not-found response.
  */
-export class ModelNotFoundException extends Error {
+export class ModelNotFoundException extends HttpException {
   /**
    * The model class the lookup failed against
    */
@@ -17,8 +19,8 @@ export class ModelNotFoundException extends Error {
    */
   public ids: Array<string | number> = [];
 
-  constructor(message: string) {
-    super(message);
+  constructor(message: string = '') {
+    super(404, message || 'Not Found');
     this.name = 'ModelNotFoundException';
 
     // Keep instanceof working when the output is down-levelled

@@ -1,15 +1,17 @@
 import { AsyncLocalStorage } from 'async_hooks';
+import type { Handler } from '@/Foundation/Exceptions';
 import type { ViewFactory } from '@/View/ViewFactory';
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { Application } from '@/Foundation/Application';
-import { ValidationException } from '@/Foundation/Http/ValidationException';
+import { NotFoundHttpException, resolveExceptionHandler } from '@/Foundation/Exceptions';
 import { View } from '@/View/View';
 import type { Middleware, MiddlewareArgument } from './Pipeline';
-import { ModelNotFoundException } from './ModelNotFoundException';
 import { Pipeline } from './Pipeline';
 import { Request } from './Request';
 import { buildResourceRoutes, ResourceOptions } from './ResourceRegistrar';
 import { Response } from './Response';
+import { RedirectResponse } from './Responses/RedirectResponse';
+import { ResponseObject } from './Responses/ResponseObject';
 import { Route, HttpMethod, RouteAction } from './Route';
 import { RouteResolver, RouteBinder } from './RouteResolver';
 import { RouteUrlParameters, UrlGenerator } from './UrlGenerator';
@@ -72,6 +74,13 @@ export class Router {
   private middlewarePriorityList: MiddlewareArgument[] = [];
 
   /**
+   * The application's shared exception handler; the Kernel resolves the
+   * same instance from the container, so both entry points answer errors
+   * identically
+   */
+  private exceptionHandler?: Handler;
+
+  /**
    * Laravel resolves Route::current() from the request bound in the
    * container; in a shared Node process the request lives in an async-local
    * store instead, so concurrent dispatches never see each other's route.
@@ -89,6 +98,15 @@ export class Router {
    */
   getRouteResolver(): RouteResolver {
     return this.routeResolver;
+  }
+
+  /**
+   * The shared exception handler dispatch failures are rendered with
+   * Laravel: Router resolves the ExceptionHandler contract from the container
+   */
+  getExceptionHandler(): Handler {
+    this.exceptionHandler ??= resolveExceptionHandler(this.app);
+    return this.exceptionHandler;
   }
 
   /**
@@ -263,14 +281,18 @@ export class Router {
    * Laravel: Route::view('/welcome', 'welcome', ['name' => 'Taylor'])
    */
   view(uri: string, view: string, data: Record<string, any> = {}): Route {
-    return this.get(uri, (_req: Request, res: Response) => {
+    return this.get(uri, () => {
       // With the view system registered the action returns a View the router
-      // renders; otherwise fall back to the Response's built-in renderer.
+      // renders; otherwise respond with the built-in fallback page
       if (this.app.bound('view')) {
         return this.app.make<ViewFactory>('view').make(view, data);
       }
 
-      return res.view(view, data);
+      return new ResponseObject(
+        `<html><body><h1>View: ${view}</h1><pre>${JSON.stringify(data, null, 2)}</pre></body></html>`,
+        200,
+        { 'Content-Type': 'text/html' }
+      );
     });
   }
 
@@ -279,9 +301,7 @@ export class Router {
    * Laravel: Route::redirect('/here', '/there', 301)
    */
   redirect(uri: string, destination: string, status: number = 302): Route {
-    return this.get(uri, (_req: Request, res: Response) => {
-      res.redirect(destination, status);
-    });
+    return this.get(uri, () => new RedirectResponse(destination, status));
   }
 
   /**
@@ -670,18 +690,18 @@ export class Router {
     const context: RequestContext = { route: null };
 
     return Router.dispatchContext.run(context, async () => {
-      const host = req.header('host');
-      const path = Route.normalizePath(req.path);
-      const route = this.findRoute(req.method, path, host);
-
-      if (!route) {
-        this.respondMethodMismatch(req, res, path, host);
-        return;
-      }
-
-      context.route = route;
-
       try {
+        const host = req.header('host');
+        const path = Route.normalizePath(req.path);
+        const route = this.findRoute(req.method, path, host);
+
+        if (!route) {
+          this.respondMethodMismatch(req, res, path, host);
+          return;
+        }
+
+        context.route = route;
+
         // Resolve route bindings: Route::bind / Route::model / implicit models
         await this.routeResolver.substituteBindings(route);
 
@@ -697,12 +717,10 @@ export class Router {
           await this.runRoute(route, req, res);
         });
       } catch (error) {
-        if (error instanceof ModelNotFoundException) {
-          res.status(404).send('Not Found');
-          return;
-        }
-
-        res.status(500).send(error instanceof Error ? error.message : 'Internal Server Error');
+        // One shared handler reports and renders every dispatch failure -
+        // including validation, authorization and not-found exceptions. The
+        // finished response keeps the Kernel's own catch out of the picture.
+        await this.getExceptionHandler().handle(req, error, res);
       }
     });
   }
@@ -710,14 +728,14 @@ export class Router {
   /**
    * Answer requests that found no route: 405 with an Allow header when the
    * path exists under other verbs, an Allow-bearing response for OPTIONS,
-   * and a plain 404 otherwise
+   * and a NotFoundHttpException - rendered by the exception handler - for
+   * paths no route claims at all
    */
   private respondMethodMismatch(req: Request, res: Response, path: string, host?: string): void {
     const allowed = this.allowedMethods(path, host);
 
     if (allowed.length === 0) {
-      res.status(404).send('Not Found');
-      return;
+      throw new NotFoundHttpException();
     }
 
     res.header('Allow', allowed.join(', '));
@@ -751,7 +769,11 @@ export class Router {
 
     // If the handler returned a value and response wasn't sent, send it
     if (result !== undefined && !res.finished) {
-      if (result instanceof View) {
+      if (result instanceof ResponseObject) {
+        // Returned response objects (JsonResponse, RedirectResponse,
+        // StreamedResponse) deliver themselves onto the transport
+        await result.sendTo(res);
+      } else if (result instanceof View) {
         const html = await result.render();
         res.header('Content-Type', 'text/html');
         res.send(html);
@@ -821,8 +843,9 @@ export class Router {
    * Resolve an action's dependencies through the shared route resolver and
    * invoke it.
    *
-   * FormRequest validation failures keep their historical HTTP behaviour:
-   * a failed validation answers 422 with the error bag, a denial answers 403.
+   * FormRequest failures - ValidationException and AccessDeniedHttpException -
+   * propagate to the exception handler, which answers 422 with the error bag
+   * or 403 respectively.
    */
   private async callController(
     controller: any,
@@ -833,30 +856,7 @@ export class Router {
     res: Response
   ): Promise<any> {
     const reflection = this.routeResolver.reflectMethod(prototype, methodName);
-
-    let args: any[];
-    try {
-      args = await this.routeResolver.resolveArguments(reflection, route.getParameters(), req, res);
-    } catch (error) {
-      // If validation failed, send error response
-      if (error instanceof ValidationException) {
-        res.status(422).json({
-          message: 'The given data was invalid.',
-          errors: error.errors(),
-        });
-        return;
-      }
-
-      // If authorization failed, send error response
-      if (error instanceof Error && error.message === 'This action is unauthorized.') {
-        res.status(403).json({
-          message: 'This action is unauthorized.',
-        });
-        return;
-      }
-
-      throw error;
-    }
+    const args = await this.routeResolver.resolveArguments(reflection, route.getParameters(), req, res);
 
     return await controller[methodName](...args);
   }
