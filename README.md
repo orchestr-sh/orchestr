@@ -159,6 +159,66 @@ When `isFillable()` is called, the lookup order is:
 
 The same two-step lookup applies to `guarded`. Models that define neither property behave identically to before: the base-class default of `guarded = ['*']` blocks all mass assignment.
 
+### Observers
+
+Observers group model event listeners into a single class, like Laravel's Eloquent observers. Each lifecycle hook (`creating`, `created`, `updating`, `updated`, `saving`, `saved`, `deleting`, `deleted`, `retrieved`, `restoring`, `restored`, `forceDeleting`, `forceDeleted`) runs when present on the observer. Halting events abort the operation when a hook returns `false`.
+
+```typescript
+import { Ensemble, ObservedBy } from '@orchestr-sh/orchestr';
+
+class UserObserver {
+  creating(user: Ensemble) {
+    // runs before the insert; return false to halt it
+  }
+
+  saved(user: Ensemble) {
+    // runs after every successful save
+  }
+}
+
+// Register imperatively…
+User.observe(UserObserver);
+
+// …or declaratively with the class decorator
+@ObservedBy(UserObserver)
+class DecoratedUser extends Ensemble {}
+```
+
+Observers are registered per model class and inherit down to subclasses. They fire through the same model-event path as the global dispatcher, so `Event.listen(ModelSaved, …)` keeps working alongside them.
+
+### Scopes
+
+**Local scopes** are `scope*` methods on the model. The Ensemble query builder resolves unknown method calls to them, so they chain like any other builder call:
+
+```typescript
+class Post extends Ensemble {
+  scopePublished(builder) {
+    builder.where('is_published', '=', 1);
+  }
+}
+
+const posts = await Post.query().published().latest().get();
+```
+
+**Global scopes** apply automatically to every query for the model — selects, aggregates/counts and eager loads:
+
+```typescript
+import type { Scope, EnsembleBuilder, Ensemble } from '@orchestr-sh/orchestr';
+
+class PublishedScope implements Scope {
+  apply(builder: EnsembleBuilder<any>, model: Ensemble): void {
+    builder.where('is_published', '=', 1);
+  }
+}
+
+Post.addGlobalScope(new PublishedScope());
+Post.addGlobalScope('tenant', (builder) => builder.where('tenant_id', '=', 5));
+
+// Opt out per query:
+await Post.withoutGlobalScope('PublishedScope').get();
+await Post.query().withoutGlobalScopes().get(); // remove all
+```
+
 ## Querying
 
 Fluent query builder with chainable methods.

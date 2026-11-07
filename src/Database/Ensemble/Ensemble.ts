@@ -20,6 +20,9 @@ import {
   ModelDeleting,
   ModelDeleted,
 } from './Events';
+import { GlobalScopeRegistry } from './GlobalScopeRegistry';
+import { ObserverRegistry, type ObserverRegistration } from './Observers';
+import { type AnyGlobalScope } from './Scope';
 
 export abstract class Ensemble extends HasRelationshipsMixin {
   /**
@@ -431,6 +434,91 @@ export abstract class Ensemble extends HasRelationshipsMixin {
   }
 
   /**
+   * Register an observer class or instance for this model.
+   *
+   * Any of the lifecycle hooks (`creating`, `created`, `updating`, `updated`,
+   * `saving`, `saved`, `deleting`, `deleted`, `retrieved`, `restoring`,
+   * `restored`, `forceDeleting`, `forceDeleted`) is called when present on the
+   * observer. Halting events abort the operation when the hook returns
+   * `false`.
+   */
+  static observe(observer: ObserverRegistration): void {
+    ObserverRegistry.observe(this, observer);
+  }
+
+  /**
+   * Forget the observers registered directly on this model class
+   */
+  static forgetObservers(): void {
+    ObserverRegistry.clear(this);
+  }
+
+  /**
+   * Add a global scope to this model class.
+   *
+   * Accepts either a `Scope` instance / callback, or an explicit identifier
+   * plus scope: `addGlobalScope(scope)` / `addGlobalScope('published', fn)`.
+   */
+  static addGlobalScope(scope: AnyGlobalScope): void;
+  static addGlobalScope(name: string, scope: AnyGlobalScope): void;
+  static addGlobalScope(scopeOrName: AnyGlobalScope | string, scope?: AnyGlobalScope): void {
+    if (typeof scopeOrName === 'string') {
+      if (!scope) {
+        throw new Error('addGlobalScope(name, scope) requires a scope.');
+      }
+
+      GlobalScopeRegistry.add(this, scopeOrName, scope);
+      return;
+    }
+
+    GlobalScopeRegistry.add(this, GlobalScopeRegistry.identifierFor(scopeOrName), scopeOrName);
+  }
+
+  /**
+   * Register a global scope under an explicit identifier
+   */
+  static withGlobalScope(name: string, scope: AnyGlobalScope): void {
+    GlobalScopeRegistry.add(this, name, scope);
+  }
+
+  /**
+   * Every global scope applying to this model class, including inherited ones
+   */
+  static getGlobalScopes(): Map<string, AnyGlobalScope> {
+    return GlobalScopeRegistry.forModel(this);
+  }
+
+  /**
+   * Remove global scopes registered directly on this class: one by identifier,
+   * or all when no name is given
+   */
+  static forgetGlobalScopes(name?: string): void {
+    if (name) {
+      GlobalScopeRegistry.remove(this, name);
+    } else {
+      GlobalScopeRegistry.clear(this);
+    }
+  }
+
+  /**
+   * Begin querying with a global scope excluded from the query
+   */
+  static withoutGlobalScope<T extends Ensemble>(this: { new (): T }, name: string | Function): EnsembleBuilder<T> {
+    return (this as any).query().withoutGlobalScope(name);
+  }
+
+  /**
+   * Begin querying with several global scopes excluded, or all of them when
+   * none are named
+   */
+  static withoutGlobalScopes<T extends Ensemble>(
+    this: { new (): T },
+    names?: (string | Function)[]
+  ): EnsembleBuilder<T> {
+    return (this as any).query().withoutGlobalScopes(names);
+  }
+
+  /**
    * Get all of the models from the database
    */
   static async all<T extends Ensemble>(this: { new (): T }, columns: string[] = ['*']): Promise<T[]> {
@@ -812,10 +900,19 @@ export abstract class Ensemble extends HasRelationshipsMixin {
   /**
    * Fire the given model event
    *
+   * Observers registered through `observe()` / `@ObservedBy` run first, then
+   * the global event dispatcher. Both can halt a halting event (`saving`,
+   * `creating`, `updating`, `deleting`) by returning `false`.
+   *
    * @param event - Event name (saving, saved, creating, created, etc.)
    * @returns false if event is halting and a listener returned false, undefined otherwise
    */
   protected async fireModelEvent(event: string): Promise<boolean | undefined> {
+    // Observer hooks fire through the same lifecycle path as the dispatcher.
+    if ((await ObserverRegistry.notify(this, event)) === false) {
+      return false;
+    }
+
     // Try to get the event dispatcher
     let dispatcher: any;
     try {
