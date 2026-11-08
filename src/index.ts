@@ -38,6 +38,10 @@ export { View as ViewFacade } from './Facades/View';
 // Helpers
 export { loadRoutes, base_path, routes_path, resource_path, view } from './Support/helpers';
 
+// Support Collections
+export { Collection, collect } from './Support/Collection';
+export type { CollectionKey } from './Support/Collection';
+
 // Decorators
 export { Injectable } from './Support/Injectable';
 export { ValidateRequest } from './Support/ValidateRequest';
