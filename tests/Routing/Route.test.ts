@@ -94,7 +94,8 @@ describe('Route', () => {
 
     it('returns the route for chaining', () => {
       const route = new Route('GET', '/test', () => {});
-      const result = route.addMiddleware(vi.fn());
+      const middleware = vi.fn();
+      const result = route.addMiddleware(middleware);
       expect(result).toBe(route);
     });
   });

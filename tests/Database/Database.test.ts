@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DatabaseManager } from '@/Database/DatabaseManager';
-import { Expression, raw } from '@/Database/Query/Expression';
-import { EnsembleCollection } from '@/Database/Ensemble/EnsembleCollection';
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
+import { EnsembleCollection } from '@/Database/Ensemble/EnsembleCollection';
+import { Expression, raw } from '@/Database/Query/Expression';
 
 // Mock adapter for DatabaseManager tests
 function createMockAdapter() {
@@ -28,7 +28,7 @@ describe('DatabaseManager', () => {
       default: 'sqlite',
       connections: {
         sqlite: { adapter: 'test', driver: 'sqlite', database: ':memory:' },
-        mysql: { adapter: 'test', driver: 'mysql', host: 'localhost' },
+        mysql: { adapter: 'test', driver: 'mysql', host: 'localhost', database: 'test' },
       },
     });
 
@@ -59,7 +59,7 @@ describe('DatabaseManager', () => {
     it('throws for unregistered adapter', () => {
       const mgr = new DatabaseManager({
         default: 'pg',
-        connections: { pg: { adapter: 'postgres', driver: 'pg' } },
+        connections: { pg: { adapter: 'postgres', driver: 'pg', database: 'test' } },
       });
       expect(() => mgr.connection()).toThrow('not registered');
     });
@@ -237,7 +237,7 @@ describe('EnsembleCollection', () => {
 
     it('contains() with callback', () => {
       const col = createCollection([{ id: 1 }, { id: 2 }]);
-      expect(col.contains((m) => m.getKey() === 2)).toBe(true);
+      expect(col.contains((m: MockModel) => m.getKey() === 2)).toBe(true);
     });
   });
 
