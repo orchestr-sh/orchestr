@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
 import { IncomingMessage } from 'http';
 import { Socket } from 'net';
+import { describe, it, expect } from 'vitest';
 import { Request } from '@/Routing/Request';
+import { Route as RouteClass } from '@/Routing/Route';
 
 function createMockIncomingMessage(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
   const socket = new Socket();
@@ -201,6 +202,58 @@ describe('Request', () => {
     it('returns default for missing param', () => {
       const req = new Request(createMockIncomingMessage());
       expect(req.routeParam('id', 'none')).toBe('none');
+    });
+  });
+
+  describe('route()', () => {
+    it('returns the matched route instance when called with no key', () => {
+      const req = new Request(createMockIncomingMessage());
+      const route = new RouteClass('GET', '/users/:id', () => {});
+      req.setRoute(route);
+
+      expect(req.route()).toBe(route);
+    });
+
+    it('returns bound parameters from the matched route', () => {
+      const req = new Request(createMockIncomingMessage());
+      const route = new RouteClass('GET', '/users/:id', () => {});
+      route.bind('/users/42');
+      req.setRoute(route);
+      req.params = route.parameters;
+
+      expect(req.route('id')).toBe('42');
+      expect(req.routeParam('id')).toBe('42');
+    });
+
+    it('returns resolved models, keeping route() and routeParam() consistent', () => {
+      const req = new Request(createMockIncomingMessage());
+      const route = new RouteClass('GET', '/users/:user', () => {});
+      route.bind('/users/1');
+      const model = { id: 1 };
+      route.parameters.user = model;
+      req.setRoute(route);
+      req.params = route.parameters;
+
+      expect(req.route('user')).toBe(model);
+      expect(req.routeParam('user')).toBe(model);
+    });
+
+    it('returns the default for a parameter the route does not have', () => {
+      const req = new Request(createMockIncomingMessage());
+      const route = new RouteClass('GET', '/users/:id', () => {});
+      route.bind('/users/1');
+      req.setRoute(route);
+
+      expect(req.route('missing', 'fallback')).toBe('fallback');
+      expect(req.routeParam('missing', 'fallback')).toBe('fallback');
+    });
+
+    it('falls back to params when no route matched yet', () => {
+      const req = new Request(createMockIncomingMessage());
+      req.params = { id: '7' };
+
+      expect(req.route()).toBeUndefined();
+      expect(req.route('id')).toBe('7');
     });
   });
 });
