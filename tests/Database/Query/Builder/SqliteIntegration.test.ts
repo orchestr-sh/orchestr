@@ -10,19 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DrizzleAdapter } from '@/Database/Adapters/DrizzleAdapter';
 import { Connection } from '@/Database/Connection';
-
-/**
- * better-sqlite3 is an optional dependency (and needs a native build), so the
- * integration suite only runs when the driver is actually installed.
- */
-async function hasBetterSqlite(): Promise<boolean> {
-  try {
-    await import('better-sqlite3');
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { WITH_BETTER_SQLITE } from '../../support';
 
 const SCHEMA = [
   `CREATE TABLE users (
@@ -39,8 +27,6 @@ const SCHEMA = [
   )`,
   'CREATE TABLE post_user (user_id INTEGER, post_id INTEGER)',
 ];
-
-const WITH_BETTER_SQLITE = await hasBetterSqlite();
 
 describe.skipIf(!WITH_BETTER_SQLITE)('Query Builder (better-sqlite3)', () => {
   let adapter: DrizzleAdapter;

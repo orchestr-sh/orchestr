@@ -1,27 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
 import { DrizzleAdapter } from '@/Database/Adapters/DrizzleAdapter';
 import { Connection } from '@/Database/Connection';
 import { DatabaseAdapter } from '@/Database/Contracts/DatabaseAdapter';
 import { DatabaseManager } from '@/Database/DatabaseManager';
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
-
-/**
- * better-sqlite3 is an optional dependency (and needs a native build), so the
- * integration suite only runs when the driver is actually installed. The JS
- * wrapper imports fine even without a compiled binding - `bindings()` only
- * resolves when a Database is constructed - so probe by opening a real
- * in-memory connection.
- */
-async function hasBetterSqlite(): Promise<boolean> {
-  try {
-    const Database = await import('better-sqlite3');
-    const db = new Database.default(':memory:');
-    db.close();
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { WITH_BETTER_SQLITE } from './support';
 
 const SCHEMA = `
   CREATE TABLE users (
@@ -29,8 +12,6 @@ const SCHEMA = `
     name TEXT
   )
 `;
-
-const WITH_BETTER_SQLITE = await hasBetterSqlite();
 
 describe.skipIf(!WITH_BETTER_SQLITE)('Connection.transaction (better-sqlite3)', () => {
   let adapter: DrizzleAdapter;
@@ -170,9 +151,9 @@ describe.skipIf(!WITH_BETTER_SQLITE)('Connection.transaction (better-sqlite3)', 
 
 describe('Connection.transaction attempts', () => {
   interface RecordingAdapter extends Partial<DatabaseAdapter> {
-    beginTransaction: ReturnType<typeof vi.fn>;
-    commit: ReturnType<typeof vi.fn>;
-    rollback: ReturnType<typeof vi.fn>;
+    beginTransaction: Mock<DatabaseAdapter['beginTransaction']>;
+    commit: Mock<DatabaseAdapter['commit']>;
+    rollback: Mock<DatabaseAdapter['rollback']>;
   }
 
   function fakeAdapter(overrides: Partial<DatabaseAdapter> = {}): RecordingAdapter {
