@@ -425,7 +425,9 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    */
   static query<T extends Ensemble>(this: { new (): T }): EnsembleBuilder<T> {
     const instance = new this();
-    return new EnsembleBuilder<T>(instance.getConnection().getAdapter(), instance);
+    const connection = instance.getConnection();
+
+    return new EnsembleBuilder<T>(connection.getAdapter(), connection.getGrammar(), instance);
   }
 
   /**
@@ -536,7 +538,9 @@ export abstract class Ensemble extends HasRelationshipsMixin {
     const connection = this.getConnection();
     const table = this.getTable();
 
-    const id = await connection.table(table).insertGetId(attributes);
+    // The model's key is passed along so the dialect reads the generated value
+    // back from the column this model actually uses, never an assumed `id`.
+    const id = await connection.table(table).insertGetId(attributes, this.getKeyName());
 
     if (this.incrementing) {
       this.setAttribute(this.getKeyName(), id);

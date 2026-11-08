@@ -112,7 +112,8 @@
     "format:check": "oxfmt --check src",
     "test": "vitest run",
     "test:lint": "oxlint --type-aware src && oxfmt --check src",
-    "test:types": "oxlint --type-aware --type-check src",
+    "test:types": "oxlint --type-aware --type-check src && tsc -p tests/tsconfig.json",
+    "test:drivers": "node scripts/check-drivers.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
@@ -157,7 +158,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.5.3",
     "@commitlint/config-conventional": "^20.5.3",
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^25.6.2",
     "@vitest/coverage-v8": "^4.1.5",
     "husky": "^9.1.7",
@@ -175,7 +176,7 @@
     "typescript": ">=5.0.0"
   },
   "optionalDependencies": {
-    "better-sqlite3": "^9.4.0",
+    "better-sqlite3": "^13.0.3",
     "mysql2": "^3.9.0",
     "postgres": "^3.4.3"
   }

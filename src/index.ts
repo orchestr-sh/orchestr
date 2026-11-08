@@ -58,6 +58,13 @@ export { DatabaseManager } from './Database/DatabaseManager';
 export { Connection } from './Database/Connection';
 export { Builder as QueryBuilder } from './Database/Query/Builder';
 export { Expression, raw } from './Database/Query/Expression';
+export {
+  QueryGrammar,
+  SqliteGrammar,
+  PostgresGrammar,
+  MySqlGrammar,
+  grammarForDriver,
+} from './Database/Query/Grammars';
 export { DrizzleAdapter } from './Database/Adapters/DrizzleAdapter';
 
 // Database Facades
@@ -175,7 +182,10 @@ export type {
   WhereClause,
   JoinClause,
   OrderByClause,
+  HavingClause,
 } from './Database/Contracts/QueryBuilderInterface';
+export type { BindingClause } from './Database/Query/Builder';
+export type { QueryState } from './Database/Query/Grammars';
 export type { Schema, Blueprint, ColumnDefinition, ForeignKeyDefinition } from './Database/Contracts/Schema';
 export type { DatabaseManagerConfig, DatabaseConnectionConfig } from './Database/DatabaseManager';
 

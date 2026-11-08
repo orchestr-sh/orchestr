@@ -821,6 +821,8 @@ user.toObject()           // Convert to plain object
 .avg(column)
 .min(column)
 .max(column)
+.toSql()                  // Compiled statement, with bindings separate
+.toRawSql()               // Same statement with bindings interpolated in, for debugging only
 ```
 
 ### Schema Methods

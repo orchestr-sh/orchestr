@@ -1,26 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { DrizzleAdapter } from '@/Database/Adapters/DrizzleAdapter';
 import { Builder } from '@/Database/Query/Builder';
+import { SqliteGrammar } from '@/Database/Query/Grammars';
+import { WITH_BETTER_SQLITE } from './support';
 
 const INJECTION = "Robert'); DROP TABLE users;--";
-
-/**
- * better-sqlite3 is an optional dependency (and needs a native build), so the
- * integration suite only runs when the driver is actually installed. The JS
- * wrapper imports fine even without a compiled binding - `bindings()` only
- * resolves when a Database is constructed - so probe by opening a real
- * in-memory connection.
- */
-async function hasBetterSqlite(): Promise<boolean> {
-  try {
-    const Database = await import('better-sqlite3');
-    const db = new Database.default(':memory:');
-    db.close();
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 const SCHEMA = `
   CREATE TABLE users (
@@ -31,8 +15,6 @@ const SCHEMA = `
     joined_at TEXT
   )
 `;
-
-const WITH_BETTER_SQLITE = await hasBetterSqlite();
 
 describe.skipIf(!WITH_BETTER_SQLITE)('DrizzleAdapter parameterized execution (better-sqlite3)', () => {
   let adapter: DrizzleAdapter;
@@ -327,7 +309,7 @@ describe.skipIf(!WITH_BETTER_SQLITE)('DrizzleAdapter parameterized execution (be
     await adapter.insert('INSERT INTO users (name, bio) VALUES (?, ?)', [INJECTION, 'plain']);
     await adapter.insert('INSERT INTO users (name, bio) VALUES (?, ?)', ['grace', '?safe']);
 
-    const matched = await new Builder<{ name: string }>(adapter)
+    const matched = await new Builder<{ name: string }>(adapter, new SqliteGrammar())
       .from('users')
       .select('name')
       .where('name', '=', INJECTION)
@@ -335,14 +317,17 @@ describe.skipIf(!WITH_BETTER_SQLITE)('DrizzleAdapter parameterized execution (be
       .get();
     expect(matched.map((row) => row.name).sort()).toEqual([INJECTION, 'grace'].sort());
 
-    const inList = await new Builder<{ name: string }>(adapter)
+    const inList = await new Builder<{ name: string }>(adapter, new SqliteGrammar())
       .from('users')
       .select('name')
       .whereIn('bio', ['?safe', '?danger'])
       .get();
     expect(inList).toEqual([{ name: 'grace' }]);
 
-    const updated = await new Builder(adapter).from('users').where('bio', '=', '?safe').update({ bio: INJECTION });
+    const updated = await new Builder(adapter, new SqliteGrammar())
+      .from('users')
+      .where('bio', '=', '?safe')
+      .update({ bio: INJECTION });
     expect(updated).toBe(1);
 
     const rows = await adapter.select<{ name: string }>('SELECT name FROM users WHERE bio = ?', [INJECTION]);

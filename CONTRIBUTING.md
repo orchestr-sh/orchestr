@@ -49,6 +49,19 @@ npm run test:watch  # Watch mode
 npm run test:coverage  # With coverage report
 ```
 
+### Optional Database Drivers
+
+Database drivers are optional dependencies, so the suites that need a real
+database report themselves as skipped rather than failed when a driver cannot be
+installed for the running Node version:
+```bash
+npm run test:drivers  # Which optional drivers are usable
+```
+
+CI runs the same check as a step in the test and coverage jobs and turns an
+unusable driver into a warning annotation - it never fails the build, but the
+gap stays visible in the run instead of only showing up as a smaller test count.
+
 ### Linting & Formatting
 
 The project uses **oxlint** and **Prettier** for code quality. Run before committing:

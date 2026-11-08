@@ -6,6 +6,7 @@
 
 import { DatabaseAdapter, DatabaseConfig } from './Contracts/DatabaseAdapter';
 import { Builder } from './Query/Builder';
+import { grammarForDriver, QueryGrammar } from './Query/Grammars';
 
 /**
  * Driver error codes that signal a deadlock or a lock-wait timeout and are
@@ -32,6 +33,7 @@ const DEADLOCK_ERROR_ERRNOS = new Set([
 export class Connection {
   protected queryLog: Array<{ query: string; bindings: any[]; time: number }> = [];
   protected loggingEnabled: boolean = false;
+  protected grammar?: QueryGrammar;
   /**
    * Pause between deadlock retries of `transaction()`, mirroring Laravel's
    * 50ms `deadlockRetryInterval`.
@@ -47,7 +49,22 @@ export class Connection {
    * Get a query builder instance
    */
   table(tableName: string): Builder {
-    return new Builder(this.adapter).from(tableName);
+    return new Builder(this.adapter, this.getGrammar()).from(tableName);
+  }
+
+  /**
+   * Get the grammar that compiles this connection's queries.
+   *
+   * It is resolved from the configured driver the first time it is needed, so a
+   * connection can be created for a driver no grammar exists for as long as no
+   * query is compiled.
+   */
+  getGrammar(): QueryGrammar {
+    if (!this.grammar) {
+      this.grammar = grammarForDriver(this.config.driver);
+    }
+
+    return this.grammar;
   }
 
   /**
