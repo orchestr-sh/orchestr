@@ -6,6 +6,18 @@
 
 import { QueryGrammar } from './QueryGrammar';
 
+/**
+ * Quote a MySQL string literal.
+ *
+ * MySQL honours backslash escapes inside single quotes as well as the doubled
+ * quote form, so both have to be written out for the literal to mean the same
+ * thing on the server. Shared with the schema grammar so both compilers spell
+ * literals identically.
+ */
+export function quoteMySqlLiteral(value: string): string {
+  return `'${value.split('\\').join('\\\\').split("'").join("\\'")}'`;
+}
+
 export class MySqlGrammar extends QueryGrammar {
   /**
    * MySQL quotes identifiers with backticks.
@@ -38,7 +50,7 @@ export class MySqlGrammar extends QueryGrammar {
    * MySQL string literals honour backslash escapes as well as doubled quotes.
    */
   protected quoteLiteral(value: string): string {
-    return `'${value.split('\\').join('\\\\').split("'").join("\\'")}'`;
+    return quoteMySqlLiteral(value);
   }
 
   /**

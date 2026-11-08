@@ -115,6 +115,14 @@ export { MigrationRepository } from './Database/Migrations/MigrationRepository';
 export { Migrator } from './Database/Migrations/Migrator';
 export { MigrationCreator } from './Database/Migrations/MigrationCreator';
 export { SchemaBuilder } from './Database/Migrations/SchemaBuilder';
+export {
+  SchemaGrammar,
+  SqliteSchemaGrammar,
+  PostgresSchemaGrammar,
+  MySqlSchemaGrammar,
+  schemaGrammarForDriver,
+} from './Database/Migrations/Grammars';
+export { ForeignIdColumnDefinition as ForeignIdColumnDefinitionBuilder } from './Database/Migrations/ForeignIdColumnDefinition';
 export { Blueprint as BlueprintBuilder } from './Database/Migrations/Blueprint';
 export { ColumnDefinition as ColumnDefinitionBuilder } from './Database/Migrations/ColumnDefinition';
 export { ForeignKeyDefinition as ForeignKeyDefinitionBuilder } from './Database/Migrations/ForeignKeyDefinition';
@@ -129,6 +137,7 @@ export { ConsoleKernel } from './Console/ConsoleKernel';
 
 // Console Commands - Migrations
 export { MigrateCommand } from './Console/Commands/MigrateCommand';
+export { MigrateInstallCommand } from './Console/Commands/MigrateInstallCommand';
 export { MigrateRollbackCommand } from './Console/Commands/MigrateRollbackCommand';
 export { MigrateResetCommand } from './Console/Commands/MigrateResetCommand';
 export { MigrateRefreshCommand } from './Console/Commands/MigrateRefreshCommand';
@@ -186,7 +195,16 @@ export type {
 } from './Database/Contracts/QueryBuilderInterface';
 export type { BindingClause } from './Database/Query/Builder';
 export type { QueryState } from './Database/Query/Grammars';
-export type { Schema, Blueprint, ColumnDefinition, ForeignKeyDefinition } from './Database/Contracts/Schema';
+export type {
+  Schema,
+  Blueprint,
+  ColumnDefinition,
+  ForeignKeyDefinition,
+  ForeignIdColumnDefinition,
+  ModelIdentifier,
+} from './Database/Contracts/Schema';
+export type { SchemaConnection } from './Database/Migrations/Grammars';
+export type { BlueprintCommand, IndexDefinition } from './Database/Migrations/Blueprint';
 export type { DatabaseManagerConfig, DatabaseConnectionConfig } from './Database/DatabaseManager';
 
 // Console Types

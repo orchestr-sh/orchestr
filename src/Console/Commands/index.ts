@@ -34,6 +34,7 @@ import { MakeSeederCommand } from './MakeSeederCommand';
 import { MakeViewCommand } from './MakeViewCommand';
 import { MigrateCommand } from './MigrateCommand';
 import { MigrateFreshCommand } from './MigrateFreshCommand';
+import { MigrateInstallCommand } from './MigrateInstallCommand';
 import { MigrateRefreshCommand } from './MigrateRefreshCommand';
 import { MigrateResetCommand } from './MigrateResetCommand';
 import { MigrateRollbackCommand } from './MigrateRollbackCommand';
@@ -60,6 +61,7 @@ export function coreCommands(app: Application): Command[] {
   return [
     // Migration commands
     new MigrateCommand(app),
+    new MigrateInstallCommand(app),
     new MigrateRollbackCommand(app),
     new MigrateResetCommand(app),
     new MigrateRefreshCommand(app),

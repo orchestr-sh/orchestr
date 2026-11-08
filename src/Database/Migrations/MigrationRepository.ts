@@ -5,6 +5,7 @@
  */
 
 import { Connection } from '@/Database/Connection';
+import { SchemaBuilder } from './SchemaBuilder';
 
 export interface MigrationData {
   id?: number;
@@ -14,8 +15,20 @@ export interface MigrationData {
 
 export class MigrationRepository {
   protected table: string = 'migrations';
+  protected schema?: SchemaBuilder;
 
   constructor(protected connection: Connection) {}
+
+  /**
+   * The schema builder the tracking table is created and inspected with.
+   */
+  protected getSchema(): SchemaBuilder {
+    if (!this.schema) {
+      this.schema = new SchemaBuilder(this.connection);
+    }
+
+    return this.schema;
+  }
 
   /**
    * Get the migrations that have been run
@@ -101,36 +114,36 @@ export class MigrationRepository {
 
   /**
    * Create the migration repository table
+   *
+   * Built through the schema grammar, so the tracking table gets the
+   * auto-incrementing primary key each dialect spells correctly. The shape -
+   * `id`, `migration`, `batch` - is the contract every migration command relies
+   * on.
    */
   async createRepository(): Promise<void> {
-    const schema = this.connection.getAdapter();
+    if (await this.repositoryExists()) {
+      return;
+    }
 
-    await this.connection.query(`
-      CREATE TABLE IF NOT EXISTS ${this.table} (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        migration VARCHAR(255) NOT NULL,
-        batch INTEGER NOT NULL
-      )
-    `);
+    await this.getSchema().create(this.table, (table) => {
+      table.increments('id');
+      table.string('migration');
+      table.integer('batch');
+    });
   }
 
   /**
    * Determine if the migration repository exists
    */
   async repositoryExists(): Promise<boolean> {
-    try {
-      await this.connection.table(this.table).limit(1).get();
-      return true;
-    } catch (error) {
-      return false;
-    }
+    return this.getSchema().hasTable(this.table);
   }
 
   /**
    * Delete the migration repository
    */
   async deleteRepository(): Promise<void> {
-    await this.connection.query(`DROP TABLE IF EXISTS ${this.table}`);
+    await this.getSchema().dropIfExists(this.table);
   }
 
   /**

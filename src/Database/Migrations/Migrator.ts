@@ -12,7 +12,16 @@ import { MigrationRepository } from './MigrationRepository';
 import { SchemaBuilder } from './SchemaBuilder';
 
 export interface MigrationOptions {
-  step?: number;
+  /**
+   * When rolling back, how many migrations to undo.
+   *
+   * When running, a truthy value puts each migration in its own batch, so a
+   * single migration can be rolled back later instead of the whole run.
+   *
+   * Forcing past a production check and seeding are the commands' business, not
+   * the migrator's, so they are not options here.
+   */
+  step?: number | boolean;
   pretend?: boolean;
 }
 
@@ -46,9 +55,17 @@ export class Migrator {
       return [];
     }
 
-    const batch = await this.repository.getNextBatchNumber();
+    // With `--step` every migration becomes its own batch, which is what makes
+    // rolling back a single migration possible later on.
+    const oneBatchEach = Boolean(options.step);
+
+    let batch = await this.repository.getNextBatchNumber();
 
     for (const file of pending) {
+      if (oneBatchEach) {
+        batch = await this.repository.getNextBatchNumber();
+      }
+
       await this.runUp(file, batch, options.pretend || false);
       ran.push(file);
     }
@@ -58,6 +75,10 @@ export class Migrator {
 
   /**
    * Run a single migration up
+   *
+   * On a driver that keeps DDL inside a transaction, the migration and the
+   * record of it are written together: if the migration fails partway, neither
+   * the schema change nor its log entry is left behind.
    */
   protected async runUp(file: string, batch: number, pretend: boolean): Promise<void> {
     const migration = await this.resolveMigration(file);
@@ -67,8 +88,10 @@ export class Migrator {
       return;
     }
 
-    await migration.up(this.schema);
-    await this.repository.log(file, batch);
+    await this.withSchemaTransaction(async () => {
+      await migration.up(this.schema);
+      await this.repository.log(file, batch);
+    });
   }
 
   /**
@@ -102,8 +125,10 @@ export class Migrator {
       return;
     }
 
-    await migration.down(this.schema);
-    await this.repository.delete({ migration: file, batch: 0 });
+    await this.withSchemaTransaction(async () => {
+      await migration.down(this.schema);
+      await this.repository.delete({ migration: file, batch: 0 });
+    });
   }
 
   /**
@@ -135,22 +160,40 @@ export class Migrator {
    * Unlike reset(), this does not rely on migration records or down() methods.
    * It queries the database's own schema catalog for every table name and
    * issues a DROP TABLE IF EXISTS for each one, giving a truly clean slate
-   * regardless of whether migrations were tracked.
+   * regardless of whether migrations were tracked. Constraints are switched off
+   * for the duration, so tables can be dropped in any order, and an already
+   * empty database runs nothing at all.
    */
   async dropAllTables(): Promise<void> {
     const tables = await this.connection.getTables();
 
-    for (const table of tables) {
-      await this.connection.query(`DROP TABLE IF EXISTS ${table}`);
+    if (tables.length === 0) {
+      return;
     }
+
+    await this.schema.withoutForeignKeyConstraints(async () => {
+      for (const table of tables) {
+        await this.schema.dropIfExists(table);
+      }
+    });
+  }
+
+  /**
+   * Create the migration repository, the step `migrate:install` performs.
+   */
+  async createRepository(): Promise<void> {
+    await this.repository.createRepository();
   }
 
   /**
    * Refresh the database (reset and re-run all migrations)
+   *
+   * Without a step count every migration is rolled back, as it always has been;
+   * `--step=5` rolls back and re-runs only the last five.
    */
-  async refresh(): Promise<{ rolledBack: string[]; ran: string[] }> {
-    const rolledBack = await this.reset();
-    const ran = await this.run();
+  async refresh(options: MigrationOptions = {}): Promise<{ rolledBack: string[]; ran: string[] }> {
+    const rolledBack = this.rollbackSteps(options.step) ? await this.rollback(options) : await this.reset();
+    const ran = await this.run(options);
 
     return { rolledBack, ran };
   }
@@ -159,11 +202,38 @@ export class Migrator {
    * Get migrations for rollback
    */
   protected async getMigrationsForRollback(options: MigrationOptions): Promise<any[]> {
-    if (options.step && options.step > 0) {
-      return await this.repository.getMigrations(options.step);
+    const steps = this.rollbackSteps(options.step);
+
+    if (steps) {
+      return await this.repository.getMigrations(steps);
     }
 
     return await this.repository.getLast();
+  }
+
+  /**
+   * How many migrations a rollback should undo. A bare `--step` flag counts as
+   * one; nothing given means the last batch.
+   */
+  protected rollbackSteps(step?: number | boolean): number | undefined {
+    if (typeof step === 'number') {
+      return step > 0 ? step : undefined;
+    }
+
+    return step ? 1 : undefined;
+  }
+
+  /**
+   * Run schema work inside a transaction when the driver keeps DDL
+   * transactional, and plainly when it commits each statement anyway.
+   */
+  protected async withSchemaTransaction(work: () => Promise<void>): Promise<void> {
+    if (!this.schema.getGrammar().supportsSchemaTransactions()) {
+      await work();
+      return;
+    }
+
+    await this.connection.transaction(work);
   }
 
   /**

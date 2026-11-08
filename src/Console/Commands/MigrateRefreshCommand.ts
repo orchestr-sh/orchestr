@@ -28,7 +28,10 @@ export class MigrateRefreshCommand extends Command {
     this.newLine();
 
     try {
-      const result = await migrator.refresh();
+      const result = await migrator.refresh({
+        step: options.step ? parseInt(options.step as string, 10) : undefined,
+        pretend: options.pretend === true,
+      });
 
       if (result.rolledBack.length > 0) {
         this.comment('Rolled back:');
