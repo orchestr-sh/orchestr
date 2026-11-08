@@ -3,6 +3,7 @@
  */
 
 import type { Config as ConfigClass } from '@/Foundation/Config/Config';
+import type { RouteUrlParameters } from '@/Routing/UrlGenerator';
 import type { CollectionKey } from '@/Support/Collection';
 import type { View } from '@/View/View';
 import type { ViewFactory } from '@/View/ViewFactory';
@@ -101,6 +102,23 @@ export function view(name: string, data: Record<string, any> = {}): View {
 
   const factory = globalApp.make<ViewFactory>('view');
   return factory.make(name, data);
+}
+
+/**
+ * Generate the URL for a named route.
+ * Laravel: route('users.show', ['user' => 1])
+ *
+ * Unused parameters are appended as a query string. The router is resolved
+ * from the container lazily (no import here - the Routing layer already
+ * depends on this module through Response).
+ */
+export function route(name: string, parameters?: RouteUrlParameters): string {
+  if (!globalApp) {
+    throw new Error('Application not initialized. Call setGlobalApp() first.');
+  }
+
+  const router = globalApp.make<{ url: (name: string, parameters?: any) => string }>('router');
+  return router.url(name, parameters);
 }
 
 /**

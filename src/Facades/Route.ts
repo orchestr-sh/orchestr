@@ -21,6 +21,16 @@ class RouteFacade extends Facade {
   static bind: Router['bind'];
   static model: Router['model'];
   static scopeBindings: Router['scopeBindings'];
+  static where: Router['where'];
+  static pattern: Router['pattern'];
+  static fallback: Router['fallback'];
+  static resource: Router['resource'];
+  static apiResource: Router['apiResource'];
+  static view: Router['view'];
+  static redirect: Router['redirect'];
+  static url: Router['url'];
+  static current: Router['current'];
+  static currentRouteName: Router['currentRouteName'];
 }
 
 // Create proxy to enable static method calls

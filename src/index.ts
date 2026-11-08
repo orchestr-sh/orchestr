@@ -28,6 +28,10 @@ export { Action } from './Routing/Action';
 export { RouteResolver } from './Routing/RouteResolver';
 export type { RouteBinder, ActionReflection } from './Routing/RouteResolver';
 export { ModelNotFoundException } from './Routing/ModelNotFoundException';
+export { UrlGenerator } from './Routing/UrlGenerator';
+export type { RouteUrlParameters } from './Routing/UrlGenerator';
+export { buildResourceRoutes } from './Routing/ResourceRegistrar';
+export type { ResourceOptions, ResourceRouteDefinition, ResourceActionName } from './Routing/ResourceRegistrar';
 
 // Facades
 export { Facade } from './Support/Facade';
@@ -46,6 +50,7 @@ export {
   routes_path,
   resource_path,
   view,
+  route,
   str,
   arr,
   data_get,
