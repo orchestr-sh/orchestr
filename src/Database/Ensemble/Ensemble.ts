@@ -7,6 +7,7 @@
 
 import { Connection } from '@/Database/Connection';
 import { DatabaseManager } from '@/Database/DatabaseManager';
+import type { SoftDeletes } from './SoftDeletes';
 import { HasRelationshipsMixin } from './Concerns/HasRelationships';
 import { EnsembleBuilder } from './EnsembleBuilder';
 import {
@@ -19,12 +20,24 @@ import {
   ModelSaved,
   ModelDeleting,
   ModelDeleted,
+  ModelSoftDeleting,
+  ModelSoftDeleted,
+  ModelRestoring,
+  ModelRestored,
+  ModelForceDeleting,
+  ModelForceDeleted,
 } from './Events';
 import { GlobalScopeRegistry } from './GlobalScopeRegistry';
 import { ObserverRegistry, type ObserverRegistration } from './Observers';
 import { type AnyGlobalScope } from './Scope';
 
-export abstract class Ensemble extends HasRelationshipsMixin {
+/**
+ * Events the dispatcher halts on: a listener returning `false` aborts the
+ * operation. `ObserverRegistry` keeps the matching list for observer hooks.
+ */
+const HALTING_MODEL_EVENTS = ['creating', 'updating', 'saving', 'deleting', 'restoring', 'forceDeleting'];
+
+export abstract class Ensemble extends HasRelationshipsMixin implements SoftDeletes {
   /**
    * The connection resolver instance
    */
@@ -123,6 +136,14 @@ export abstract class Ensemble extends HasRelationshipsMixin {
   protected static DELETED_AT: string = 'deleted_at';
 
   /**
+   * Indicates if the model soft deletes. Subclasses opt in with
+   * `protected static softDeletes = true`, which makes `delete()` stamp the
+   * `deleted_at` column instead of removing the row and registers the
+   * `SoftDeletingScope` on every query for the model.
+   */
+  protected static softDeletes: boolean = false;
+
+  /**
    * The model's attributes
    */
   protected attributes: Record<string, any> = {};
@@ -141,6 +162,13 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    * Indicates if the model was inserted during this request
    */
   public wasRecentlyCreated: boolean = false;
+
+  /**
+   * Indicates if the model is currently being force deleted. Set by
+   * `forceDelete()` so the shared delete path issues a hard `DELETE` even on
+   * soft-deleting models.
+   */
+  public forceDeleting: boolean = false;
 
   /**
    * The connection name for the model
@@ -290,18 +318,40 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    * Determine if a cast is defined for an attribute
    */
   protected hasCast(key: string): boolean {
-    return key in this.casts;
+    return this.castType(key) !== undefined;
+  }
+
+  /**
+   * The cast type applied to an attribute, if any.
+   *
+   * Soft-deleting models always cast the deleted-at column to a date, the way
+   * Laravel merges it into the model's date casts, even when the subclass
+   * declares no explicit cast for it.
+   */
+  protected castType(key: string): string | undefined {
+    if (key in this.casts) {
+      return this.casts[key];
+    }
+
+    if (this.usesSoftDeletes() && key === this.getDeletedAtColumn()) {
+      return 'datetime';
+    }
+
+    return undefined;
   }
 
   /**
    * Cast an attribute to a native PHP type
+   *
+   * Absent and null values pass through untouched: casting `undefined` would
+   * invent data (an Invalid `Date`, say) where the model simply has nothing.
    */
   protected castAttribute(key: string, value: any): any {
-    if (value === null) {
+    if (value === null || value === undefined) {
       return value;
     }
 
-    const castType = this.casts[key];
+    const castType = this.castType(key);
 
     switch (castType) {
       case 'int':
@@ -437,10 +487,10 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    * Register an observer class or instance for this model.
    *
    * Any of the lifecycle hooks (`creating`, `created`, `updating`, `updated`,
-   * `saving`, `saved`, `deleting`, `deleted`, `retrieved`, `restoring`,
-   * `restored`, `forceDeleting`, `forceDeleted`) is called when present on the
-   * observer. Halting events abort the operation when the hook returns
-   * `false`.
+   * `saving`, `saved`, `deleting`, `deleted`, `retrieved`, `softDeleting`,
+   * `softDeleted`, `restoring`, `restored`, `forceDeleting`, `forceDeleted`)
+   * is called when present on the observer. Halting events abort the
+   * operation when the hook returns `false`.
    */
   static observe(observer: ObserverRegistration): void {
     ObserverRegistry.observe(this, observer);
@@ -754,7 +804,7 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    * Determine if the given attribute is a date or date castable
    */
   protected isDateAttribute(key: string): boolean {
-    const cast = this.casts[key];
+    const cast = this.castType(key);
     return cast === 'date' || cast === 'datetime' || cast === 'timestamp';
   }
 
@@ -784,6 +834,9 @@ export abstract class Ensemble extends HasRelationshipsMixin {
 
   /**
    * Delete the model from the database
+   *
+   * Soft-deleting models stamp the `deleted_at` column and leave the row in
+   * the table; every other model issues a hard `DELETE`.
    */
   async delete(): Promise<boolean> {
     if (!this.exists) {
@@ -795,6 +848,23 @@ export abstract class Ensemble extends HasRelationshipsMixin {
       return false;
     }
 
+    const deleted =
+      this.usesSoftDeletes() && !this.forceDeleting ? await this.runSoftDelete() : await this.runHardDelete();
+
+    if (!deleted) {
+      return false;
+    }
+
+    // Fire deleted event
+    await this.fireModelEvent('deleted');
+
+    return true;
+  }
+
+  /**
+   * Issue the hard `DELETE` for the model and forget its identity
+   */
+  protected async runHardDelete(): Promise<boolean> {
     const connection = this.getConnection();
     const table = this.getTable();
 
@@ -802,10 +872,120 @@ export abstract class Ensemble extends HasRelationshipsMixin {
 
     this.exists = false;
 
-    // Fire deleted event
-    await this.fireModelEvent('deleted');
+    return true;
+  }
+
+  /**
+   * Stamp the deleted-at column instead of removing the row
+   *
+   * The update goes straight to the connection the way Laravel's
+   * `runSoftDelete()` does: writing `deleted_at` is not a model save, so no
+   * `saving`/`updating` events fire around it.
+   */
+  protected async runSoftDelete(): Promise<boolean> {
+    // Fire soft deleting event
+    await this.fireModelEvent('softDeleting');
+
+    const deletedAt = new Date();
+    const columns: Record<string, any> = { [this.getDeletedAtColumn()]: deletedAt };
+    this.setAttribute(this.getDeletedAtColumn(), deletedAt);
+
+    const updatedAtColumn = this.getUpdatedAtColumn();
+    if (updatedAtColumn) {
+      columns[updatedAtColumn] = deletedAt;
+      this.setAttribute(updatedAtColumn, deletedAt);
+    }
+
+    const connection = this.getConnection();
+    const table = this.getTable();
+
+    await connection.table(table).where(this.getKeyName(), '=', this.getKey()).update(columns);
+
+    this.syncOriginal();
+
+    // Fire soft deleted event
+    await this.fireModelEvent('softDeleted');
 
     return true;
+  }
+
+  /**
+   * Force a hard delete on a soft deleted model
+   *
+   * Runs the full delete lifecycle (`deleting`/`deleted`) with the
+   * soft-delete shortcut disabled, wrapped in the `forceDeleting`/
+   * `forceDeleted` events.
+   */
+  async forceDelete(): Promise<boolean> {
+    if (!this.exists) {
+      return false;
+    }
+
+    // Fire force deleting event
+    if ((await this.fireModelEvent('forceDeleting')) === false) {
+      return false;
+    }
+
+    this.forceDeleting = true;
+    const deleted = await this.delete();
+    this.forceDeleting = false;
+
+    if (deleted) {
+      // Fire force deleted event
+      await this.fireModelEvent('forceDeleted');
+    }
+
+    return deleted;
+  }
+
+  /**
+   * Restore a soft-deleted model instance
+   */
+  async restore(): Promise<boolean> {
+    // Fire restoring event
+    if ((await this.fireModelEvent('restoring')) === false) {
+      return false;
+    }
+
+    this.setAttribute(this.getDeletedAtColumn(), null);
+    this.exists = true;
+
+    const restored = await this.save();
+
+    // Fire restored event
+    await this.fireModelEvent('restored');
+
+    return restored;
+  }
+
+  /**
+   * Determine if the model instance has been soft-deleted
+   */
+  trashed(): boolean {
+    const deletedAt = this.getAttribute(this.getDeletedAtColumn());
+
+    return deletedAt !== null && deletedAt !== undefined;
+  }
+
+  /**
+   * Determine whether this model soft deletes instead of removing rows
+   */
+  usesSoftDeletes(): boolean {
+    return (this.constructor as typeof Ensemble).softDeletes === true;
+  }
+
+  /**
+   * Get the name of the "deleted at" column
+   */
+  getDeletedAtColumn(): string {
+    return (this.constructor as typeof Ensemble).DELETED_AT;
+  }
+
+  /**
+   * Get the fully qualified "deleted at" column
+   */
+  getQualifiedDeletedAtColumn(): string {
+    return `${this.getTable()}.${this.getDeletedAtColumn()}`;
   }
 
   /**
@@ -816,7 +996,15 @@ export abstract class Ensemble extends HasRelationshipsMixin {
       return this;
     }
 
-    const fresh = await (this.constructor as any).find(this.getKey());
+    const query: EnsembleBuilder<any> = (this.constructor as any).query();
+
+    // A trashed model still exists, so its row has to be read back with the
+    // soft-delete exclusion lifted.
+    if (this.usesSoftDeletes()) {
+      query.withTrashed();
+    }
+
+    const fresh = await query.find(this.getKey());
 
     if (!fresh) {
       throw new Error('Ensemble not found');
@@ -902,7 +1090,8 @@ export abstract class Ensemble extends HasRelationshipsMixin {
    *
    * Observers registered through `observe()` / `@ObservedBy` run first, then
    * the global event dispatcher. Both can halt a halting event (`saving`,
-   * `creating`, `updating`, `deleting`) by returning `false`.
+   * `creating`, `updating`, `deleting`, `restoring`, `forceDeleting`) by
+   * returning `false`.
    *
    * @param event - Event name (saving, saved, creating, created, etc.)
    * @returns false if event is halting and a listener returned false, undefined otherwise
@@ -945,6 +1134,12 @@ export abstract class Ensemble extends HasRelationshipsMixin {
       saved: ModelSaved,
       deleting: ModelDeleting,
       deleted: ModelDeleted,
+      softDeleting: ModelSoftDeleting,
+      softDeleted: ModelSoftDeleted,
+      restoring: ModelRestoring,
+      restored: ModelRestored,
+      forceDeleting: ModelForceDeleting,
+      forceDeleted: ModelForceDeleted,
     };
 
     const EventClass = eventMap[event];
@@ -954,9 +1149,10 @@ export abstract class Ensemble extends HasRelationshipsMixin {
 
     const eventInstance = new EventClass(this);
 
-    // For halting events (creating, updating, saving, deleting), use until()
-    // which returns the first non-null result (false halts the operation)
-    if (['creating', 'updating', 'saving', 'deleting'].includes(event)) {
+    // For halting events (creating, updating, saving, deleting, restoring,
+    // forceDeleting), use until() which returns the first non-null result
+    // (false halts the operation)
+    if (HALTING_MODEL_EVENTS.includes(event)) {
       const result = await dispatcher.until?.(eventInstance);
       // If any listener returns false, halt the operation
       if (result === false) {

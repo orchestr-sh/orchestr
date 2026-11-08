@@ -12,6 +12,13 @@ import { Ensemble } from './Ensemble';
 import { EnsembleCollection } from './EnsembleCollection';
 import { GlobalScopeRegistry } from './GlobalScopeRegistry';
 import { Relation } from './Relations';
+import { SoftDeletingScope } from './SoftDeletingScope';
+
+/**
+ * How a query treats trashed rows: exclude them (default), include them, or
+ * return only them
+ */
+type TrashedState = 'without' | 'with' | 'only';
 
 export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
   /**
@@ -35,10 +42,25 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    */
   protected scopesApplied: boolean = false;
 
+  /**
+   * How this query treats trashed rows, read by the `SoftDeletingScope` when
+   * it is applied
+   */
+  protected trashedState: TrashedState = 'without';
+
+  /**
+   * Whether eager-loaded relations include trashed rows as well
+   */
+  protected eagerLoadTrashed: boolean = false;
+
   constructor(adapter: DatabaseAdapter, grammar: QueryGrammar, model: T) {
     super(adapter, grammar);
     this.model = model;
     this.from(model.getTable());
+
+    // Soft-deleting models get their scope through the global-scope pipeline,
+    // so queries, relations and aggregates all share the one implementation.
+    SoftDeletingScope.registerFor(model);
 
     // Return a proxy so model local scopes (`scopePublished`) are callable
     // directly as builder methods without per-model boilerplate.
@@ -124,6 +146,60 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
       this.withoutGlobalScope(name);
     }
 
+    return this;
+  }
+
+  /**
+   * Include trashed rows in the query
+   *
+   * The `SoftDeletingScope` reads this flag when the query is executed, so
+   * the default `deleted_at IS NULL` constraint is never added.
+   */
+  withTrashed(withTrashed: boolean = true): this {
+    this.trashedState = withTrashed ? 'with' : 'without';
+    return this;
+  }
+
+  /**
+   * Return only the trashed rows of a soft-deleting model
+   */
+  onlyTrashed(): this {
+    this.trashedState = 'only';
+    return this;
+  }
+
+  /**
+   * Exclude trashed rows, the default for soft-deleting models
+   */
+  withoutTrashed(): this {
+    this.trashedState = 'without';
+    return this;
+  }
+
+  /**
+   * Determine whether the query includes trashed rows
+   */
+  isWithTrashed(): boolean {
+    return this.trashedState === 'with';
+  }
+
+  /**
+   * Determine whether the query returns only trashed rows
+   */
+  isOnlyTrashed(): boolean {
+    return this.trashedState === 'only';
+  }
+
+  /**
+   * Let eager-loaded relations include trashed rows as well
+   *
+   * The trashed state of the query itself is untouched: this opts the
+   * relationship queries (including nested ones) into `withTrashed()`, which
+   * is how `User::withTrashedRelations()->with('posts')->get()` sees posts
+   * that were soft deleted.
+   */
+  withTrashedRelations(): this {
+    this.eagerLoadTrashed = true;
     return this;
   }
 
@@ -243,6 +319,12 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
     // Get the relation instance from the first model
     const relation = this.getRelation(models[0], name);
 
+    // Trashed-aware eager loads lift the soft-delete exclusion on the
+    // relation query before its constraints are added
+    if (this.eagerLoadTrashed) {
+      relation.getQuery().withTrashed();
+    }
+
     // Set the eager constraints
     relation.addEagerConstraints(models);
 
@@ -292,6 +374,12 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
     // Recursively load the nested relationships
     if (relatedModels.length > 0 && relatedModels[0]) {
       const nestedBuilder = relatedModels[0].newQuery();
+
+      // The trashed-relations request propagates down every level
+      if (this.eagerLoadTrashed) {
+        nestedBuilder.withTrashedRelations();
+      }
+
       nestedBuilder.eagerLoad[remainingSegments] = constraints;
       await nestedBuilder.eagerLoadRelations(relatedModels as any[]);
     }
@@ -347,6 +435,33 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
     this.applyScopes();
 
     return await super.delete();
+  }
+
+  /**
+   * Restore the trashed rows matching the query
+   *
+   * The soft-delete exclusion is never applied here: the query narrows itself
+   * to trashed rows (`deleted_at IS NOT NULL`) through the `SoftDeletingScope`
+   * and clears the column in one statement, leaving live rows untouched.
+   */
+  async restore(): Promise<number> {
+    this.onlyTrashed();
+
+    return this.update({ [this.model.getDeletedAtColumn()]: null });
+  }
+
+  /**
+   * Hard delete the rows matching the query, trashed ones included
+   *
+   * This is the purge entry point: without an explicit `onlyTrashed()` the
+   * statement removes every matching row whether or not it is soft deleted.
+   */
+  async forceDelete(): Promise<number> {
+    if (!this.isOnlyTrashed()) {
+      this.withTrashed();
+    }
+
+    return this.delete();
   }
 
   /**
@@ -437,6 +552,8 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
     cloned.eagerLoad = { ...this.eagerLoad };
     cloned.removedGlobalScopes = new Set(this.removedGlobalScopes);
     cloned.scopesApplied = this.scopesApplied;
+    cloned.trashedState = this.trashedState;
+    cloned.eagerLoadTrashed = this.eagerLoadTrashed;
     return cloned;
   }
 }
