@@ -136,6 +136,12 @@ test-results/
 junit.xml
 .jest-cache/
 
+# Compiled test output: tests/ is type-checked, not built (tests/tsconfig.json
+# runs with noEmit). Force-add anything that is a real fixture, not a build.
+tests/**/*.js
+tests/**/*.d.ts
+tests/**/*.d.ts.map
+
 # Playwright
 playwright-report/
 test-results/

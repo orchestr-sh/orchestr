@@ -112,7 +112,8 @@
     "format:check": "oxfmt --check src",
     "test": "vitest run",
     "test:lint": "oxlint --type-aware src && oxfmt --check src",
-    "test:types": "oxlint --type-aware --type-check src",
+    "test:types": "oxlint --type-aware --type-check src && tsc -p tests/tsconfig.json",
+    "test:drivers": "node scripts/check-drivers.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
