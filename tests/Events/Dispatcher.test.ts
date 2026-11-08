@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Dispatcher } from '@/Events/Dispatcher';
 import { Container } from '@/Container/Container';
+import { Dispatcher } from '@/Events/Dispatcher';
 
 describe('Dispatcher', () => {
   let container: Container;
@@ -145,7 +145,8 @@ describe('Dispatcher', () => {
 
   describe('forget()', () => {
     it('removes all listeners for an event', () => {
-      dispatcher.listen('test', vi.fn());
+      const listener = vi.fn();
+      dispatcher.listen('test', listener);
       dispatcher.forget('test');
       expect(dispatcher.hasListeners('test')).toBe(false);
     });
@@ -196,12 +197,14 @@ describe('Dispatcher', () => {
     });
 
     it('returns true for events with direct listeners', () => {
-      dispatcher.listen('test', vi.fn());
+      const listener = vi.fn();
+      dispatcher.listen('test', listener);
       expect(dispatcher.hasListeners('test')).toBe(true);
     });
 
     it('returns true for events matching wildcard pattern', () => {
-      dispatcher.listen('order.*', vi.fn());
+      const listener = vi.fn();
+      dispatcher.listen('order.*', listener);
       expect(dispatcher.hasListeners('order.placed')).toBe(true);
     });
   });

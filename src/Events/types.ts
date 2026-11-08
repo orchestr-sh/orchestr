@@ -14,9 +14,10 @@ export interface ListenerInterface<TEvent extends Event = Event> {
    * Handle the event
    *
    * @param event - The event instance to handle
-   * @returns void, false to stop propagation, or a Promise
+   * @returns Any value: `false` stops propagation when halting, other values are
+   * collected as responses, `null`/`undefined` responses are skipped
    */
-  handle(event: TEvent): void | false | Promise<void | false>;
+  handle(event: TEvent): unknown;
 }
 
 /**
@@ -26,7 +27,7 @@ export interface ListenerInterface<TEvent extends Event = Event> {
  *
  * @template TEvent - The event type this closure handles
  */
-export type ListenerClosure<TEvent extends Event = Event> = (event: TEvent) => void | false | Promise<void | false>;
+export type ListenerClosure<TEvent extends Event = Event> = (event: TEvent) => unknown;
 
 /**
  * Event Listener Type
@@ -51,9 +52,10 @@ export interface EventSubscriber {
    * Register event listeners
    *
    * @param events - The event dispatcher instance
-   * @returns Mapping of event names to listener methods/closures
+   * @returns Mapping of event names to listeners, or void when the subscriber
+   * registered its listeners through `events.listen()` directly
    */
-  subscribe(events: DispatcherContract): void | Record<string, string | string[]>;
+  subscribe(events: DispatcherContract): void | Record<string, EventListener | EventListener[]>;
 }
 
 /**
