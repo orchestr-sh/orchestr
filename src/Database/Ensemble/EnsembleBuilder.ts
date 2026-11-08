@@ -7,8 +7,10 @@
 import type { QueryGrammar } from '@/Database/Query/Grammars';
 import { DatabaseAdapter } from '@/Database/Contracts/DatabaseAdapter';
 import { Builder as QueryBuilder } from '@/Database/Query/Builder';
+import { Str } from '@/Support/Str';
 import { Ensemble } from './Ensemble';
 import { EnsembleCollection } from './EnsembleCollection';
+import { GlobalScopeRegistry } from './GlobalScopeRegistry';
 import { Relation } from './Relations';
 
 export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
@@ -22,10 +24,107 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    */
   protected eagerLoad: Record<string, (query: any) => void> = {};
 
+  /**
+   * Identifiers of global scopes excluded from this query
+   */
+  protected removedGlobalScopes: Set<string> = new Set();
+
+  /**
+   * Whether this builder's global scopes have already been applied. Scopes
+   * are added once per query no matter how many entry points run.
+   */
+  protected scopesApplied: boolean = false;
+
   constructor(adapter: DatabaseAdapter, grammar: QueryGrammar, model: T) {
     super(adapter, grammar);
     this.model = model;
     this.from(model.getTable());
+
+    // Return a proxy so model local scopes (`scopePublished`) are callable
+    // directly as builder methods without per-model boilerplate.
+    return EnsembleBuilder.withLocalScopeProxy(this);
+  }
+
+  /**
+   * Wrap a builder so unknown method calls resolve to local scopes on the
+   * model (`published` -> `scopePublished`), mirroring Eloquent's `__call`.
+   * Everything that exists on the builder itself passes through untouched,
+   * and scope calls always hand back a chainable builder.
+   */
+  private static withLocalScopeProxy<T extends Ensemble>(builder: EnsembleBuilder<T>): EnsembleBuilder<T> {
+    return new Proxy(builder, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+
+        if (value !== undefined || typeof prop !== 'string' || prop.startsWith('_')) {
+          return value;
+        }
+
+        const scopeMethod = (target.model as any)?.[`scope${Str.studly(prop)}`];
+
+        if (typeof scopeMethod !== 'function') {
+          return value;
+        }
+
+        return (...args: any[]): EnsembleBuilder<T> => {
+          const result = scopeMethod.call(target.model, receiver, ...args);
+          return result === undefined ? receiver : result;
+        };
+      },
+    });
+  }
+
+  /**
+   * Apply the model's global scopes to the query. Idempotent: a builder that
+   * has already been scoped never collects the same where clauses twice, even
+   * when several entry points (get, count, eager loads) run on it.
+   */
+  applyScopes(): this {
+    if (this.scopesApplied) {
+      return this;
+    }
+
+    for (const [identifier, scope] of GlobalScopeRegistry.forModel(this.model.constructor)) {
+      if (this.removedGlobalScopes.has(identifier)) {
+        continue;
+      }
+
+      if (typeof scope === 'function') {
+        scope(this, this.model);
+      } else {
+        scope.apply(this, this.model);
+      }
+    }
+
+    this.scopesApplied = true;
+    return this;
+  }
+
+  /**
+   * Exclude a global scope from this query. Accepts the scope identifier or
+   * the scope class.
+   */
+  withoutGlobalScope(name: string | Function): this {
+    this.removedGlobalScopes.add(typeof name === 'function' ? name.name : name);
+    return this;
+  }
+
+  /**
+   * Exclude several global scopes, or every global scope when none are named
+   */
+  withoutGlobalScopes(names?: (string | Function)[]): this {
+    if (names === undefined) {
+      for (const identifier of GlobalScopeRegistry.forModel(this.model.constructor).keys()) {
+        this.removedGlobalScopes.add(identifier);
+      }
+      return this;
+    }
+
+    for (const name of names) {
+      this.withoutGlobalScope(name);
+    }
+
+    return this;
   }
 
   /**
@@ -39,6 +138,8 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    * Execute the query and get all results
    */
   async get(): Promise<T[]> {
+    this.applyScopes();
+
     const results = await super.get();
     const models = this.hydrate(results);
 
@@ -234,6 +335,8 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    * Update records in the database
    */
   async update(values: Record<string, any>): Promise<number> {
+    this.applyScopes();
+
     return await super.update(values);
   }
 
@@ -241,7 +344,28 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    * Delete records from the database
    */
   async delete(): Promise<number> {
+    this.applyScopes();
+
     return await super.delete();
+  }
+
+  /**
+   * Execute an aggregate function with global scopes applied
+   *
+   * Aggregates run against a plain query builder so the driver's count row is
+   * read directly, never a hydrated model. Scopes are applied to this builder
+   * first, then copied into the raw clone.
+   */
+  protected async aggregate(func: string, column: string): Promise<any> {
+    this.applyScopes();
+
+    const raw = new QueryBuilder<any>(this.adapter, this.grammar);
+    this.copyStateInto(raw);
+    raw.selectRaw(this.grammar.compileAggregate(func, column));
+
+    const result = await raw.first();
+
+    return result ? (result as any)['aggregate'] : null;
   }
 
   /**
@@ -311,6 +435,8 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
     const cloned = new EnsembleBuilder<T>(this.adapter, this.grammar, this.model);
     this.copyStateInto(cloned);
     cloned.eagerLoad = { ...this.eagerLoad };
+    cloned.removedGlobalScopes = new Set(this.removedGlobalScopes);
+    cloned.scopesApplied = this.scopesApplied;
     return cloned;
   }
 }
