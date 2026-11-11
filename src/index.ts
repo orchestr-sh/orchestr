@@ -64,6 +64,7 @@ export { Bus } from './Facades/Bus';
 export { Cache } from './Facades/Cache';
 export { View as ViewFacade } from './Facades/View';
 export { Session } from './Facades/Session';
+export { Auth } from './Facades/Auth';
 export { Hash } from './Facades/Hash';
 export { Crypt } from './Facades/Crypt';
 
@@ -99,6 +100,7 @@ export {
   hash,
   encrypt,
   decrypt,
+  auth,
 } from './Support/helpers';
 
 // Support Collections
@@ -127,6 +129,7 @@ export { CacheServiceProvider } from './Cache/CacheServiceProvider';
 export { SessionServiceProvider } from './Session/SessionServiceProvider';
 export { HashServiceProvider } from './Hashing/HashServiceProvider';
 export { EncryptionServiceProvider } from './Encryption/EncryptionServiceProvider';
+export { AuthServiceProvider } from './Auth/AuthServiceProvider';
 export { ViewServiceProvider } from './View/ViewServiceProvider';
 export type { ViewConfig } from './View/ViewServiceProvider';
 
@@ -485,6 +488,50 @@ export { MissingAppKeyException } from './Encryption/MissingAppKeyException';
 
 // Encryption Contracts
 export type { Encrypter as EncrypterContract } from './Encryption/Contracts/Encrypter';
+
+// Auth
+export { AuthManager, AUTH_DEFAULTS } from './Auth/AuthManager';
+export type {
+  AuthConfig,
+  AuthGuardConfig,
+  AuthDefaultsConfig,
+  AuthPasswordBrokerConfig,
+  AuthManagerDependencies,
+  GuardFactory,
+} from './Auth/AuthManager';
+export { SessionGuard } from './Auth/SessionGuard';
+export type { SessionGuardOptions } from './Auth/SessionGuard';
+export { TokenGuard } from './Auth/TokenGuard';
+export type { TokenGuardConfig } from './Auth/TokenGuard';
+export { EnsembleUserProvider } from './Auth/EnsembleUserProvider';
+export type {
+  EnsembleUserProviderConfig,
+  EnsembleUserInstance,
+  UserProviderModel,
+  UserProviderQuery,
+} from './Auth/EnsembleUserProvider';
+export { UserNotFoundException } from './Auth/UserNotFoundException';
+export { HasAuthenticatable } from './Auth/Concerns/HasAuthenticatable';
+export type { AttributeCarrier, AuthenticatableInstance } from './Auth/Concerns/HasAuthenticatable';
+
+// Auth Contracts
+export type { Authenticatable } from './Auth/Contracts/Authenticatable';
+export type { AuthCredentials, UserProvider } from './Auth/Contracts/UserProvider';
+export type { Guard as AuthGuard, StatefulGuard } from './Auth/Contracts/Guard';
+
+// Auth Middleware
+export {
+  Authenticate,
+  makeAuthenticate,
+  resolveAuthManager,
+  type AuthenticateOptions,
+} from './Auth/Middleware/Authenticate';
+export {
+  RedirectIfAuthenticated,
+  makeRedirectIfAuthenticated,
+  type RedirectIfAuthenticatedOptions,
+} from './Auth/Middleware/RedirectIfAuthenticated';
+export { resolveRedirect, type RedirectDestination } from './Auth/Middleware/RedirectResolver';
 
 // Routing Middleware
 export { ValidateSignature, makeValidateSignature, resolveSignedRouter } from './Routing/Middleware/ValidateSignature';

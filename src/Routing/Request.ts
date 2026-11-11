@@ -1,8 +1,21 @@
 import { IncomingMessage } from 'http';
 import { parse as parseQuery } from 'querystring';
 import { parse as parseUrl } from 'url';
+import type { Authenticatable } from '@/Auth/Contracts/Authenticatable';
+import type { StatefulGuard } from '@/Auth/Contracts/Guard';
 import type { Store as SessionStore } from '@/Session/Contracts/Store';
 import { Route } from './Route';
+
+/**
+ * Resolves the authenticated user for a guard, or the default guard
+ * Laravel: the callable behind Illuminate\Http\Request::user()
+ */
+export type UserResolver = (guard?: string) => Authenticatable | null | Promise<Authenticatable | null>;
+
+/**
+ * Resolves the guard handling a request
+ */
+export type GuardResolver = (guard?: string) => StatefulGuard;
 
 /**
  * Request - Laravel's HTTP Request wrapper
@@ -21,6 +34,10 @@ export class Request {
   private matchedRoute?: Route;
 
   private sessionStore?: SessionStore;
+
+  private userResolver?: UserResolver;
+
+  private guardResolver?: GuardResolver;
 
   private bodyParsed: boolean = false;
 
@@ -141,6 +158,66 @@ export class Request {
    */
   setSession(session: SessionStore): void {
     this.sessionStore = session;
+  }
+
+  /**
+   * The bearer token from the `Authorization: Bearer ...` header
+   * Laravel: $request->bearerToken()
+   */
+  bearerToken(): string | null {
+    const authorization = this.header('authorization');
+
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return null;
+    }
+
+    const token = authorization.slice('Bearer '.length).trim();
+
+    return token === '' ? null : token;
+  }
+
+  /**
+   * Bind the callback that resolves the authenticated user
+   * Laravel: $request->setUserResolver($resolver)
+   */
+  setUserResolver(resolver: UserResolver): void {
+    this.userResolver = resolver;
+  }
+
+  /**
+   * Bind the callback that resolves the request's auth guard
+   * Laravel: the request-side half of AuthServiceProvider's rebinding
+   */
+  setGuardResolver(resolver: GuardResolver): void {
+    this.guardResolver = resolver;
+  }
+
+  /**
+   * The authenticated user for a guard (the default when omitted), or null
+   * while no auth layer has bound a resolver
+   * Laravel: $request->user($guard)
+   */
+  async user<T extends Authenticatable = Authenticatable>(guard?: string): Promise<T | null> {
+    if (!this.userResolver) {
+      return null;
+    }
+
+    return (await this.userResolver(guard)) as T | null;
+  }
+
+  /**
+   * The guard authenticating this request
+   * Laravel: $request->user($guard) paired with $this->auth->guard($guard)
+   */
+  auth(guard?: string): StatefulGuard {
+    if (!this.guardResolver) {
+      throw new Error(
+        'No auth guard bound to this request. Register the AuthServiceProvider and run the auth ' +
+          'middleware, or call Auth.forRequest(request, response).'
+      );
+    }
+
+    return this.guardResolver(guard);
   }
 
   /**

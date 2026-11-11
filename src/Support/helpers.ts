@@ -2,6 +2,7 @@
  * Helper functions - Laravel-style global helpers
  */
 
+import type { StatefulGuard } from '@/Auth/Contracts/Guard';
 import type { Encrypter as EncrypterContract } from '@/Encryption/Contracts/Encrypter';
 import type { Config as ConfigClass } from '@/Foundation/Config/Config';
 import type { HashManager as HashManagerContract } from '@/Hashing/HashManager';
@@ -263,6 +264,22 @@ function requireEncrypter(): EncrypterContract {
   }
 
   return globalApp.make<EncrypterContract>('encrypter');
+}
+
+/**
+ * Access an authentication guard.
+ * Laravel: auth() / auth('api')
+ *
+ * The guard named by the argument (defaults to auth.defaults.guard) comes
+ * from the container-bound AuthManager, so no import of the Auth module is
+ * needed here.
+ */
+export function auth(guard?: string): StatefulGuard {
+  if (!globalApp || !globalApp.bound('auth')) {
+    throw new Error('Authentication is not available. Register the AuthServiceProvider first.');
+  }
+
+  return globalApp.make<{ guard(name?: string): StatefulGuard }>('auth').guard(guard);
 }
 
 /**

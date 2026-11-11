@@ -12,5 +12,6 @@ export { Queue } from './Queue';
 export { Bus } from './Bus';
 export { Cache } from './Cache';
 export { Session } from './Session';
+export { Auth } from './Auth';
 export { Hash } from './Hash';
 export { Crypt } from './Crypt';
