@@ -88,6 +88,7 @@ const STATUS_TEXTS: Record<number, string> = {
   413: 'Content Too Large',
   415: 'Unsupported Media Type',
   418: "I'm a teapot",
+  419: 'Page Expired',
   422: 'Unprocessable Content',
   429: 'Too Many Requests',
   500: 'Internal Server Error',

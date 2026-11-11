@@ -1092,6 +1092,58 @@ kernel.getExceptionHandler().addRenderer(new MyXmlRenderer());
 kernel.getExceptionHandler().dontReport([AuthenticationException]);
 ```
 
+## Session & CSRF Protection
+
+`SessionManager` builds session stores from config behind a `Store` contract,
+with `array`, `file` and `cookie` drivers built in - and `extend()` registers
+new drivers without touching the manager (OCP). The file store writes atomic,
+expiring `sess_<id>` payloads; the cookie store carries the whole session in
+one HMAC-signed payload:
+
+```typescript
+import {
+  SessionServiceProvider,
+  StartSession,
+  VerifyCsrfToken,
+  Session,
+  session,
+} from '@orchestr-sh/orchestr';
+
+app.instance('config', new Config({
+  app: { key: 'your-app-key' }, // signs cookie-store payloads
+  session: {
+    driver: 'file', // array | file | cookie
+    lifetime: 120, // minutes
+    cookie: 'orchestr_session',
+    path: '/',
+    files: 'storage/framework/sessions',
+    // HttpOnly + SameSite=Lax are defaults; Secure turns on in production
+  },
+}));
+
+app.register(SessionServiceProvider);
+kernel.use(StartSession, VerifyCsrfToken);
+
+Route.post('/login', (req) => {
+  req.session().regenerate(); // new ID + token on login, data preserved
+  Session.put('user_id', 1); // Session facade / session() / req.session()
+  Session.flash('status', 'Welcome back'); // available for exactly one request
+});
+```
+
+CSRF middleware rejects unsafe methods without the session token - accepted via
+the `_token` input, the `X-CSRF-TOKEN` header, or the `X-XSRF-TOKEN` header
+mirroring the readable `XSRF-TOKEN` cookie it sets for SPAs - with a 419 (Page
+Expired). Exclude URIs through `config.csrf.except` (wildcards allowed) or
+`makeVerifyCsrfToken({ except: [...] })`, and read the token in forms with
+`csrf_token()` / `csrf_field()`:
+
+```typescript
+import { csrf_field } from '@orchestr-sh/orchestr';
+
+Route.get('/charge', () => `<form method="POST" action="/charge">${csrf_field()}</form>`);
+```
+
 ## Configuration
 
 ### Database Setup
@@ -2138,6 +2190,7 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Configuration System
 - ✅ HTTP Router & Middleware
 - ✅ Exception Handling (abort, HttpExceptions, JSON/HTML rendering)
+- ✅ Sessions & CSRF Protection (array/file/cookie stores, flash data, token verification)
 - ✅ Controllers with DI
 - ✅ FormRequest Validation
 - ✅ Query Builder

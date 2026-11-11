@@ -4,6 +4,8 @@
 
 import type { Config as ConfigClass } from '@/Foundation/Config/Config';
 import type { RouteUrlParameters } from '@/Routing/UrlGenerator';
+import type { Store as SessionStore } from '@/Session/Contracts/Store';
+import type { SessionManager } from '@/Session/SessionManager';
 import type { CollectionKey } from '@/Support/Collection';
 import type { View } from '@/View/View';
 import type { ViewFactory } from '@/View/ViewFactory';
@@ -119,6 +121,90 @@ export function route(name: string, parameters?: RouteUrlParameters): string {
 
   const router = globalApp.make<{ url: (name: string, parameters?: any) => string }>('router');
   return router.url(name, parameters);
+}
+
+/**
+ * Access the current request's session.
+ * Laravel: session() / session('key') / session(['key' => 'value'])
+ *
+ * Called with no arguments it returns the active session store (or null
+ * when no session middleware ran); with a key it reads from the session;
+ * with an object it writes every pair. The manager comes from the
+ * container, so no import of the Session module is needed here.
+ */
+export function session(values: Record<string, any>): void;
+export function session<T = any>(key: string, defaultValue?: T): T | undefined;
+export function session(): SessionStore | null;
+export function session(keyOrValues?: string | Record<string, any>, defaultValue?: any): any {
+  const store = activeSession();
+
+  if (keyOrValues === undefined) {
+    return store;
+  }
+
+  if (!store) {
+    throw new Error('No active session. Register the session middleware.');
+  }
+
+  if (typeof keyOrValues === 'string') {
+    return store.get(keyOrValues, defaultValue);
+  }
+
+  for (const [key, value] of Object.entries(keyOrValues)) {
+    store.put(key, value);
+  }
+
+  return undefined;
+}
+
+/**
+ * Get the CSRF token of the active session.
+ * Laravel: csrf_token()
+ */
+export function csrf_token(): string {
+  const store = activeSession();
+
+  if (!store) {
+    throw new Error('No active session. Register the session middleware before using csrf_token().');
+  }
+
+  return store.token();
+}
+
+/**
+ * Render the hidden CSRF input for HTML forms.
+ * Laravel: csrf_field()
+ */
+export function csrf_field(): string {
+  return `<input type="hidden" name="_token" value="${escapeHtml(csrf_token())}" autocomplete="off">`;
+}
+
+/**
+ * Resolve the session store the StartSession middleware attached to the
+ * running request, or null when sessions are not in play
+ */
+function activeSession(): SessionStore | null {
+  if (!globalApp || !globalApp.bound('session')) {
+    return null;
+  }
+
+  try {
+    return globalApp.make<SessionManager>('session').current();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Escape a value for embedding in HTML attributes
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /**
