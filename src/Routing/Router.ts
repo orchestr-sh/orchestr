@@ -69,6 +69,12 @@ export class Router {
    */
   private middlewareGroups: Map<string, MiddlewareArgument[]> = new Map();
   /**
+   * `name:params` references expanded against their alias, memoised per
+   * middleware string so identity-based ordering and exclusion stay stable
+   * Laravel: MiddlewareNameResolver::resolve() parameter passing
+   */
+  private parameterizedAliases: Map<string, Middleware> = new Map();
+  /**
    * Relative ordering applied to gathered middleware
    * Laravel: Router::$middlewarePriority
    */
@@ -594,13 +600,61 @@ export class Router {
       const alias = this.middlewareAliases.get(entry);
 
       if (!alias) {
-        throw new Error(`Middleware [${entry}] is not registered as an alias or a group.`);
+        const parameterized = this.resolveParameterizedAlias(entry);
+
+        if (!parameterized) {
+          throw new Error(`Middleware [${entry}] is not registered as an alias or a group.`);
+        }
+
+        flattened.push(parameterized);
+        continue;
       }
 
       flattened.push(alias);
     }
 
     return flattened;
+  }
+
+  /**
+   * Expand a `name:params` reference against the named alias, forwarding
+   * the comma-separated parameters to the middleware like Laravel's
+   * `handle($request, $next, ...$args)` - e.g. `can:update,post` invokes
+   * the `can` alias with ['update', 'post']
+   */
+  private resolveParameterizedAlias(entry: string): Middleware | null {
+    if (this.parameterizedAliases.has(entry)) {
+      return this.parameterizedAliases.get(entry) ?? null;
+    }
+
+    const separator = entry.indexOf(':');
+
+    if (separator === -1) {
+      return null;
+    }
+
+    const name = entry.slice(0, separator);
+    const base = this.middlewareAliases.get(name);
+
+    if (!base) {
+      return null;
+    }
+
+    const args = entry
+      .slice(separator + 1)
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+
+    // Look the base alias up at call time so re-registering `name` (e.g. an
+    // app overriding the 'can' alias) is honoured; the wrapper identity is
+    // stable so ordering and exclusion stay predictable
+    const middleware: Middleware = (req, res, next) =>
+      (this.middlewareAliases.get(name) ?? base)(req, res, next, ...args);
+
+    this.parameterizedAliases.set(entry, middleware);
+
+    return middleware;
   }
 
   /**

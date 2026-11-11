@@ -1211,6 +1211,116 @@ const temp = Route.temporarySignedRoute('unsubscribe', Math.floor(Date.now() / 1
 Route.hasValidSignature(request); // false for a modified path or expired link
 ```
 
+## Authentication
+
+`AuthManager` builds guards from the Laravel-shaped `auth.*` config (`defaults.guard`,
+`guards`, `providers`, `passwords`). Two guard drivers ship built-in - `session` and
+`token` - and `Auth.extend()` registers custom drivers without touching the manager
+(OCP). Guards own authentication; `EnsembleUserProvider` owns user retrieval (SRP),
+configurable per provider with the model class, credential columns, password column
+and rehash-on-login behaviour:
+
+```typescript
+import {
+  AuthServiceProvider,
+  Authenticate, // 'auth' alias - installed on boot
+  RedirectIfAuthenticated, // 'guest' alias - installed on boot
+  HasAuthenticatable,
+  Auth, // facade - auth() helper resolves a guard
+  RedirectResponse,
+  StartSession,
+} from '@orchestr-sh/orchestr';
+
+class User extends HasAuthenticatable(Ensemble) {
+  static fillable = ['name', 'email', 'password'];
+  getTable() {
+    return 'users';
+  }
+}
+
+app.instance('config', new Config({
+  auth: {
+    defaults: { guard: 'session' },
+    guards: {
+      session: { driver: 'session', provider: 'users' },
+      token: { driver: 'token', provider: 'users', hash: false }, // Authorization: Bearer, ?api_token
+    },
+    providers: { users: { driver: 'ensemble', model: User, credentials: ['email'] } },
+    passwords: { users: { provider: 'users', table: 'password_reset_tokens', expire: 60 } },
+  },
+}));
+
+app.register(SessionServiceProvider);
+app.register(HashServiceProvider);
+app.register(AuthServiceProvider);
+kernel.use(StartSession);
+await app.boot(); // installs the 'auth' / 'guest' middleware aliases
+
+Route.post('/login', async (req, res) => {
+  await Auth.forRequest(req, res).attempt(req.only(['email', 'password']), req.input('remember') === '1');
+  // session ID regenerated on login; remember=true stores a token on the
+  // user and queues the `remember_{guard}_recaller` cookie
+  return new RedirectResponse('/dashboard');
+});
+
+Route.get('/me', (req) => req.user()).middleware('auth'); // 401 JSON / login redirect for guests
+Route.get('/login', loginForm).middleware('guest'); // authenticated visitors go home
+await Auth.logout(); // clears the session and the stored remember token
+```
+
+## Authorization
+
+`AuthServiceProvider` also registers the shared `Gate` service (`'gate'` in the
+container, reachable through the `Gate` facade): one place where ability
+callbacks, model policies, and `before`/`after` overrides resolve. The `'can'`
+middleware, `Request.can/cannot/authorize`, `FormRequest.authorize()` and
+`Rule.can()` all call the same gate, and denials throw the
+`AuthorizationException` the exception handler renders as a 403 - carrying the
+denial's message and status when the gate provided one:
+
+```typescript
+import { AuthServiceProvider, Gate, Policy, Rule, FormRequest } from '@orchestr-sh/orchestr';
+
+class PostPolicy extends Policy {
+  viewAny(user: Authenticatable): boolean {
+    return true;
+  }
+
+  update(user: Authenticatable, post: Post): boolean | Response {
+    return post.authorId === user.getAuthIdentifier() ? true : this.deny('Only authors may edit posts.');
+  }
+}
+
+app.register(AuthServiceProvider); // binds 'gate' and installs the 'auth'/'guest'/'can' aliases
+
+Gate.policy(Post, PostPolicy); // explicit registration (OCP: policies are registered, never hard-coded)
+Gate.define('update-post', (user, post) => user?.getAuthIdentifier() === post.authorId);
+Gate.before((user) => ((user as User)?.isSuperAdmin ? true : null)); // overrides every check for admins
+
+await Gate.allows('update', post); // true | false
+await Gate.denies('update', post);
+await Gate.authorize('update', post); // Response - throws AuthorizationException on denial
+await Gate.inspect('update', post); // Response with allowed/message/status, no throw
+await Gate.forUser(null).allows('view', post); // check a specific user (or a guest)
+
+// Policies are also discovered by convention: Gate.usePolicyNamespace('App\\Policies')
+// resolves container-bound `App\\Policies\\PostPolicy` (and `PostPolicy`) classes,
+// `Gate.guessPolicyNamesUsing(fn)` replaces the guesser, and a model's static
+// `policy` property points at its policy without any registration.
+
+Route.put('/posts/:post', update).middleware(['auth', 'can:update,post']); // 403 'Only authors...' on denial
+
+class UpdatePostRequest extends FormRequest {
+  protected async authorize() {
+    return this.can('update', this.routeParam('post')); // the same gate, no duplicated checks
+  }
+
+  protected rules(): ValidationRules {
+    return { title: ['required', Rule.can('update', this.routeParam('post'))] }; // gate-backed field rule
+  }
+}
+```
+
 ## Configuration
 
 ### Database Setup
@@ -2277,6 +2387,7 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Attribute Casting
 - ✅ Password Hashing (scrypt default, bcrypt/argon2 optional, needsRehash)
 - ✅ Encryption (AES-256-GCM payloads, encrypted casts) & Signed URLs
+- ✅ Authentication (session + token guards, remember me, Ensemble user provider, auth/guest middleware)
 - ✅ Timestamps
 - ✅ @DynamicRelation Decorator
 

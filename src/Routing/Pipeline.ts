@@ -18,11 +18,16 @@ export type NextFunction = () => Promise<void>;
  * so the destination and downstream middleware never run. A terminable
  * middleware attaches a `terminate` hook, which the pipeline runs after the
  * response has been sent.
+ *
+ * Trailing arguments carry the parameters of a parameterized alias -
+ * `can:update,post` invokes the `can` middleware with 'update' and 'post',
+ * like Laravel's `handle($request, $next, $ability, ...$models)`.
  */
 export type Middleware = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
+  ...args: string[]
 ) => void | Response | ResponseObject | Promise<void | Response | ResponseObject>;
 
 /**

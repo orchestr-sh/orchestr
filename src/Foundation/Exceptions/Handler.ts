@@ -2,8 +2,10 @@ import type { Application } from '@/Foundation/Application';
 import type { Request } from '@/Routing/Request';
 import type { Response } from '@/Routing/Response';
 import type { ResponseObject } from '@/Routing/Responses/ResponseObject';
+import { AuthorizationException } from '@/Auth/Access/AuthorizationException';
 import { ValidationException } from '@/Foundation/Http/ValidationException';
 import type { ExceptionDetails, ExceptionRenderer } from './Renderer';
+import { AccessDeniedHttpException } from './AccessDeniedHttpException';
 import { HtmlRenderer } from './HtmlRenderer';
 import { HttpException, httpStatusText } from './HttpException';
 import { JsonRenderer } from './JsonRenderer';
@@ -130,12 +132,13 @@ export class Handler {
    * Normalise any thrown value into the shared render input: status and
    * headers come from HttpException subclasses (422 ValidationException,
    * 403 AccessDeniedHttpException, 401 AuthenticationException, 404
-   * NotFoundHttpException/ModelNotFoundException), the error bag only from
-   * ValidationException, and everything else is a 500.
+   * NotFoundHttpException/ModelNotFoundException), AuthorizationException
+   * converts to the 403 it denotes (Laravel's prepareException), the error
+   * bag only from ValidationException, and everything else is a 500.
    */
   protected toDetails(error: unknown): ExceptionDetails {
     const exception = error instanceof Error ? error : new Error(String(error));
-    const http = exception instanceof HttpException ? exception : null;
+    const http = this.asHttpException(exception);
     const status = http?.getStatus() ?? 500;
 
     return {
@@ -146,6 +149,24 @@ export class Handler {
       exception,
       debug: this.app.isDebug(),
     };
+  }
+
+  /**
+   * Map a thrown value onto the HttpException whose status and headers
+   * drive the render: gate denials become AccessDeniedHttpException (or an
+   * HttpException carrying the denial's custom status), matching Laravel's
+   * Handler::prepareException conversion
+   */
+  protected asHttpException(exception: Error): HttpException | null {
+    if (exception instanceof AuthorizationException) {
+      const status = exception.status ?? 403;
+
+      return status === 403
+        ? new AccessDeniedHttpException(exception.message)
+        : new HttpException(status, exception.message);
+    }
+
+    return exception instanceof HttpException ? exception : null;
   }
 }
 
