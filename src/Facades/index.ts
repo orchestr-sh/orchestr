@@ -11,3 +11,4 @@ export { Event, EventFake } from './Event';
 export { Queue } from './Queue';
 export { Bus } from './Bus';
 export { Cache } from './Cache';
+export { Session } from './Session';

@@ -25,9 +25,22 @@ export class Response {
   private statusCode: number = 200;
   private responseHeaders: Record<string, string> = {};
   private cookies: Array<{ name: string; value: string; options: CookieOptions }> = [];
+  private beforeSendCallbacks: Array<() => void> = [];
 
   constructor(res: ServerResponse) {
     this.raw = res;
+  }
+
+  /**
+   * Register a callback that runs immediately before the response headers
+   * are written. Middleware that finishes its work after the route action
+   * - session saving, queued cookies - uses this seam to still influence a
+   * response the destination has already produced but not yet sent.
+   * Laravel: the framework preparing/modifying the response before send
+   */
+  beforeSend(callback: () => void): this {
+    this.beforeSendCallbacks.push(callback);
+    return this;
   }
 
   /**
@@ -69,6 +82,15 @@ export class Response {
    * Write headers to the response
    */
   private writeHeaders(): void {
+    // Give late middleware a final chance to touch headers and cookies;
+    // callbacks run once, immediately before the header flush
+    const callbacks = this.beforeSendCallbacks;
+    this.beforeSendCallbacks = [];
+
+    for (const callback of callbacks) {
+      callback();
+    }
+
     this.raw.statusCode = this.statusCode;
 
     // Write custom headers

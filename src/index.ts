@@ -63,6 +63,7 @@ export { Queue as QueueFacade } from './Facades/Queue';
 export { Bus } from './Facades/Bus';
 export { Cache } from './Facades/Cache';
 export { View as ViewFacade } from './Facades/View';
+export { Session } from './Facades/Session';
 
 // Helpers
 export {
@@ -90,6 +91,9 @@ export {
   title_case,
   now,
   today,
+  session,
+  csrf_token,
+  csrf_field,
 } from './Support/helpers';
 
 // Support Collections
@@ -115,6 +119,7 @@ export { RouteServiceProvider } from './Providers/RouteServiceProvider';
 export { DatabaseServiceProvider } from './Database/DatabaseServiceProvider';
 export { QueueServiceProvider } from './Queue/QueueServiceProvider';
 export { CacheServiceProvider } from './Cache/CacheServiceProvider';
+export { SessionServiceProvider } from './Session/SessionServiceProvider';
 export { ViewServiceProvider } from './View/ViewServiceProvider';
 export type { ViewConfig } from './View/ViewServiceProvider';
 
@@ -430,6 +435,26 @@ export { CacheMissed } from './Cache/Events/CacheMissed';
 export { KeyWritten } from './Cache/Events/KeyWritten';
 export { KeyForgotten } from './Cache/Events/KeyForgotten';
 export { CacheFlushed } from './Cache/Events/CacheFlushed';
+
+// Session
+export { SessionManager, SESSION_DEFAULTS } from './Session/SessionManager';
+export type { SessionConfig, SessionDriverFactory } from './Session/SessionManager';
+export { TokenMismatchException } from './Session/TokenMismatchException';
+
+// Session Contract
+export type { Store as SessionStore } from './Session/Contracts/Store';
+
+// Session Stores
+export { BaseSessionStore } from './Session/Stores/BaseSessionStore';
+export type { SessionStoreConfig } from './Session/Stores/BaseSessionStore';
+export { ArraySessionStore } from './Session/Stores/ArraySessionStore';
+export { FileSessionStore } from './Session/Stores/FileSessionStore';
+export { CookieSessionStore } from './Session/Stores/CookieSessionStore';
+
+// Session Middleware
+export { StartSession, makeStartSession, resolveSessionManager } from './Session/Middleware/StartSession';
+export { VerifyCsrfToken, makeVerifyCsrfToken, XSRF_COOKIE_NAME } from './Session/Middleware/VerifyCsrfToken';
+export type { CsrfOptions } from './Session/Middleware/VerifyCsrfToken';
 
 // View
 export { View } from './View/View';
