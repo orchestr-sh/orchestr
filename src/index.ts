@@ -119,6 +119,8 @@ export {
   encrypt,
   decrypt,
   auth,
+  factory,
+  fake,
 } from './Support/helpers';
 
 // Support Collections
@@ -240,6 +242,25 @@ export { ForeignKeyDefinition as ForeignKeyDefinitionBuilder } from './Database/
 // Database Seeders
 export { Seeder } from './Database/Seeders/Seeder';
 export { SeederRunner } from './Database/Seeders/SeederRunner';
+
+// Database Factories
+export { Factory, FactoryConfiguration, Sequence } from './Database/Factories/Factory';
+export { FactoryBuilder } from './Database/Factories/FactoryBuilder';
+export type {
+  EnsembleClass,
+  FactoryAttributes,
+  FactoryHook,
+  FactoryState,
+  FactoryStateClosure,
+  PendingFor,
+  PendingHas,
+  SequenceClosure,
+  SequenceItem,
+} from './Database/Factories/Factory';
+export { registerFactory, forgetFactory, factoryForModel, resolveModelFactory } from './Database/Factories/HasFactory';
+export type { FactoryClass } from './Database/Factories/HasFactory';
+export { Fake } from './Database/Factories/Fake';
+export type { FakeProvider } from './Database/Factories/Fake';
 
 // Console
 export { Command } from './Console/Command';

@@ -618,6 +618,151 @@ export default class DatabaseSeeder extends Seeder {
 }
 ```
 
+## Model Factories
+
+Factories generate model attributes for tests and seeders so you never hand-build records again. A factory is a class extending `Factory<TModel>` with a `definition()` method; `registerFactory(UserFactory)` pairs the model and factory by convention (`User` -> `UserFactory`), which lets every model call `User.factory()`.
+
+```typescript
+import { Ensemble, Factory, fake, registerFactory } from '@orchestr-sh/orchestr';
+
+export class User extends Ensemble {
+  static fillable = ['name', 'email'];
+
+  posts() {
+    return this.hasMany(Post, 'user_id');
+  }
+}
+
+export class UserFactory extends Factory<User> {
+  static model = User;
+
+  definition() {
+    return {
+      name: fake('name.fullName'),
+      email: fake('internet.email'),
+    };
+  }
+
+  // State transformations, callable like admin()
+  admin() {
+    return this.state({ admin: true });
+  }
+}
+
+registerFactory(UserFactory);
+```
+
+### Creating Models
+
+```typescript
+const user = await User.factory().make(); // unsaved model with generated attributes
+await User.factory().create(); // persisted model
+const users = await User.factory().count(3).create(); // three persisted models
+
+await User.factory().state({ admin: true }).create(); // state override
+await User.factory().make({ name: 'Ada' }); // attributes passed inline
+await User.factory().admin().create(); // named state method
+
+// Sequences cycle values deterministically, one per record
+await User.factory()
+  .count(4)
+  .sequence([{ admin: true }, { admin: false }])
+  .create();
+
+// Plain attribute records, no model instances
+const attributes = await User.factory().raw();
+
+// Bulk helpers
+await User.factory().makeMany(2); // two unsaved models
+await User.factory().createMany([{ name: 'A' }, { name: 'B' }]); // per-record states
+
+// Global helper, same resolution convention
+await factory(User, 3).create();
+
+// Models whose factory breaks the convention override newFactory()
+class Page extends Ensemble {
+  static newFactory() {
+    return new CustomPageFactory();
+  }
+}
+```
+
+Mass assignment protection is disabled for factory-built attributes, just like Laravel.
+
+### Relationships
+
+```typescript
+// has() creates children around each parent (Post -> posts guessed by convention)
+const user = await User.factory().has(Post.factory().count(2)).create();
+
+// Explicit count and relationship name also supported
+await User.factory().has(Post.factory(), 3, 'posts').create();
+
+// for() wires the child to a belongsTo parent...
+const posts = await Post.factory().count(3).for(User.factory().state({ name: 'Jessica' })).create();
+
+// ...including existing model instances, shared across all records
+const posts = await Post.factory().count(3).for(existingUser).create();
+
+// Relationship factories can also be embedded in definitions
+class PostFactory extends Factory<Post> {
+  static model = Post;
+
+  definition() {
+    return {
+      user_id: User.factory(), // created, its key stored in user_id
+      title: fake('lorem.sentence'),
+    };
+  }
+}
+```
+
+### Callbacks
+
+```typescript
+class UserFactory extends Factory<User> {
+  static model = User;
+
+  configure(): this {
+    return this
+      .afterMaking((user) => {
+        /* runs on built models, before saving */
+      })
+      .afterCreating(async (user) => {
+        /* runs after the user (and its has() children) are persisted */
+      });
+  }
+}
+
+// Global hooks for every factory, optionally scoped to one model class
+Factory.configure((config) => {
+  config.afterCreating((user) => audit(user), User);
+});
+```
+
+### Faker
+
+`fake()` reads from `@faker-js/faker`, an **optional peer dependency**:
+
+```bash
+npm install @faker-js/faker --save-dev
+```
+
+Factories load the generator automatically before evaluating a definition. Definitions that never call `fake()` work without the package installed, and calling `fake()` without it throws a clear installation message rather than returning random data. Use `await Fake.load()` when calling `fake()` outside of a factory.
+
+For deterministic tests without Faker - or with a pinned seed - substitute a provider behind the `Fake` adapter:
+
+```typescript
+Fake.use({
+  name: { fullName: () => 'Ada Lovelace' },
+  internet: { email: () => 'ada@example.com' },
+});
+
+// With real Faker installed:
+Fake.seed(1234);
+await Fake.load();
+```
+
 ## Events and Listeners
 
 Laravel-style event system with listeners, subscribers, and automatic discovery.
