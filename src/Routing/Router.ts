@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
+import type { Config as ConfigClass } from '@/Foundation/Config/Config';
 import type { Handler } from '@/Foundation/Exceptions';
 import type { ViewFactory } from '@/View/ViewFactory';
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
@@ -90,7 +91,35 @@ export class Router {
   constructor(app: Application) {
     this.app = app;
     this.routeResolver = new RouteResolver(app);
-    this.urlGenerator = new UrlGenerator(() => this.namedRoutes);
+    // URL signing reads the same application key the encrypter uses:
+    // config('app.key') first, APP_KEY from the environment as the fallback
+    this.urlGenerator = new UrlGenerator(
+      () => this.namedRoutes,
+      () => this.resolveSigningKey()
+    );
+  }
+
+  /**
+   * The application key for URL signatures, resolved per call so late-bound
+   * configuration still works
+   */
+  private resolveSigningKey(): string | Buffer | null {
+    try {
+      const config = this.app.bound('config') ? this.app.make<ConfigClass>('config') : null;
+      const key = config?.get<string>('app.key');
+
+      if (typeof key === 'string' && key !== '') {
+        return key;
+      }
+
+      if (Buffer.isBuffer(key)) {
+        return key;
+      }
+    } catch {
+      // Config repository unavailable: fall through to the environment
+    }
+
+    return process.env.APP_KEY ?? null;
   }
 
   /**
@@ -310,6 +339,38 @@ export class Router {
    */
   url(name: string, parameters: RouteUrlParameters = {}): string {
     return this.urlGenerator.route(name, parameters);
+  }
+
+  /**
+   * Generate a signed URL for a named route
+   * Laravel: URL::signedRoute('unsubscribe', ['user' => 1])
+   */
+  signedRoute(name: string, parameters: RouteUrlParameters = {}, expiration?: number | Date): string {
+    return this.urlGenerator.signedRoute(name, parameters, expiration);
+  }
+
+  /**
+   * Generate a temporary signed URL for a named route
+   * Laravel: URL::temporarySignedRoute('invite', now()->addMinutes(30))
+   */
+  temporarySignedRoute(name: string, expiration: number | Date, parameters: RouteUrlParameters = {}): string {
+    return this.urlGenerator.temporarySignedRoute(name, expiration, parameters);
+  }
+
+  /**
+   * Determine whether a request carries a valid (and unexpired) signature
+   * Laravel: $request->hasValidSignature()
+   */
+  hasValidSignature(request: Request): boolean {
+    return this.urlGenerator.hasValidSignature(request);
+  }
+
+  /**
+   * The URL generator behind url()/signedRoute(), for apps that want to
+   * build URLs without the router facade
+   */
+  getUrlGenerator(): UrlGenerator {
+    return this.urlGenerator;
   }
 
   /**

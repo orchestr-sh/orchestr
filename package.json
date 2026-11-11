@@ -173,7 +173,17 @@
   },
   "peerDependencies": {
     "drizzle-orm": ">=0.30.0",
-    "typescript": ">=5.0.0"
+    "typescript": ">=5.0.0",
+    "bcrypt": ">=5.0.0",
+    "argon2": ">=0.30.0"
+  },
+  "peerDependenciesMeta": {
+    "bcrypt": {
+      "optional": true
+    },
+    "argon2": {
+      "optional": true
+    }
   },
   "optionalDependencies": {
     "better-sqlite3": "^13.0.3",

@@ -55,7 +55,8 @@ export type CastType =
   | 'collection'
   | 'date'
   | 'datetime'
-  | 'timestamp';
+  | 'timestamp'
+  | 'encrypted';
 
 /**
  * Attribute mutator function type

@@ -1144,6 +1144,73 @@ import { csrf_field } from '@orchestr-sh/orchestr';
 Route.get('/charge', () => `<form method="POST" action="/charge">${csrf_field()}</form>`);
 ```
 
+## Hashing & Encryption
+
+`HashManager` puts password hashers behind the `Hasher` contract with three
+drivers: `scrypt` (the default, pure `node:crypto` - no native addon
+required), `bcrypt` and `argon2` (each an optional peer dependency that is
+only loaded when used; installing orchestr without them yields an error that
+names the package to add). Hash strings embed their algorithm and cost
+parameters, so `check()` verifies old hashes correctly and `needsRehash()`
+spots cost or algorithm changes:
+
+```typescript
+import { HashServiceProvider, Hash, hash } from '@orchestr-sh/orchestr';
+
+app.instance('config', new Config({
+  hashing: { driver: 'scrypt', scrypt: { cost: 16384 } }, // or bcrypt/argon2
+}));
+app.register(HashServiceProvider);
+
+const hashed = Hash.make('secret'); // hash('secret') works too
+Hash.check('secret', hashed); // true - constant-time
+Hash.check('wrong', hashed); // false
+if (Hash.needsRehash(hashed)) { /* cost changed - rehash on login */ }
+Hash.verifyConfiguration(); // throws when the configured options cannot round-trip
+```
+
+The `Encrypter` is AES-256-GCM with base64 JSON payloads carrying `iv`,
+`value` and `tag`; tampered payloads or foreign keys fail with a
+`DecryptException`, and an invalid `APP_KEY` (base64: prefixed, plain base64
+or raw 32-byte) fails fast at boot:
+
+```typescript
+import { EncryptionServiceProvider, Crypt, encrypt, decrypt } from '@orchestr-sh/orchestr';
+
+app.instance('config', new Config({ app: { key: 'base64:' + crypto.randomBytes(32).toString('base64') } }));
+app.register(EncryptionServiceProvider);
+
+Crypt.decrypt(Crypt.encrypt({ a: 1 })); // { a: 1 }  (encrypt()/decrypt() too)
+Crypt.decryptString(Crypt.encryptString('secret')); // 'secret'
+
+class Credential extends Ensemble {
+  static fillable = ['secret'];
+  static casts = { secret: 'encrypted' }; // stores ciphertext, reads plaintext
+}
+```
+
+## Signed URLs
+
+`UrlGenerator` (reached through the router, the `Route` facade or
+`kernel.middlewareAlias('signed', ValidateSignature)`) signs URLs with an
+HMAC-SHA256 of the app key, covering path and query. An optional
+`expires` (unix seconds or a `Date`) limits the link's lifetime, and the
+middleware answers invalid, modified or expired signatures with a 403:
+
+```typescript
+import { ValidateSignature } from '@orchestr-sh/orchestr';
+
+kernel.middlewareAlias('signed', ValidateSignature);
+
+const route = Route.get('/unsubscribe/:id', unsubscribe).middleware('signed');
+Route.name('unsubscribe', route);
+
+const url = Route.signedRoute('unsubscribe', { id: 1 }); // ?signature=...
+const temp = Route.temporarySignedRoute('unsubscribe', Math.floor(Date.now() / 1000) + 1800, { id: 1 });
+
+Route.hasValidSignature(request); // false for a modified path or expired link
+```
+
 ## Configuration
 
 ### Database Setup
@@ -2208,6 +2275,8 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ View System (Templates, Layouts, Directives)
 - ✅ Soft Deletes
 - ✅ Attribute Casting
+- ✅ Password Hashing (scrypt default, bcrypt/argon2 optional, needsRehash)
+- ✅ Encryption (AES-256-GCM payloads, encrypted casts) & Signed URLs
 - ✅ Timestamps
 - ✅ @DynamicRelation Decorator
 

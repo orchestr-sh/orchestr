@@ -2,7 +2,9 @@
  * Helper functions - Laravel-style global helpers
  */
 
+import type { Encrypter as EncrypterContract } from '@/Encryption/Contracts/Encrypter';
 import type { Config as ConfigClass } from '@/Foundation/Config/Config';
+import type { HashManager as HashManagerContract } from '@/Hashing/HashManager';
 import type { RouteUrlParameters } from '@/Routing/UrlGenerator';
 import type { Store as SessionStore } from '@/Session/Contracts/Store';
 import type { SessionManager } from '@/Session/SessionManager';
@@ -205,6 +207,62 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/**
+ * Access password hashing.
+ *
+ * With a value it returns that value's hash using the configured driver;
+ * with no arguments it hands back the hashing manager for check(),
+ * needsRehash(), verifyConfiguration() and driver() work:
+ *
+ *   const hashed = hash('secret');
+ *   hash().check('secret', hashed); // true
+ */
+export function hash(): HashManagerContract;
+export function hash(value: string, options?: Record<string, any>): string;
+export function hash(value?: string, options?: Record<string, any>): any {
+  const manager = requireHash();
+
+  return value === undefined ? manager : manager.make(value, options);
+}
+
+/**
+ * Resolve the hashing manager from the container
+ */
+function requireHash(): HashManagerContract {
+  if (!globalApp || !globalApp.bound('hash')) {
+    throw new Error('Hashing is not available. Register the HashServiceProvider first.');
+  }
+
+  return globalApp.make<HashManagerContract>('hash');
+}
+
+/**
+ * Encrypt a value with the application encrypter.
+ * Laravel: Crypt::encrypt()
+ */
+export function encrypt(value: unknown, serialize: boolean = true): string {
+  return requireEncrypter().encrypt(value, serialize);
+}
+
+/**
+ * Decrypt a payload produced by encrypt().
+ * Laravel: Crypt::decrypt()
+ */
+export function decrypt<T = any>(payload: string, unserialize: boolean = true): T {
+  return requireEncrypter().decrypt<T>(payload, unserialize);
+}
+
+/**
+ * Resolve the application encrypter from the container
+ */
+function requireEncrypter(): EncrypterContract {
+  if (!globalApp || !globalApp.bound('encrypter')) {
+    throw new Error('Encryption is not available. Register the EncryptionServiceProvider first.');
+  }
+
+  return globalApp.make<EncrypterContract>('encrypter');
 }
 
 /**

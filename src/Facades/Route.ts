@@ -29,6 +29,9 @@ class RouteFacade extends Facade {
   static view: Router['view'];
   static redirect: Router['redirect'];
   static url: Router['url'];
+  static signedRoute: Router['signedRoute'];
+  static temporarySignedRoute: Router['temporarySignedRoute'];
+  static hasValidSignature: Router['hasValidSignature'];
   static current: Router['current'];
   static currentRouteName: Router['currentRouteName'];
 }
