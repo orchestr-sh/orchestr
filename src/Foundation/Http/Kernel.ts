@@ -1,6 +1,8 @@
 import { IncomingMessage, ServerResponse, createServer, Server } from 'http';
+import type { Handler } from '@/Foundation/Exceptions';
 import type { Middleware, MiddlewareArgument } from '@/Routing/Pipeline';
 import { Application } from '@/Foundation/Application';
+import { resolveExceptionHandler } from '@/Foundation/Exceptions';
 import { Pipeline } from '@/Routing/Pipeline';
 import { Request } from '@/Routing/Request';
 import { Response } from '@/Routing/Response';
@@ -15,10 +17,14 @@ export class Kernel {
   protected router: Router;
   protected middleware: MiddlewareArgument[] = [];
   protected server?: Server;
+  protected exceptionHandler?: Handler;
 
   constructor(app: Application) {
     this.app = app;
     this.router = app.make<Router>('router');
+    // The same container-resolved handler serves Kernel.handle() and
+    // Router.dispatch(), so both answer errors identically
+    this.exceptionHandler = resolveExceptionHandler(app);
   }
 
   /**
@@ -38,7 +44,9 @@ export class Kernel {
       // Run global middleware then dispatch to router
       await this.sendRequestThroughRouter(request, response);
     } catch (error) {
-      this.handleException(error, response);
+      // Report through and render with the shared exception handler; errors
+      // already answered by the Router never surface here
+      await this.getExceptionHandler().handle(request, error, response);
     }
   }
 
@@ -54,17 +62,12 @@ export class Kernel {
   }
 
   /**
-   * Handle an exception
+   * The shared exception handler, resolved from the container
+   * Laravel: Kernel::getExceptionHandler() via the contract binding
    */
-  private handleException(error: any, response: Response): void {
-    console.error('Error handling request:', error);
-
-    if (!response.finished) {
-      response.status(500).json({
-        message: error instanceof Error ? error.message : 'Internal Server Error',
-        ...(this.app.isDebug() && { stack: error instanceof Error ? error.stack : undefined }),
-      });
-    }
+  public getExceptionHandler(): Handler {
+    this.exceptionHandler ??= resolveExceptionHandler(this.app);
+    return this.exceptionHandler;
   }
 
   /**

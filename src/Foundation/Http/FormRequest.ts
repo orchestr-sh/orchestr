@@ -1,5 +1,5 @@
+import { AccessDeniedHttpException } from '@/Foundation/Exceptions/AccessDeniedHttpException';
 import { Request } from '@/Routing/Request';
-import { Response } from '@/Routing/Response';
 import { ValidationException } from './ValidationException';
 import { Validator, ValidationRules } from './Validator';
 
@@ -24,7 +24,7 @@ export abstract class FormRequest {
    * Laravel: public function authorize(): bool
    *
    * Override this method to implement authorization logic.
-   * Return false to deny access (403 response).
+   * Return false to deny access (the exception handler renders a 403).
    *
    * @returns {boolean | Promise<boolean>}
    */
@@ -66,13 +66,13 @@ export abstract class FormRequest {
    * Validate the request
    *
    * @throws {ValidationException} If validation fails
-   * @throws {Error} If authorization fails
+   * @throws {AccessDeniedHttpException} If authorization fails
    */
   async validate(): Promise<void> {
     // Check authorization first
     const authorized = await this.authorize();
     if (!authorized) {
-      throw new Error('This action is unauthorized.');
+      throw new AccessDeniedHttpException();
     }
 
     // Get validation rules
@@ -155,60 +155,19 @@ export abstract class FormRequest {
   }
 
   /**
-   * Handle a failed authorization attempt
-   * Laravel: protected function failedAuthorization()
-   *
-   * @param {Response} res
-   */
-  handleFailedAuthorization(res: Response): void {
-    res.status(403).json({
-      message: 'This action is unauthorized.',
-    });
-  }
-
-  /**
-   * Handle a failed validation attempt
-   * Laravel: protected function failedValidation(Validator $validator)
-   *
-   * @param {Response} res
-   * @param {ValidationException} exception
-   */
-  handleFailedValidation(res: Response, exception: ValidationException): void {
-    res.status(422).json({
-      message: 'The given data was invalid.',
-      errors: exception.errors(),
-    });
-  }
-
-  /**
    * Static factory method to create and validate a FormRequest
    *
+   * Validation and authorization failures throw ValidationException and
+   * AccessDeniedHttpException respectively; the exception handler renders
+   * the corresponding response, so nothing is written here.
+   *
    * @param {Request} request
-   * @param {Response} res
    * @returns {Promise<T>} The validated FormRequest instance
    */
-  static async validate<T extends FormRequest>(
-    this: new (request: Request) => T,
-    request: Request,
-    res: Response
-  ): Promise<T> {
+  static async validate<T extends FormRequest>(this: new (request: Request) => T, request: Request): Promise<T> {
     const formRequest = new this(request);
+    await formRequest.validate();
 
-    try {
-      await formRequest.validate();
-      return formRequest;
-    } catch (error) {
-      if (error instanceof ValidationException) {
-        formRequest.handleFailedValidation(res, error);
-        throw error;
-      }
-
-      if (error instanceof Error && error.message === 'This action is unauthorized.') {
-        formRequest.handleFailedAuthorization(res);
-        throw error;
-      }
-
-      throw error;
-    }
+    return formRequest;
   }
 }

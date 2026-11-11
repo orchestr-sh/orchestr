@@ -23,9 +23,9 @@
 
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { Application } from '@/Foundation/Application';
+import { ModelNotFoundException } from '@/Foundation/Exceptions/ModelNotFoundException';
 import { FormRequest } from '@/Foundation/Http/FormRequest';
 import { Str } from '@/Support/Str';
-import { ModelNotFoundException } from './ModelNotFoundException';
 import { Request } from './Request';
 import { Response } from './Response';
 import { Route, RouteAction } from './Route';

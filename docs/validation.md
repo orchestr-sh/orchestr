@@ -150,6 +150,10 @@ class CreateUserRequest extends FormRequest {
 ```
 
 Use it in your controller/handler to validate and access sanitized inputs.
+Injected `FormRequest` parameters are validated before the action runs: a
+failure throws `ValidationException` (rendered as 422 with the error bag) and
+an `authorize()` denial throws `AccessDeniedHttpException` (rendered as 403) -
+both through the shared exception handler.
 
 ## Auth Validation
 

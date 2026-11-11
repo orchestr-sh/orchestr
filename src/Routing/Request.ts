@@ -208,11 +208,32 @@ export class Request {
 
   /**
    * Determine if the request expects JSON
-   * Laravel: $request->expectsJson()
+   * Laravel: $request->expectsJson() ($request->ajax() || $request->prefersJson())
    */
   expectsJson(): boolean {
+    return this.ajax() || this.prefersJson();
+  }
+
+  /**
+   * Determine if the request's Accept header prefers JSON
+   * Laravel: $request->prefersJson()
+   */
+  prefersJson(): boolean {
     const accept = this.header('accept') || '';
     return accept.includes('application/json');
+  }
+
+  /**
+   * Determine if the request accepts HTML responses
+   * Laravel: $request->prefersHtml()
+   *
+   * Browsers list text/html explicitly; wildcard accepts are not treated as
+   * HTML so tooling without an Accept header keeps the JSON rendering it got
+   * before.
+   */
+  acceptsHtml(): boolean {
+    const accept = this.header('accept') || '';
+    return accept.includes('text/html') || accept.includes('application/xhtml+xml');
   }
 
   /**

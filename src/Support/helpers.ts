@@ -128,6 +128,13 @@ export function route(name: string, parameters?: RouteUrlParameters): string {
 export { collect } from '@/Support/Collection';
 
 /**
+ * Re-exports of the HTTP abort helpers, implementation in
+ * Foundation/Exceptions (the exception handler renders the thrown exception).
+ * Laravel: abort(), abort_if(), abort_unless()
+ */
+export { abort, abort_if, abort_unless } from '@/Foundation/Exceptions/abort';
+
+/**
  * Access the Str utility class without importing it directly. Laravel's
  * `str()` helper returns a fluent Stringable; this port keeps Str purely
  * static, so str() hands back the class itself:

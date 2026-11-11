@@ -15,6 +15,25 @@ export { Rule } from './Foundation/Http/Rule';
 export { Config as ConfigClass } from './Foundation/Config/Config';
 export { ConfigServiceProvider } from './Foundation/Config/ConfigServiceProvider';
 
+// Foundation Exceptions
+export {
+  Handler,
+  resolveExceptionHandler,
+  EXCEPTION_HANDLER_BINDING,
+  HttpException,
+  httpStatusText,
+  NotFoundHttpException,
+  AccessDeniedHttpException,
+  AuthenticationException,
+  ModelNotFoundException,
+  JsonRenderer,
+  HtmlRenderer,
+  abort,
+  abort_if,
+  abort_unless,
+} from './Foundation/Exceptions';
+export type { ExceptionDetails, ExceptionRenderer } from './Foundation/Exceptions';
+
 // Container
 export { Container } from './Container/Container';
 
@@ -24,11 +43,12 @@ export { Pipeline } from './Routing/Pipeline';
 export { Route as RouteClass } from './Routing/Route';
 export { Request } from './Routing/Request';
 export { Response } from './Routing/Response';
+export { ResponseObject, JsonResponse, RedirectResponse, StreamedResponse } from './Routing/Responses';
+export type { StreamCallback } from './Routing/Responses';
 export { Controller } from './Routing/Controller';
 export { Action } from './Routing/Action';
 export { RouteResolver } from './Routing/RouteResolver';
 export type { RouteBinder, ActionReflection } from './Routing/RouteResolver';
-export { ModelNotFoundException } from './Routing/ModelNotFoundException';
 export { UrlGenerator } from './Routing/UrlGenerator';
 export type { RouteUrlParameters } from './Routing/UrlGenerator';
 export { buildResourceRoutes } from './Routing/ResourceRegistrar';
