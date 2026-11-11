@@ -1,6 +1,7 @@
 import { IncomingMessage } from 'http';
 import { parse as parseQuery } from 'querystring';
 import { parse as parseUrl } from 'url';
+import type { Store as SessionStore } from '@/Session/Contracts/Store';
 import { Route } from './Route';
 
 /**
@@ -18,6 +19,8 @@ export class Request {
   public body: any = {};
 
   private matchedRoute?: Route;
+
+  private sessionStore?: SessionStore;
 
   private bodyParsed: boolean = false;
 
@@ -78,6 +81,66 @@ export class Request {
   header(name: string, defaultValue?: string): string | undefined {
     const value = this.headers[name.toLowerCase()];
     return Array.isArray(value) ? value[0] : value || defaultValue;
+  }
+
+  /**
+   * Parse the request's Cookie header
+   * Laravel: $request->cookie() / the cookie bag
+   */
+  cookies(): Record<string, string> {
+    const parsed: Record<string, string> = {};
+
+    for (const pair of (this.header('cookie') ?? '').split(';')) {
+      const separator = pair.indexOf('=');
+
+      if (separator === -1) {
+        continue;
+      }
+
+      const name = pair.slice(0, separator).trim();
+
+      if (name) {
+        parsed[decodeCookieComponent(name)] = decodeCookieComponent(pair.slice(separator + 1).trim());
+      }
+    }
+
+    return parsed;
+  }
+
+  /**
+   * Get a cookie value from the request
+   * Laravel: $request->cookie('name', 'default')
+   */
+  cookie(name: string, defaultValue?: string): string | undefined {
+    return this.cookies()[name] ?? defaultValue;
+  }
+
+  /**
+   * The session store bound to this request by the session middleware
+   * Laravel: $request->session()
+   */
+  session(): SessionStore {
+    if (!this.sessionStore) {
+      throw new Error('Session store not set on request. Is the session middleware registered?');
+    }
+
+    return this.sessionStore;
+  }
+
+  /**
+   * Determine whether a session has been started for this request
+   * Laravel: $request->hasSession()
+   */
+  hasSession(): boolean {
+    return this.sessionStore !== undefined;
+  }
+
+  /**
+   * Bind the session store to this request
+   * Laravel: $request->setLaravelSession($session)
+   */
+  setSession(session: SessionStore): void {
+    this.sessionStore = session;
   }
 
   /**
@@ -288,5 +351,17 @@ export class Request {
     }
 
     return this.raw.socket.remoteAddress;
+  }
+}
+
+/**
+ * Percent-decode a cookie component, keeping the raw value when it is not
+ * a valid escape sequence
+ */
+function decodeCookieComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
 }
