@@ -1321,6 +1321,67 @@ class UpdatePostRequest extends FormRequest {
 }
 ```
 
+## Filesystem & File Uploads
+
+`FilesystemManager` builds disks from the `filesystems` config section behind a
+small `Disk` contract (`put`, `get`, `exists`, `delete`, `copy`, `move`, `size`,
+`lastModified`, `files`/`allFiles`, `directories`/`allDirectories`,
+`makeDirectory`, `deleteDirectory`, `url`, `path`, `temporaryUrl`) over a
+lower-level driver contract, so an S3 disk can be registered later with
+`manager.extend('s3', ...)` without touching callers (OCP). Built in: the
+`local`, `public` and `null` disks with configurable roots and URLs; the local
+adapter jails every path below its root (`..` escapes throw
+`PathTraversalException`) and writes atomically via temp-file + rename:
+
+```typescript
+import { FilesystemServiceProvider, Storage, storage_path } from '@orchestr-sh/orchestr';
+
+app.instance('config', new Config({
+  filesystems: {
+    default: 'local', // storage/app, no URLs
+    disks: {
+      local: { driver: 'local', root: storage_path('app') },
+      public: { driver: 'local', root: storage_path('app/public'), url: '/storage' },
+      null: { driver: 'null' }, // accepts writes, stores nothing
+    },
+  },
+}));
+app.register(FilesystemServiceProvider);
+
+await Storage.put('notes.txt', 'Hello World'); // default disk
+(await Storage.get('notes.txt'))?.toString(); // Buffer reads
+await Storage.disk('local').delete('notes.txt');
+
+Storage.disk('public').url('avatars/photo.png'); // '/storage/avatars/photo.png'
+```
+
+Multipart requests (any method with a body, DELETE included) are parsed by
+`Request::parseBody()` with per-file and per-body memory ceilings: file parts
+arrive as `UploadedFile` instances through `request.file('avatar')`,
+`request.hasFile()` and `request.allFiles()`, oversized parts are rejected as
+invalid uploads instead of exhausting memory, and storing delegates entirely
+to the Disk contract - `store('avatars')` writes hash-named files to the
+configured disk and returns the stored path, `storeAs`/`storePublicly`/
+`storePubliclyAs` cover explicit names and the public disk:
+
+```typescript
+import { UploadedFile } from '@orchestr-sh/orchestr';
+
+Route.post('/profile', async (request) => {
+  const avatar = request.file('avatar') as UploadedFile; // multipart body parsed by parseBody()
+
+  const path = await avatar.store('avatars'); // storage/app/avatars/<hash>.png
+  const publicPath = await avatar.storePublicly('avatars'); // served at /storage/avatars/<hash>.png
+
+  return { path, publicPath };
+});
+```
+
+Upload validation is wired into the existing rules: `file`, `image`, `mimes`,
+`mimetypes`, `dimensions` and the kilobyte `min`/`max`/`size` checks read the
+upload's bytes (magic-byte MIME sniffing and image headers), so a text file
+renamed `.png` fails `image` and a 4 MB upload fails `max:1024`.
+
 ## Configuration
 
 ### Database Setup
@@ -2388,6 +2449,7 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Password Hashing (scrypt default, bcrypt/argon2 optional, needsRehash)
 - ✅ Encryption (AES-256-GCM payloads, encrypted casts) & Signed URLs
 - ✅ Authentication (session + token guards, remember me, Ensemble user provider, auth/guest middleware)
+- ✅ Filesystem & Uploads (local/public/null disks, path-traversal protection, atomic writes, multipart parsing, UploadedFile storage, upload validation rules)
 - ✅ Timestamps
 - ✅ @DynamicRelation Decorator
 

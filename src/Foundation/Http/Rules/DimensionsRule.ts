@@ -1,3 +1,5 @@
+import type { ImageDimensions } from '@/Support/Mimes';
+import { isUploadedFile } from '@/Routing/UploadedFile';
 import { BaseRule } from './Base';
 
 type DimensionsOptions = {
@@ -16,11 +18,28 @@ export class DimensionsRule extends BaseRule {
     this.invokable = true;
     this.opts = opts;
   }
-  passes(_attribute: string, value: any): boolean {
+  async passes(_attribute: string, value: any): Promise<boolean> {
     if (!value || typeof value !== 'object') return true;
-    const w = Number(value.width ?? value.w);
-    const h = Number(value.height ?? value.h);
-    if (!Number.isFinite(w) || !Number.isFinite(h)) return true;
+
+    let dims: ImageDimensions | null = null;
+
+    if (isUploadedFile(value)) {
+      // Read the raster header from the upload's bytes - getimagesize in PHP
+      dims = await value.dimensions();
+    } else {
+      const w = Number(value.width ?? value.w);
+      const h = Number(value.height ?? value.h);
+
+      if (Number.isFinite(w) && Number.isFinite(h)) {
+        dims = { width: w, height: h };
+      }
+    }
+
+    if (dims === null) return true;
+
+    const w = dims.width;
+    const h = dims.height;
+
     if (this.opts.width !== undefined && w !== this.opts.width) return false;
     if (this.opts.height !== undefined && h !== this.opts.height) return false;
     if (this.opts.minWidth !== undefined && w < this.opts.minWidth) return false;
