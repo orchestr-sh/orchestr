@@ -42,6 +42,21 @@ export { Router } from './Routing/Router';
 export { Pipeline } from './Routing/Pipeline';
 export { Route as RouteClass } from './Routing/Route';
 export { Request } from './Routing/Request';
+export type { ParseBodyOptions } from './Routing/Request';
+export {
+  UploadedFile,
+  isUploadedFile,
+  UPLOAD_ERR_OK,
+  UPLOAD_ERR_INI_SIZE,
+  UPLOAD_ERR_FORM_SIZE,
+  UPLOAD_ERR_PARTIAL,
+  UPLOAD_ERR_NO_FILE,
+  UPLOAD_ERR_NO_TMP_DIR,
+  UPLOAD_ERR_CANT_WRITE,
+  UPLOAD_ERR_EXTENSION,
+} from './Routing/UploadedFile';
+export type { UploadedFileOptions, UploadStoreOptions } from './Routing/UploadedFile';
+export { FileUploadException } from './Routing/FileUploadException';
 export { Response } from './Routing/Response';
 export { ResponseObject, JsonResponse, RedirectResponse, StreamedResponse } from './Routing/Responses';
 export type { StreamCallback } from './Routing/Responses';
@@ -64,6 +79,7 @@ export { Bus } from './Facades/Bus';
 export { Cache } from './Facades/Cache';
 export { View as ViewFacade } from './Facades/View';
 export { Session } from './Facades/Session';
+export { Storage } from './Facades/Storage';
 export { Auth } from './Facades/Auth';
 export { Gate as GateFacade } from './Facades/Gate';
 export { Hash } from './Facades/Hash';
@@ -75,6 +91,7 @@ export {
   base_path,
   routes_path,
   resource_path,
+  storage_path,
   view,
   route,
   str,
@@ -128,6 +145,7 @@ export { DatabaseServiceProvider } from './Database/DatabaseServiceProvider';
 export { QueueServiceProvider } from './Queue/QueueServiceProvider';
 export { CacheServiceProvider } from './Cache/CacheServiceProvider';
 export { SessionServiceProvider } from './Session/SessionServiceProvider';
+export { FilesystemServiceProvider } from './Filesystem/FilesystemServiceProvider';
 export { HashServiceProvider } from './Hashing/HashServiceProvider';
 export { EncryptionServiceProvider } from './Encryption/EncryptionServiceProvider';
 export { AuthServiceProvider } from './Auth/AuthServiceProvider';
@@ -466,6 +484,20 @@ export { CookieSessionStore } from './Session/Stores/CookieSessionStore';
 export { StartSession, makeStartSession, resolveSessionManager } from './Session/Middleware/StartSession';
 export { VerifyCsrfToken, makeVerifyCsrfToken, XSRF_COOKIE_NAME } from './Session/Middleware/VerifyCsrfToken';
 export type { CsrfOptions } from './Session/Middleware/VerifyCsrfToken';
+
+// Filesystem
+export { FilesystemManager, FILESYSTEM_DEFAULTS } from './Filesystem/FilesystemManager';
+export type { FilesystemConfig, DiskConfig, FilesystemDriverFactory } from './Filesystem/FilesystemManager';
+export { FilesystemDisk } from './Filesystem/FilesystemDisk';
+export { LocalFilesystemAdapter } from './Filesystem/LocalFilesystemAdapter';
+export type { LocalAdapterConfig } from './Filesystem/LocalFilesystemAdapter';
+export { NullFilesystemAdapter } from './Filesystem/NullFilesystemAdapter';
+export { FileNotFoundException } from './Filesystem/FileNotFoundException';
+export { PathTraversalException } from './Filesystem/PathTraversalException';
+
+// Filesystem Contracts
+export type { Disk, Uploadable } from './Filesystem/Contracts/Disk';
+export type { FilesystemAdapter, WriteOptions } from './Filesystem/Contracts/FilesystemAdapter';
 
 // Hashing
 export { HashManager, HASHING_DEFAULTS } from './Hashing/HashManager';

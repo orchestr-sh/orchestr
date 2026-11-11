@@ -105,12 +105,27 @@ const rules = {
 
 ## Files
 
+`file`, `image`, `mimes` and `mimetypes` accept `UploadedFile` instances
+straight out of a multipart request (`request.all()` carries them alongside
+text input, so FormRequest rules apply to uploads too):
+
 ```ts
 const rules = {
   avatar: [Rule.file(), Rule.image(), Rule.mimes(['png','jpg'])],
   doc: [Rule.file(), Rule.mimetypes(['application/pdf'])],
 };
 ```
+
+- `file` passes only uploads whose transfer succeeded (`getError() === UPLOAD_ERR_OK`).
+- `image`, `mimes` and `mimetypes` sniff the file's bytes (magic signatures)
+  and fall back to the client-reported type, so a text file renamed `.png`
+  fails `mimes:png`.
+- `min`, `max` and `size` measure uploads in kilobytes; strings and numbers
+  keep their character/value meanings.
+- `dimensions` reads raster headers - `dimensions:min_width=100,max_height=600`
+  or `Rule.dimensions({ minWidth: 100 })`.
+- Plain objects exposing `mimetype`/`extension`/`width`/`height` are still
+  validated structurally for non-HTTP callers.
 
 ## Custom Messages
 

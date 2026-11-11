@@ -5,6 +5,10 @@
  * Provides validation rules and error handling
  */
 
+import type { ImageDimensions } from '@/Support/Mimes';
+import { UploadedFile, isUploadedFile } from '@/Routing/UploadedFile';
+import { IMAGE_EXTENSIONS } from '@/Support/Mimes';
+
 export type ValidationRule = string | Array<string | ValidationRuleObject> | ValidationRuleObject;
 export type ValidationRules = Record<string, ValidationRule>;
 
@@ -542,6 +546,15 @@ export class Validator {
 
       case 'min': {
         const minValue = params[0];
+        if (isUploadedFile(value)) {
+          if (value.getSize() / 1024 < parseFloat(minValue)) {
+            return {
+              passes: false,
+              message: this.getMessage(field, rule, `The ${attribute} must be at least ${minValue} kilobytes.`),
+            };
+          }
+          return { passes: true, message: '' };
+        }
         if (typeof value === 'string' && value.length < parseInt(minValue)) {
           return {
             passes: false,
@@ -559,6 +572,15 @@ export class Validator {
 
       case 'max': {
         const maxValue = params[0];
+        if (isUploadedFile(value)) {
+          if (value.getSize() / 1024 > parseFloat(maxValue)) {
+            return {
+              passes: false,
+              message: this.getMessage(field, rule, `The ${attribute} may not be greater than ${maxValue} kilobytes.`),
+            };
+          }
+          return { passes: true, message: '' };
+        }
         if (typeof value === 'string' && value.length > parseInt(maxValue)) {
           return {
             passes: false,
@@ -588,6 +610,15 @@ export class Validator {
 
       case 'size': {
         const sizeValue = params[0];
+        if (isUploadedFile(value)) {
+          if (value.getSize() / 1024 !== parseFloat(sizeValue)) {
+            return {
+              passes: false,
+              message: this.getMessage(field, rule, `The ${attribute} must be ${sizeValue} kilobytes.`),
+            };
+          }
+          return { passes: true, message: '' };
+        }
         if (typeof value === 'string' && value.length !== parseInt(sizeValue)) {
           return {
             passes: false,
@@ -1141,12 +1172,28 @@ export class Validator {
       }
 
       case 'file':
+        if (isUploadedFile(value)) {
+          if (!value.isValid()) {
+            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be a file.`) };
+          }
+          return { passes: true, message: '' };
+        }
         if (value && typeof value !== 'object') {
           return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be a file.`) };
         }
         return { passes: true, message: '' };
 
       case 'image':
+        if (isUploadedFile(value)) {
+          if (!value.isValid()) {
+            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be an image.`) };
+          }
+          const meta = await this.uploadMeta(value);
+          if (!IMAGE_EXTENSIONS.includes(meta.extension) && !meta.mimeType.startsWith('image/')) {
+            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be an image.`) };
+          }
+          return { passes: true, message: '' };
+        }
         if (value && typeof value === 'object') {
           const type = (value.mimetype || value.type || '').toString();
           if (!type.startsWith('image/')) {
@@ -1157,6 +1204,16 @@ export class Validator {
 
       case 'mimetypes': {
         const allowed = listParams;
+        if (isUploadedFile(value)) {
+          const meta = value.isValid() ? await this.uploadMeta(value) : null;
+          if (meta === null || !allowed.includes(meta.mimeType)) {
+            return {
+              passes: false,
+              message: this.getMessage(field, rule, `The ${attribute} has an invalid mimetype.`),
+            };
+          }
+          return { passes: true, message: '' };
+        }
         if (value && typeof value === 'object') {
           const type = (value.mimetype || value.type || '').toString();
           if (!allowed.includes(type)) {
@@ -1171,6 +1228,22 @@ export class Validator {
 
       case 'mimes': {
         const allowed = listParams;
+        if (isUploadedFile(value)) {
+          if (!value.isValid()) {
+            return {
+              passes: false,
+              message: this.getMessage(field, rule, `The ${attribute} has an invalid file type.`),
+            };
+          }
+          const meta = await this.uploadMeta(value);
+          if (!(allowed.includes(meta.extension) || allowed.some((m) => meta.mimeType.endsWith(`/${m}`)))) {
+            return {
+              passes: false,
+              message: this.getMessage(field, rule, `The ${attribute} has an invalid file type.`),
+            };
+          }
+          return { passes: true, message: '' };
+        }
         if (value && typeof value === 'object') {
           const type = (value.mimetype || value.type || '').toString();
           const ext = (value.extension || '').toString();
@@ -1181,6 +1254,45 @@ export class Validator {
             };
           }
         }
+        return { passes: true, message: '' };
+      }
+
+      case 'dimensions': {
+        // Laravel: dimensions:min_width=100,min_height=100,max_width=1000,...
+        const limits: Record<string, number> = {};
+
+        for (const param of listParams) {
+          const separator = param.indexOf('=');
+
+          if (separator !== -1) {
+            limits[param.slice(0, separator)] = Number(param.slice(separator + 1));
+          }
+        }
+
+        const size = await this.imageSize(value);
+
+        if (size !== null) {
+          const { width, height } = size;
+          const pixels = width * height;
+          const invalid =
+            (limits['width'] !== undefined && width !== limits['width']) ||
+            (limits['height'] !== undefined && height !== limits['height']) ||
+            (limits['min_width'] !== undefined && width < limits['min_width']) ||
+            (limits['max_width'] !== undefined && width > limits['max_width']) ||
+            (limits['min_height'] !== undefined && height < limits['min_height']) ||
+            (limits['max_height'] !== undefined && height > limits['max_height']) ||
+            (limits['pixels'] !== undefined && pixels !== limits['pixels']) ||
+            (limits['min_pixels'] !== undefined && pixels < limits['min_pixels']) ||
+            (limits['max_pixels'] !== undefined && pixels > limits['max_pixels']);
+
+          if (invalid) {
+            return {
+              passes: false,
+              message: this.getMessage(field, rule, `The ${attribute} has invalid image dimensions.`),
+            };
+          }
+        }
+
         return { passes: true, message: '' };
       }
 
@@ -1231,6 +1343,40 @@ export class Validator {
         console.warn(`Unknown validation rule: ${rule}`);
         return { passes: true, message: '' };
     }
+  }
+
+  /**
+   * Resolve the media type and extension file rules compare against for an
+   * upload. UploadedFile keeps the detection itself (finfo-style signature
+   * sniffing with the client-declared type as fallback); rules that need
+   * both values call this once per rule.
+   */
+  private async uploadMeta(value: UploadedFile): Promise<{ mimeType: string; extension: string }> {
+    const mimeType = await value.detectedMimeType();
+
+    return { mimeType, extension: await value.guessExtension() };
+  }
+
+  /**
+   * Width and height for the dimensions rule: read from an upload's image
+   * header (getimagesize in PHP) or from explicit object properties, and
+   * null when the value carries nothing measurable
+   */
+  private async imageSize(value: any): Promise<ImageDimensions | null> {
+    if (isUploadedFile(value)) {
+      return await value.dimensions();
+    }
+
+    if (value && typeof value === 'object') {
+      const width = Number(value.width ?? value.w);
+      const height = Number(value.height ?? value.h);
+
+      if (Number.isFinite(width) && Number.isFinite(height)) {
+        return { width, height };
+      }
+    }
+
+    return null;
   }
 
   /**

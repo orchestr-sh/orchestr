@@ -36,8 +36,9 @@ export class Kernel {
     const response = new Response(res);
 
     try {
-      // Parse request body
-      if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
+      // Parse request body - Laravel's Symfony layer fills the parameter and
+      // file bags for any method that carries a body, DELETE included
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
         await request.parseBody();
       }
 

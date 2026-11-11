@@ -93,6 +93,22 @@ export function resource_path(path: string = ''): string {
 }
 
 /**
+ * Get the storage directory path
+ * Laravel: storage_path('app/file.txt')
+ *
+ * Resolves through the application instance when one is running so the
+ * helper and the filesystem disks agree on the storage root; falls back to
+ * the current working directory otherwise.
+ */
+export function storage_path(path: string = ''): string {
+  if (globalApp) {
+    return globalApp.storagePath(path);
+  }
+
+  return base_path(`storage${path ? '/' + path : ''}`);
+}
+
+/**
  * Create a new view instance.
  * Laravel: view('welcome', ['name' => 'John'])
  *

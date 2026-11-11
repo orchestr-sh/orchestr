@@ -6,7 +6,10 @@ import type { Authenticatable } from '@/Auth/Contracts/Authenticatable';
 import type { StatefulGuard } from '@/Auth/Contracts/Guard';
 import type { Store as SessionStore } from '@/Session/Contracts/Store';
 import { resolveGate } from '@/Auth/Access/Gate';
+import { FileUploadException } from './FileUploadException';
+import { DEFAULT_MAX_BODY_SIZE, multipartBoundary, parseMultipart } from './MultipartParser';
 import { Route } from './Route';
+import { UploadedFile } from './UploadedFile';
 
 /**
  * Resolves the authenticated user for a guard, or the default guard
@@ -18,6 +21,16 @@ export type UserResolver = (guard?: string) => Authenticatable | null | Promise<
  * Resolves the guard handling a request
  */
 export type GuardResolver = (guard?: string) => StatefulGuard;
+
+/**
+ * Body limits honoured while parsing multipart uploads
+ */
+export interface ParseBodyOptions {
+  /** Maximum bytes buffered for a single file part */
+  maxFileSize?: number;
+  /** Maximum bytes collected for a multipart body */
+  maxBodySize?: number;
+}
 
 /**
  * Request - Laravel's HTTP Request wrapper
@@ -43,6 +56,12 @@ export class Request {
 
   private bodyParsed: boolean = false;
 
+  /**
+   * Files carried by a multipart body, keyed by input name
+   * Laravel: the request's UploadedFile parameter bag
+   */
+  private uploadedFiles: Record<string, UploadedFile | UploadedFile[]> = {};
+
   constructor(req: IncomingMessage) {
     this.raw = req;
     this.method = req.method || 'GET';
@@ -57,29 +76,67 @@ export class Request {
 
   /**
    * Parse the request body
+   *
+   * JSON and urlencoded bodies land in `body`; multipart/form-data fills
+   * `body` with its text fields and the file bag with its uploads. Buffer
+   * limits are honoured for multipart bodies: collection stops once the
+   * configured ceiling is crossed and the parse rejects.
    */
-  async parseBody(): Promise<void> {
+  async parseBody(options: ParseBodyOptions = {}): Promise<void> {
     if (this.bodyParsed) {
       return;
     }
 
-    return new Promise((resolve, reject) => {
-      let data = '';
+    const contentType = this.header('content-type') || '';
+    const isMultipart = contentType.includes('multipart/form-data');
+    const maxBodySize = options.maxBodySize ?? DEFAULT_MAX_BODY_SIZE;
 
-      this.raw.on('data', (chunk) => {
-        data += chunk.toString();
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      let received = 0;
+      let overflowed = false;
+
+      this.raw.on('data', (chunk: Buffer | string) => {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        received += buffer.byteLength;
+
+        if (isMultipart && received > maxBodySize) {
+          // Stop buffering; the error surfaces when the stream ends
+          overflowed = true;
+          return;
+        }
+
+        chunks.push(buffer);
       });
 
       this.raw.on('end', () => {
         try {
-          const contentType = this.header('content-type') || '';
+          if (overflowed) {
+            throw new FileUploadException(`Multipart body of ${received} bytes exceeds the ${maxBodySize} byte limit.`);
+          }
 
-          if (contentType.includes('application/json')) {
-            this.body = data ? JSON.parse(data) : {};
+          const raw = Buffer.concat(chunks);
+
+          if (isMultipart) {
+            const boundary = multipartBoundary(contentType);
+
+            if (!boundary) {
+              throw new FileUploadException('Multipart form-data request is missing its boundary parameter.');
+            }
+
+            const { fields, files } = parseMultipart(raw, boundary, {
+              maxFileSize: options.maxFileSize,
+              maxBodySize,
+            });
+
+            this.body = fields;
+            this.uploadedFiles = files;
+          } else if (contentType.includes('application/json')) {
+            this.body = raw.byteLength ? JSON.parse(raw.toString()) : {};
           } else if (contentType.includes('application/x-www-form-urlencoded')) {
-            this.body = parseQuery(data);
+            this.body = parseQuery(raw.toString());
           } else {
-            this.body = data;
+            this.body = raw.toString();
           }
 
           this.bodyParsed = true;
@@ -265,7 +322,7 @@ export class Request {
   }
 
   /**
-   * Get a value from query or body
+   * Get a value from query, body or uploaded files
    * Laravel: $request->get('name')
    */
   get(key: string, defaultValue?: any): any {
@@ -273,19 +330,27 @@ export class Request {
       return this.query[key];
     }
 
-    if (this.body[key] !== undefined) {
+    // parseQuery hands back a null-prototype bag, so instanceof is out;
+    // any non-string body that can carry keys counts
+    if (typeof this.body === 'object' && this.body !== null && this.body[key] !== undefined) {
       return this.body[key];
+    }
+
+    if (this.uploadedFiles[key] !== undefined) {
+      return this.uploadedFiles[key];
     }
 
     return defaultValue;
   }
 
   /**
-   * Get all inputs
-   * Laravel: $request->all()
+   * Get all inputs including uploaded files
+   * Laravel: $request->all() (array_replace($this->input(), $this->allFiles()))
    */
   all(): Record<string, any> {
-    return { ...this.query, ...this.body };
+    const input = typeof this.body === 'string' ? {} : this.body;
+
+    return { ...this.query, ...input, ...this.uploadedFiles };
   }
 
   /**
@@ -335,6 +400,50 @@ export class Request {
   filled(key: string): boolean {
     const value = this.get(key);
     return value !== undefined && value !== null && value !== '';
+  }
+
+  /**
+   * Get an uploaded file (or files) by input name, or the whole file bag
+   * when called without a key
+   * Laravel: $request->file('avatar') / $request->allFiles()
+   */
+  file(key?: string): Record<string, UploadedFile | UploadedFile[]> | UploadedFile | UploadedFile[] | null {
+    if (key === undefined) {
+      return this.uploadedFiles;
+    }
+
+    return this.uploadedFiles[key] ?? null;
+  }
+
+  /**
+   * Determine whether the request carries an uploaded file for the input
+   * Laravel: $request->hasFile('avatar')
+   */
+  hasFile(key: string): boolean {
+    const file = this.uploadedFiles[key];
+
+    if (file === undefined) {
+      return false;
+    }
+
+    return Array.isArray(file) ? file.some((each) => each instanceof UploadedFile) : file instanceof UploadedFile;
+  }
+
+  /**
+   * Every uploaded file on the request, keyed by input name
+   * Laravel: $request->allFiles()
+   */
+  allFiles(): Record<string, UploadedFile | UploadedFile[]> {
+    return { ...this.uploadedFiles };
+  }
+
+  /**
+   * Replace the request's uploaded files, e.g. from a test or a proxying
+   * middleware
+   * Laravel: $request->setUploadedFiles($files)
+   */
+  setFiles(files: Record<string, UploadedFile | UploadedFile[]>): void {
+    this.uploadedFiles = { ...files };
   }
 
   /**
