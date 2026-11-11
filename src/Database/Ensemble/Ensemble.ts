@@ -5,8 +5,10 @@
  * In Orchestr, your data models are called Ensembles - groups that work in harmony
  */
 
+import type { Encrypter as CrypterContract } from '@/Encryption/Contracts/Encrypter';
 import { Connection } from '@/Database/Connection';
 import { DatabaseManager } from '@/Database/DatabaseManager';
+import { getGlobalApp } from '@/Support/helpers';
 import type { SoftDeletes } from './SoftDeletes';
 import { HasRelationshipsMixin } from './Concerns/HasRelationships';
 import { EnsembleBuilder } from './EnsembleBuilder';
@@ -42,6 +44,12 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    * The connection resolver instance
    */
   protected static connectionResolver: DatabaseManager;
+
+  /**
+   * The crypter resolver used by `encrypted` casts, when one was installed
+   * explicitly through Ensemble.encryptUsing()
+   */
+  protected static cryptResolver: (() => CrypterContract) | null = null;
 
   /**
    * The table associated with the model
@@ -94,6 +102,14 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    * needing a constructor override.
    */
   static guarded?: string[];
+
+  /**
+   * Static casts map. Like `static fillable`, a `static casts` declaration
+   * resolves before subclass field initialisers run, so the constructor's
+   * `fill()` - and therefore `Model.create({...})` - already sees the
+   * `encrypted` cast.
+   */
+  static casts?: Record<string, string>;
 
   /**
    * The attributes that should be hidden for serialization
@@ -218,8 +234,46 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
       return this;
     }
 
+    // Encrypted casts store the ciphertext; the plaintext only ever comes
+    // back out through getAttribute(), the way Laravel's encrypted casts
+    // keep the raw attribute encrypted at rest
+    if (this.castType(key) === 'encrypted') {
+      this.attributes[key] = this.encryptAttribute(value);
+      return this;
+    }
+
     this.attributes[key] = value;
     return this;
+  }
+
+  /**
+   * Encrypt an attribute value for storage, leaving already-encrypted
+   * payloads untouched so copying raw attributes never double-encrypts
+   * Laravel: HasAttributes::castAttributeAsEncryptedString()
+   */
+  protected encryptAttribute(value: any): any {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    if (typeof value === 'string' && this.isEncryptedPayload(value)) {
+      return value;
+    }
+
+    return this.crypter().encrypt(value);
+  }
+
+  /**
+   * Whether a string decrypts with the application key, marking it as an
+   * existing encrypted payload rather than a new plaintext value
+   */
+  protected isEncryptedPayload(value: string): boolean {
+    try {
+      this.crypter().decrypt(value, false);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -327,8 +381,23 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    * Soft-deleting models always cast the deleted-at column to a date, the way
    * Laravel merges it into the model's date casts, even when the subclass
    * declares no explicit cast for it.
+   *
+   * A `static casts` map on the concrete class wins over the instance
+   * property, mirroring `static fillable`: it already exists while the
+   * base constructor is filling attributes, so encrypted casts are applied
+   * by `Model.create({...})` and not only by later `setAttribute()` calls.
    */
   protected castType(key: string): string | undefined {
+    const ctor = this.constructor as typeof Ensemble;
+
+    const staticCasts: Record<string, string> | undefined = Object.prototype.hasOwnProperty.call(ctor, 'casts')
+      ? ctor.casts
+      : undefined;
+
+    if (staticCasts && key in staticCasts) {
+      return staticCasts[key];
+    }
+
     if (key in this.casts) {
       return this.casts[key];
     }
@@ -377,6 +446,8 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
       case 'datetime':
       case 'timestamp':
         return value instanceof Date ? value : new Date(value);
+      case 'encrypted':
+        return this.crypter().decrypt(value);
       default:
         return value;
     }
@@ -494,6 +565,46 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    */
   getConnection(): Connection {
     return (this.constructor as typeof Ensemble).connectionResolver.connection(this.connection);
+  }
+
+  /**
+   * Provide the crypter used by `encrypted` casts
+   *
+   * The EncryptionServiceProvider wires this automatically through the
+   * container; apps building an Encrypter by hand - or tests that want a
+   * deterministic crypter - can install one directly. Passing null clears
+   * the resolver again.
+   *
+   * Laravel: Model::encryptUsing()
+   */
+  static encryptUsing(crypter: CrypterContract | (() => CrypterContract) | null): void {
+    if (crypter === null) {
+      (Ensemble as any).cryptResolver = null;
+      return;
+    }
+
+    const factory = typeof crypter === 'function' ? (crypter as () => CrypterContract) : () => crypter;
+    (Ensemble as any).cryptResolver = factory;
+  }
+
+  /**
+   * The crypter encrypted casts run through: the resolver installed with
+   * encryptUsing(), else the container's 'encrypter' binding
+   */
+  protected crypter(): CrypterContract {
+    if (Ensemble.cryptResolver) {
+      return Ensemble.cryptResolver();
+    }
+
+    const app = getGlobalApp();
+
+    if (app && app.bound('encrypter')) {
+      return app.make<CrypterContract>('encrypter');
+    }
+
+    throw new Error(
+      'A crypter is required for encrypted casts. Register the EncryptionServiceProvider or call Ensemble.encryptUsing().'
+    );
   }
 
   /**
