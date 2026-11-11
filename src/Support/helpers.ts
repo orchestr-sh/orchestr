@@ -3,6 +3,8 @@
  */
 
 import type { StatefulGuard } from '@/Auth/Contracts/Guard';
+import type { Ensemble } from '@/Database/Ensemble/Ensemble';
+import type { EnsembleClass, Factory, FactoryState } from '@/Database/Factories/Factory';
 import type { Encrypter as EncrypterContract } from '@/Encryption/Contracts/Encrypter';
 import type { Config as ConfigClass } from '@/Foundation/Config/Config';
 import type { HashManager as HashManagerContract } from '@/Hashing/HashManager';
@@ -12,6 +14,7 @@ import type { SessionManager } from '@/Session/SessionManager';
 import type { CollectionKey } from '@/Support/Collection';
 import type { View } from '@/View/View';
 import type { ViewFactory } from '@/View/ViewFactory';
+import { resolveModelFactory } from '@/Database/Factories/HasFactory';
 import { Application } from '@/Foundation/Application';
 import { Arr } from '@/Support/Arr';
 import { Collection, collect as createCollection } from '@/Support/Collection';
@@ -297,6 +300,32 @@ export function auth(guard?: string): StatefulGuard {
 
   return globalApp.make<{ guard(name?: string): StatefulGuard }>('auth').guard(guard);
 }
+
+/**
+ * Create a new factory instance for the given Ensemble model class.
+ * Laravel: factory(User::class) - the model can equally call User.factory().
+ *
+ * Resolution follows the one convention shared by HasFactory and
+ * Ensemble.factory(): the registered User -> UserFactory pairing, or the
+ * model's static newFactory() override. Pass a count, and optionally a
+ * state, to seed the factory:
+ *
+ *   factory(User, 3).create()
+ *   factory(User, { admin: true }).create()
+ */
+export function factory<TModel extends Ensemble>(
+  model: EnsembleClass<TModel>,
+  countOrState?: number | FactoryState,
+  state?: FactoryState
+): Factory<TModel> {
+  return resolveModelFactory(model, countOrState, state);
+}
+
+/**
+ * Re-export of the fake() generator helper so every global helper lives in
+ * one place; the implementation stays in Database/Factories/Fake (DRY).
+ */
+export { fake } from '@/Database/Factories/Fake';
 
 /**
  * Re-export of the collection factory, so all global helpers live in one

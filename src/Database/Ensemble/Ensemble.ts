@@ -5,9 +5,11 @@
  * In Orchestr, your data models are called Ensembles - groups that work in harmony
  */
 
+import type { EnsembleClass, Factory, FactoryState } from '@/Database/Factories/Factory';
 import type { Encrypter as CrypterContract } from '@/Encryption/Contracts/Encrypter';
 import { Connection } from '@/Database/Connection';
 import { DatabaseManager } from '@/Database/DatabaseManager';
+import { resolveModelFactory } from '@/Database/Factories/HasFactory';
 import { getGlobalApp } from '@/Support/helpers';
 import type { SoftDeletes } from './SoftDeletes';
 import { HasRelationshipsMixin } from './Concerns/HasRelationships';
@@ -615,6 +617,33 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
     const connection = instance.getConnection();
 
     return new EnsembleBuilder<T>(connection.getAdapter(), connection.getGrammar(), instance);
+  }
+
+  /**
+   * Get a new factory instance for the model.
+   *
+   * The factory is resolved by convention - registerFactory(UserFactory)
+   * pairs User with UserFactory - or by the newFactory() override below
+   * when a model needs something other than the conventional class.
+   * Laravel: HasFactory::factory()
+   */
+  static factory<T extends Ensemble>(
+    this: EnsembleClass<T>,
+    countOrState?: number | FactoryState,
+    state?: FactoryState
+  ): Factory<T> {
+    return resolveModelFactory(this, countOrState, state);
+  }
+
+  /**
+   * Create a new factory instance for the model. Overriding this static
+   * hook - and returning a factory - bypasses the User -> UserFactory
+   * convention entirely. The default returns null, which lets the
+   * resolution fall through to the registered conventions.
+   * Laravel: HasFactory::newFactory()
+   */
+  protected static newFactory(): Factory<any> | null {
+    return null;
   }
 
   /**
