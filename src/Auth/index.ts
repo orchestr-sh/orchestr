@@ -1,10 +1,12 @@
 /**
  * Auth Module
  *
- * Laravel-shaped authentication: an AuthManager reading `auth.*` config,
- * a session guard with remember-me support and a bearer token guard, both
- * sharing the UserProvider contract backed by the EnsembleUserProvider,
- * plus the 'auth'/'guest' route middleware and the Auth facade.
+ * Laravel-shaped authentication and authorization: an AuthManager reading
+ * `auth.*` config, a session guard with remember-me support and a bearer
+ * token guard, both sharing the UserProvider contract backed by the
+ * EnsembleUserProvider, plus the Gate authorization layer (defined
+ * abilities, model policies, before/after overrides and the deny Response),
+ * the 'auth'/'guest'/'can' route middleware and the Auth/Gate facades.
  */
 
 // Core
@@ -40,6 +42,24 @@ export type { Guard, StatefulGuard } from './Contracts/Guard';
 export { HasAuthenticatable } from './Concerns/HasAuthenticatable';
 export type { AttributeCarrier, AuthenticatableInstance, ModelConstructor } from './Concerns/HasAuthenticatable';
 
+// Access (gates and policies)
+export { Gate, resolveGate } from './Access/Gate';
+export type {
+  AbilityCallback,
+  AfterCallback,
+  AuthorizationResult,
+  BeforeCallback,
+  GateUser,
+  GateUserResolver,
+  PolicyModel,
+  PolicyNameGuesser,
+  PolicyTarget,
+} from './Access/Gate';
+export { Response } from './Access/Response';
+export { AuthorizationException } from './Access/AuthorizationException';
+export { Policy } from './Access/Policy';
+export { HandlesAuthorization, type AuthorizationConstructor } from './Access/Concerns/HandlesAuthorization';
+
 // Middleware
 export {
   Authenticate,
@@ -47,6 +67,7 @@ export {
   resolveAuthManager,
   type AuthenticateOptions,
 } from './Middleware/Authenticate';
+export { Can, makeCan } from './Middleware/Can';
 export {
   RedirectIfAuthenticated,
   makeRedirectIfAuthenticated,

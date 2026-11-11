@@ -1,4 +1,6 @@
-import { AccessDeniedHttpException } from '@/Foundation/Exceptions/AccessDeniedHttpException';
+import type { Authenticatable } from '@/Auth/Contracts/Authenticatable';
+import { AuthorizationException } from '@/Auth/Access/AuthorizationException';
+import { Response } from '@/Auth/Access/Response';
 import { Request } from '@/Routing/Request';
 import { ValidationException } from './ValidationException';
 import { Validator, ValidationRules } from './Validator';
@@ -23,12 +25,15 @@ export abstract class FormRequest {
    * Determine if the user is authorized to make this request
    * Laravel: public function authorize(): bool
    *
-   * Override this method to implement authorization logic.
-   * Return false to deny access (the exception handler renders a 403).
+   * Override this method to implement authorization logic. Return false,
+   * or a denied `Response`, to reject the request (the exception handler
+   * renders the resulting AuthorizationException as a 403). Checking the
+   * action through `can()`/`user()` keeps the gate as the single place
+   * abilities resolve (DRY).
    *
-   * @returns {boolean | Promise<boolean>}
+   * @returns {boolean | Response | Promise<boolean | Response>}
    */
-  protected authorize(): boolean | Promise<boolean> {
+  protected authorize(): boolean | Response | Promise<boolean | Response> {
     return true;
   }
 
@@ -66,13 +71,17 @@ export abstract class FormRequest {
    * Validate the request
    *
    * @throws {ValidationException} If validation fails
-   * @throws {AccessDeniedHttpException} If authorization fails
+   * @throws {AuthorizationException} If authorization fails (rendered as a 403)
    */
   async validate(): Promise<void> {
-    // Check authorization first
-    const authorized = await this.authorize();
-    if (!authorized) {
-      throw new AccessDeniedHttpException();
+    // Check authorization first; a denied Response throws with its own
+    // message/status, a false verdict falls back to the generic denial
+    const authorization = await this.authorize();
+
+    if (authorization instanceof Response) {
+      authorization.authorize();
+    } else if (!authorization) {
+      throw new AuthorizationException();
     }
 
     // Get validation rules
@@ -155,11 +164,29 @@ export abstract class FormRequest {
   }
 
   /**
+   * The authenticated user behind this request
+   * Laravel: $request->user() (FormRequest extends Request)
+   */
+  async user<T extends Authenticatable = Authenticatable>(guard?: string): Promise<T | null> {
+    return this.request.user<T>(guard);
+  }
+
+  /**
+   * Determine whether the request's user passes the gate check - the
+   * convenience authorize() implementations lean on so abilities resolve
+   * in the one shared Gate (DRY)
+   * Laravel: $request->can($ability, $arguments)
+   */
+  async can(ability: string, args: any = []): Promise<boolean> {
+    return this.request.can(ability, args);
+  }
+
+  /**
    * Static factory method to create and validate a FormRequest
    *
    * Validation and authorization failures throw ValidationException and
-   * AccessDeniedHttpException respectively; the exception handler renders
-   * the corresponding response, so nothing is written here.
+   * AuthorizationException respectively; the exception handler renders the
+   * corresponding response (422 and 403), so nothing is written here.
    *
    * @param {Request} request
    * @returns {Promise<T>} The validated FormRequest instance

@@ -7,9 +7,14 @@
  * into it lazily. Register it after ConfigServiceProvider (configured values
  * win), SessionServiceProvider and HashServiceProvider.
  *
- * On boot it also ships the Laravel Kernel's 'auth' and 'guest' middleware
- * aliases (Illuminate\Auth\Middleware\Authenticate / RedirectIfAuthenticated)
- * when the application has not claimed them already.
+ * It also registers the shared authorization Gate under 'gate' - like
+ * Laravel's registerAccessGate - pointing its user resolver at the default
+ * guard so every authorization surface (the 'can' middleware, Rule.can,
+ * Request.can/authorize and FormRequest) consults the same service.
+ *
+ * On boot it ships the Laravel Kernel's 'auth', 'guest' and 'can' middleware
+ * aliases (Illuminate\Auth\Middleware\Authenticate / RedirectIfAuthenticated
+ * / Authorize) when the application has not claimed them already.
  *
  * Laravel: Illuminate\Auth\AuthServiceProvider
  *
@@ -17,10 +22,11 @@
  * ```typescript
  * app.instance('config', new Config({ auth: { providers: { users: { driver: 'ensemble', model: User } } } }));
  * app.register(AuthServiceProvider);
- * await app.boot(); // installs the 'auth'/'guest' aliases
+ * await app.boot(); // installs the 'auth'/'guest'/'can' aliases
  *
  * router.get('/dashboard', show).middleware('auth');
  * router.get('/login', form).middleware('guest');
+ * router.get('/posts/:post', edit).middleware('can:update,post');
  * ```
  */
 
@@ -30,8 +36,10 @@ import type { Hasher } from '@/Hashing/Contracts/Hasher';
 import type { Middleware } from '@/Routing/Pipeline';
 import type { Router } from '@/Routing/Router';
 import type { SessionManager } from '@/Session/SessionManager';
+import { Gate } from '@/Auth/Access/Gate';
 import { AuthManager } from '@/Auth/AuthManager';
 import { Authenticate } from '@/Auth/Middleware/Authenticate';
+import { Can } from '@/Auth/Middleware/Can';
 import { RedirectIfAuthenticated } from '@/Auth/Middleware/RedirectIfAuthenticated';
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
 
@@ -74,18 +82,30 @@ export class AuthServiceProvider extends ServiceProvider {
     // Laravel binds 'auth.driver' to the default guard; resolve through so
     // it always reflects the current guard scope
     this.app.bind('auth.driver', () => this.app.make<AuthManager>('auth').guard());
+
+    // The shared authorization gate (Illuminate\Auth\AuthServiceProvider::
+    // registerAccessGate): one Gate service for policies, abilities, the
+    // 'can' middleware and Rule.can, resolving the current user through
+    // the default guard of the running request scope.
+    this.app.singleton('gate', () => {
+      const gate = new Gate(this.app);
+
+      gate.resolveUsersUsing(() => this.app.make<AuthManager>('auth').user());
+
+      return gate;
+    });
   }
 
   /**
    * The services provided by this provider
    */
   provides(): string[] {
-    return ['auth', 'auth.driver'];
+    return ['auth', 'auth.driver', 'gate'];
   }
 
   /**
-   * Ship the 'auth' and 'guest' middleware aliases, like the Laravel app
-   * Kernel's $middlewareAliases. Apps can re-register either name with
+   * Ship the 'auth', 'guest' and 'can' middleware aliases, like the Laravel
+   * app Kernel's $middlewareAliases. Apps can re-register any name with
    * Router::aliasMiddleware() before or after boot to take control.
    */
   boot(): void {
@@ -109,6 +129,10 @@ export class AuthServiceProvider extends ServiceProvider {
 
     if (!aliases.guest) {
       router.aliasMiddleware('guest', RedirectIfAuthenticated);
+    }
+
+    if (!aliases.can) {
+      router.aliasMiddleware('can', Can);
     }
   }
 

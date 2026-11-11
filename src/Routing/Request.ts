@@ -1,9 +1,11 @@
 import { IncomingMessage } from 'http';
 import { parse as parseQuery } from 'querystring';
 import { parse as parseUrl } from 'url';
+import type { Response } from '@/Auth/Access/Response';
 import type { Authenticatable } from '@/Auth/Contracts/Authenticatable';
 import type { StatefulGuard } from '@/Auth/Contracts/Guard';
 import type { Store as SessionStore } from '@/Session/Contracts/Store';
+import { resolveGate } from '@/Auth/Access/Gate';
 import { Route } from './Route';
 
 /**
@@ -218,6 +220,40 @@ export class Request {
     }
 
     return this.guardResolver(guard);
+  }
+
+  /**
+   * Determine whether the request's authenticated user can perform the
+   * ability, checking it through the application's shared gate
+   * Laravel: Illuminate\Http\Request::can() (Gate::forUser($this->user()))
+   */
+  async can(ability: string, args: any = []): Promise<boolean> {
+    const user = await this.user();
+
+    return resolveGate().forUser(user).allows(ability, args);
+  }
+
+  /**
+   * Determine whether the request's authenticated user cannot perform the
+   * ability
+   * Laravel: Illuminate\Http\Request::cannot()
+   */
+  async cannot(ability: string, args: any = []): Promise<boolean> {
+    const user = await this.user();
+
+    return resolveGate().forUser(user).denies(ability, args);
+  }
+
+  /**
+   * Authorize the request's user against the gate, returning the allow
+   * Response or throwing AuthorizationException (rendered as a 403) when
+   * the action is denied
+   * Laravel: $request->user()->authorize($ability, $arguments)
+   */
+  async authorize(ability: string, args: any = []): Promise<Response> {
+    const user = await this.user();
+
+    return resolveGate().forUser(user).authorize(ability, args);
   }
 
   /**

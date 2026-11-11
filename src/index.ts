@@ -65,6 +65,7 @@ export { Cache } from './Facades/Cache';
 export { View as ViewFacade } from './Facades/View';
 export { Session } from './Facades/Session';
 export { Auth } from './Facades/Auth';
+export { Gate as GateFacade } from './Facades/Gate';
 export { Hash } from './Facades/Hash';
 export { Crypt } from './Facades/Crypt';
 
@@ -514,6 +515,25 @@ export { UserNotFoundException } from './Auth/UserNotFoundException';
 export { HasAuthenticatable } from './Auth/Concerns/HasAuthenticatable';
 export type { AttributeCarrier, AuthenticatableInstance } from './Auth/Concerns/HasAuthenticatable';
 
+// Auth Access (gates and policies)
+export { Gate, resolveGate } from './Auth/Access/Gate';
+export type {
+  AbilityCallback,
+  AfterCallback,
+  AuthorizationResult,
+  BeforeCallback,
+  GateUser,
+  GateUserResolver,
+  PolicyModel,
+  PolicyNameGuesser,
+  PolicyTarget,
+} from './Auth/Access/Gate';
+export { Response as GateResponse } from './Auth/Access/Response';
+export { AuthorizationException } from './Auth/Access/AuthorizationException';
+export { Policy } from './Auth/Access/Policy';
+export { HandlesAuthorization } from './Auth/Access/Concerns/HandlesAuthorization';
+export type { AuthorizationConstructor } from './Auth/Access/Concerns/HandlesAuthorization';
+
 // Auth Contracts
 export type { Authenticatable } from './Auth/Contracts/Authenticatable';
 export type { AuthCredentials, UserProvider } from './Auth/Contracts/UserProvider';
@@ -526,6 +546,7 @@ export {
   resolveAuthManager,
   type AuthenticateOptions,
 } from './Auth/Middleware/Authenticate';
+export { Can, makeCan } from './Auth/Middleware/Can';
 export {
   RedirectIfAuthenticated,
   makeRedirectIfAuthenticated,

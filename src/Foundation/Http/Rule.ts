@@ -243,8 +243,8 @@ export class Rule {
   static databaseRule(rule: string): RuleReturn {
     return new DatabaseRule(rule);
   }
-  static can(ability: string): RuleReturn {
-    return new CanRule(ability);
+  static can(ability: string, ...args: any[]): RuleReturn {
+    return new CanRule(ability, ...args);
   }
   static password(): RuleReturn {
     return new PasswordRule();
