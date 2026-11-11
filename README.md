@@ -1211,6 +1211,63 @@ const temp = Route.temporarySignedRoute('unsubscribe', Math.floor(Date.now() / 1
 Route.hasValidSignature(request); // false for a modified path or expired link
 ```
 
+## Authentication
+
+`AuthManager` builds guards from the Laravel-shaped `auth.*` config (`defaults.guard`,
+`guards`, `providers`, `passwords`). Two guard drivers ship built-in - `session` and
+`token` - and `Auth.extend()` registers custom drivers without touching the manager
+(OCP). Guards own authentication; `EnsembleUserProvider` owns user retrieval (SRP),
+configurable per provider with the model class, credential columns, password column
+and rehash-on-login behaviour:
+
+```typescript
+import {
+  AuthServiceProvider,
+  Authenticate, // 'auth' alias - installed on boot
+  RedirectIfAuthenticated, // 'guest' alias - installed on boot
+  HasAuthenticatable,
+  Auth, // facade - auth() helper resolves a guard
+  RedirectResponse,
+  StartSession,
+} from '@orchestr-sh/orchestr';
+
+class User extends HasAuthenticatable(Ensemble) {
+  static fillable = ['name', 'email', 'password'];
+  getTable() {
+    return 'users';
+  }
+}
+
+app.instance('config', new Config({
+  auth: {
+    defaults: { guard: 'session' },
+    guards: {
+      session: { driver: 'session', provider: 'users' },
+      token: { driver: 'token', provider: 'users', hash: false }, // Authorization: Bearer, ?api_token
+    },
+    providers: { users: { driver: 'ensemble', model: User, credentials: ['email'] } },
+    passwords: { users: { provider: 'users', table: 'password_reset_tokens', expire: 60 } },
+  },
+}));
+
+app.register(SessionServiceProvider);
+app.register(HashServiceProvider);
+app.register(AuthServiceProvider);
+kernel.use(StartSession);
+await app.boot(); // installs the 'auth' / 'guest' middleware aliases
+
+Route.post('/login', async (req, res) => {
+  await Auth.forRequest(req, res).attempt(req.only(['email', 'password']), req.input('remember') === '1');
+  // session ID regenerated on login; remember=true stores a token on the
+  // user and queues the `remember_{guard}_recaller` cookie
+  return new RedirectResponse('/dashboard');
+});
+
+Route.get('/me', (req) => req.user()).middleware('auth'); // 401 JSON / login redirect for guests
+Route.get('/login', loginForm).middleware('guest'); // authenticated visitors go home
+await Auth.logout(); // clears the session and the stored remember token
+```
+
 ## Configuration
 
 ### Database Setup
@@ -2277,6 +2334,7 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Attribute Casting
 - ✅ Password Hashing (scrypt default, bcrypt/argon2 optional, needsRehash)
 - ✅ Encryption (AES-256-GCM payloads, encrypted casts) & Signed URLs
+- ✅ Authentication (session + token guards, remember me, Ensemble user provider, auth/guest middleware)
 - ✅ Timestamps
 - ✅ @DynamicRelation Decorator
 
