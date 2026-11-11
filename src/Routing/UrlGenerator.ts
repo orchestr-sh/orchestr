@@ -1,3 +1,7 @@
+import { createHmac, timingSafeEqual } from 'crypto';
+import type { Request } from '@/Routing/Request';
+import { MissingAppKeyException } from '@/Encryption/MissingAppKeyException';
+import { requireAppKey } from '@/Support/AppKey';
 import { Route } from './Route';
 
 /**
@@ -5,6 +9,12 @@ import { Route } from './Route';
  * name, a positional array, a single scalar/model, or nothing
  */
 export type RouteUrlParameters = Record<string, any> | Array<any> | string | number;
+
+/**
+ * Resolves the application key URL signatures are computed with; wired to
+ * the container by the Router, injectable for tests
+ */
+export type UrlSigningKeyResolver = () => string | Buffer | null | undefined;
 
 /**
  * UrlGenerator - builds URLs for named routes
@@ -16,7 +26,10 @@ export type RouteUrlParameters = Record<string, any> | Array<any> | string | num
  * string.
  */
 export class UrlGenerator {
-  constructor(private getNamedRoutes: () => Map<string, Route>) {}
+  constructor(
+    private getNamedRoutes: () => Map<string, Route>,
+    private signingKey: UrlSigningKeyResolver = () => null
+  ) {}
 
   /**
    * Generate the URL for a named route
@@ -40,6 +53,50 @@ export class UrlGenerator {
     const suffix = query ? `?${query}` : '';
 
     return `${base}${path}${suffix}`;
+  }
+
+  /**
+   * Generate a signed URL for a named route
+   *
+   * The signature covers the exact URL (plus an optional `expires`
+   * parameter), so any modification - a swapped query value, a second
+   * `signature=` pair - invalidates it. Provide an expiry to limit how long
+   * the link works.
+   *
+   * Laravel: URL::signedRoute('unsubscribe', ['user' => 1], now()->addMinutes(30))
+   */
+  signedRoute(name: string, parameters: RouteUrlParameters = {}, expiration?: number | Date): string {
+    let url = this.route(name, parameters);
+
+    if (expiration !== undefined && expiration !== null) {
+      url = this.appendToUrl(url, `expires=${this.expirationSeconds(expiration)}`);
+    }
+
+    return this.appendToUrl(url, `signature=${encodeURIComponent(this.sign(url))}`);
+  }
+
+  /**
+   * Generate a temporary signed URL for a named route
+   *
+   * Laravel: URL::temporarySignedRoute('newsletter', now()->addMinutes(30))
+   */
+  temporarySignedRoute(name: string, expiration: number | Date, parameters: RouteUrlParameters = {}): string {
+    return this.signedRoute(name, parameters, expiration);
+  }
+
+  /**
+   * Determine whether the request carries a valid signature
+   *
+   * A request wins when one of its candidate URLs - the raw request target
+   * and, with a Host header, its http/https absolute forms - matches the
+   * signature it presents, ignoring the signature parameter itself, and
+   * when a present `expires` has not passed. Candidates mirror what
+   * signedRoute() may have produced for domain or relative routes.
+   *
+   * Laravel: Request::hasValidSignature() / UrlGenerator::hasValidSignature()
+   */
+  hasValidSignature(request: Request): boolean {
+    return this.hasCorrectSignature(request) && this.signatureHasNotExpired(request);
   }
 
   /**
@@ -202,5 +259,129 @@ export class UrlGenerator {
     }
 
     return pairs.join('&');
+  }
+
+  /**
+   * HMAC-SHA256 the URL with the application key, base64url encoded
+   * Laravel: UrlGenerator::signatureHasher()->hashRequired()
+   */
+  private sign(url: string): string {
+    const key = requireAppKey(this.signingKey());
+
+    return createHmac('sha256', key).update(url).digest('base64url');
+  }
+
+  /**
+   * Compare a computed signature with the one presented, in constant time
+   * Laravel: hash_equals()
+   */
+  private signMatches(url: string, signature: string): boolean {
+    let computed: string;
+
+    try {
+      computed = this.sign(url);
+    } catch (error) {
+      // A missing app key is a server misconfiguration, not a bad link:
+      // surface it instead of reporting someone else's URL as invalid
+      if (error instanceof MissingAppKeyException) {
+        throw error;
+      }
+
+      return false;
+    }
+
+    const expected = Buffer.from(computed);
+    const presented = Buffer.from(signature);
+
+    return expected.length === presented.length && timingSafeEqual(expected, presented);
+  }
+
+  /**
+   * The URLs the presented signature could have been computed over
+   */
+  private hasCorrectSignature(request: Request): boolean {
+    const signature = request.query.signature;
+
+    if (typeof signature !== 'string' || signature === '') {
+      return false;
+    }
+
+    const unsigned = this.removeSignature(request.url ?? '/');
+    const candidates = [unsigned];
+
+    const host = request.header('host');
+
+    if (host && unsigned.startsWith('/')) {
+      // A route registered with a domain signs the absolute URL; the
+      // request only carries the path, so reconstruct the candidates
+      candidates.push(`http://${host}${unsigned}`, `https://${host}${unsigned}`);
+    }
+
+    return candidates.some((candidate) => this.signMatches(candidate, signature));
+  }
+
+  /**
+   * A signature with an `expires` parameter is only valid until then
+   * Laravel: UrlGenerator::signatureHasNotExpired()
+   */
+  private signatureHasNotExpired(request: Request): boolean {
+    const expires = request.query.expires;
+
+    if (expires === undefined || expires === '') {
+      return true;
+    }
+
+    const seconds = Number(expires);
+
+    if (!Number.isFinite(seconds)) {
+      return false;
+    }
+
+    return Math.floor(Date.now() / 1000) <= seconds;
+  }
+
+  /**
+   * Append a query pair, choosing the separator by whether the URL already
+   * carries a query string
+   */
+  private appendToUrl(url: string, pair: string): string {
+    return `${url}${url.includes('?') ? '&' : '?'}${pair}`;
+  }
+
+  /**
+   * Strip only the `signature` parameter from a URL, leaving the rest of
+   * the query string byte-for-byte as the client sent it
+   * Laravel: UrlGenerator::removeSignatureFromUrl()
+   */
+  private removeSignature(url: string): string {
+    const separatorIndex = url.indexOf('?');
+
+    if (separatorIndex === -1) {
+      return url;
+    }
+
+    const path = url.slice(0, separatorIndex);
+    const pairs = url
+      .slice(separatorIndex + 1)
+      .split('&')
+      .filter((pair) => pair !== '' && pair.split('=')[0] !== 'signature');
+
+    return pairs.length > 0 ? `${path}?${pairs.join('&')}` : path;
+  }
+
+  /**
+   * Render the expiration as unix seconds; numbers are already seconds
+   * (unix timestamps), matching the `expires=` query encoding
+   */
+  private expirationSeconds(expiration: number | Date): number {
+    if (expiration instanceof Date) {
+      return Math.floor(expiration.getTime() / 1000);
+    }
+
+    if (typeof expiration === 'number' && Number.isFinite(expiration)) {
+      return Math.floor(expiration);
+    }
+
+    throw new TypeError('Signed URL expiration must be a unix timestamp in seconds or a Date.');
   }
 }

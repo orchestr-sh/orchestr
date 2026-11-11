@@ -50,7 +50,7 @@ export { Action } from './Routing/Action';
 export { RouteResolver } from './Routing/RouteResolver';
 export type { RouteBinder, ActionReflection } from './Routing/RouteResolver';
 export { UrlGenerator } from './Routing/UrlGenerator';
-export type { RouteUrlParameters } from './Routing/UrlGenerator';
+export type { RouteUrlParameters, UrlSigningKeyResolver } from './Routing/UrlGenerator';
 export { buildResourceRoutes } from './Routing/ResourceRegistrar';
 export type { ResourceOptions, ResourceRouteDefinition, ResourceActionName } from './Routing/ResourceRegistrar';
 
@@ -64,6 +64,8 @@ export { Bus } from './Facades/Bus';
 export { Cache } from './Facades/Cache';
 export { View as ViewFacade } from './Facades/View';
 export { Session } from './Facades/Session';
+export { Hash } from './Facades/Hash';
+export { Crypt } from './Facades/Crypt';
 
 // Helpers
 export {
@@ -94,6 +96,9 @@ export {
   session,
   csrf_token,
   csrf_field,
+  hash,
+  encrypt,
+  decrypt,
 } from './Support/helpers';
 
 // Support Collections
@@ -120,6 +125,8 @@ export { DatabaseServiceProvider } from './Database/DatabaseServiceProvider';
 export { QueueServiceProvider } from './Queue/QueueServiceProvider';
 export { CacheServiceProvider } from './Cache/CacheServiceProvider';
 export { SessionServiceProvider } from './Session/SessionServiceProvider';
+export { HashServiceProvider } from './Hashing/HashServiceProvider';
+export { EncryptionServiceProvider } from './Encryption/EncryptionServiceProvider';
 export { ViewServiceProvider } from './View/ViewServiceProvider';
 export type { ViewConfig } from './View/ViewServiceProvider';
 
@@ -455,6 +462,32 @@ export { CookieSessionStore } from './Session/Stores/CookieSessionStore';
 export { StartSession, makeStartSession, resolveSessionManager } from './Session/Middleware/StartSession';
 export { VerifyCsrfToken, makeVerifyCsrfToken, XSRF_COOKIE_NAME } from './Session/Middleware/VerifyCsrfToken';
 export type { CsrfOptions } from './Session/Middleware/VerifyCsrfToken';
+
+// Hashing
+export { HashManager, HASHING_DEFAULTS } from './Hashing/HashManager';
+export type { HashingConfig, HasherFactory } from './Hashing/HashManager';
+export { ScryptHasher } from './Hashing/ScryptHasher';
+export type { ScryptOptions } from './Hashing/ScryptHasher';
+export { BcryptHasher } from './Hashing/BcryptHasher';
+export type { BcryptOptions } from './Hashing/BcryptHasher';
+export { ArgonHasher } from './Hashing/ArgonHasher';
+export type { Argon2Options } from './Hashing/ArgonHasher';
+export { HashDriverUnavailableException } from './Hashing/HashDriverUnavailableException';
+
+// Hashing Contracts
+export type { Hasher, HashInfo } from './Hashing/Contracts/Hasher';
+
+// Encryption
+export { Encrypter } from './Encryption/Encrypter';
+export type { Cipher } from './Encryption/Encrypter';
+export { DecryptException } from './Encryption/DecryptException';
+export { MissingAppKeyException } from './Encryption/MissingAppKeyException';
+
+// Encryption Contracts
+export type { Encrypter as EncrypterContract } from './Encryption/Contracts/Encrypter';
+
+// Routing Middleware
+export { ValidateSignature, makeValidateSignature, resolveSignedRouter } from './Routing/Middleware/ValidateSignature';
 
 // View
 export { View } from './View/View';
