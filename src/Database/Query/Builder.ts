@@ -392,6 +392,37 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
   }
 
   /**
+   * Set the limit and offset for a given page
+   * Laravel: Builder::forPage()
+   */
+  forPage(page: number, perPage: number = 15): this {
+    const offset = (Math.max(page, 1) - 1) * perPage;
+
+    return this.offset(offset).limit(perPage);
+  }
+
+  /**
+   * Get the current order-by clauses of the query
+   */
+  getOrderings(): OrderByClause[] {
+    return [...this._orders];
+  }
+
+  /**
+   * Clear the query's orders, optionally ordering by one fresh column
+   * Laravel: Builder::reorder()
+   */
+  reorder(column?: string, direction: OrderDirection = 'asc'): this {
+    this._orders = [];
+
+    if (column !== undefined && column !== null) {
+      this.orderBy(column, direction);
+    }
+
+    return this;
+  }
+
+  /**
    * Get all records
    */
   async get(): Promise<T[]> {

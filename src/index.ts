@@ -178,6 +178,32 @@ export { EnsembleCollection } from './Database/Ensemble/EnsembleCollection';
 export { SoftDeletingScope } from './Database/Ensemble/SoftDeletingScope';
 export { DELETED_AT } from './Database/Ensemble/SoftDeletes';
 
+// Pagination
+export {
+  AbstractPaginator,
+  LengthAwarePaginator,
+  Paginator,
+  Cursor,
+  CursorPaginator,
+  InvalidCursorException,
+  UrlWindow,
+  serializePaginatedItem,
+} from './Pagination';
+export type {
+  PaginationLink,
+  PaginationOptions,
+  LengthAwareOptions,
+  CursorDirection,
+  CursorTravel,
+  CursorPaginationOptions,
+  WindowPage,
+  CurrentPaginationRequest,
+} from './Pagination';
+export { resolveCurrentRequestUsing, currentRequestPath, currentRequestQuery } from './Pagination';
+
+// Http Resources
+export { JsonResource, ResourceCollection, AnonymousResourceCollection, MISSING_VALUE } from './Http/Resources';
+
 // Ensemble Observers & Scopes
 export { ObserverRegistry, OBSERVER_EVENTS } from './Database/Ensemble/Observers';
 export type {
