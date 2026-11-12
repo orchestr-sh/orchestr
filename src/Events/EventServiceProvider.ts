@@ -1,8 +1,8 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { Application } from '@/Foundation/Application';
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
 import { Dispatcher } from './Dispatcher';
+import { EventDiscoveryCache } from './EventDiscoveryCache';
+import { registerListener, resolveRegisteredListener } from './ListenerRegistry';
 import { EventSubscriber } from './types';
 
 /**
@@ -77,10 +77,11 @@ export abstract class EventServiceProvider extends ServiceProvider {
   /**
    * Bootstrap the application events
    *
-   * Performs three key operations:
+   * Performs four key operations:
    * 1. Registers manual event-listener mappings from the `listen` property
    * 2. Registers event subscribers from the `subscribe` property
-   * 3. Performs automatic event discovery if enabled
+   * 3. Loads cached event-listener mappings when present
+   * 4. Otherwise performs automatic event discovery if enabled
    *
    * @throws {Error} If the dispatcher cannot be resolved from the container
    */
@@ -102,8 +103,23 @@ export abstract class EventServiceProvider extends ServiceProvider {
       events.subscribe(subscriberInstance);
     }
 
-    // Perform event discovery if enabled
-    if (this.shouldDiscoverEvents()) {
+    // Prefer the cached event map written by `event:cache`...
+    if (this.eventsAreCached()) {
+      for (const [event, listeners] of this.getCachedEvents()) {
+        for (const listener of listeners) {
+          // Rebind classes this process already knows (registry) so cached
+          // string listeners resolve without a fresh discovery scan.
+          const known = resolveRegisteredListener(listener);
+
+          if (known !== undefined && known !== listener) {
+            this.bindDiscoveredListener(listener, typeof known === 'string' ? undefined : known);
+          }
+
+          events.listen(event, listener);
+        }
+      }
+    } else if (this.shouldDiscoverEvents()) {
+      // ...and fall back to live discovery when nothing is cached
       await this.discoverEvents(events);
     }
   }
@@ -134,30 +150,43 @@ export abstract class EventServiceProvider extends ServiceProvider {
    *
    * Uses EventDiscovery to scan specified directories for listener classes
    * and automatically registers them with their corresponding events.
+   * Discovered classes are bound into the container (and the listener
+   * registry) under their discovery path so string listeners resolve at
+   * dispatch time, including from queued `CallQueuedListener` jobs.
    *
    * @param {Dispatcher} events - The event dispatcher instance
-   *
-   * @throws {Error} If EventDiscovery is not available (Task 6 dependency)
    */
   protected async discoverEvents(events: Dispatcher): Promise<void> {
     // Import EventDiscovery dynamically to avoid circular dependency
-    try {
-      const { EventDiscovery } = await import('@/Support/EventDiscovery');
-      const discovery = new EventDiscovery(this.app);
+    const { EventDiscovery } = await import('@/Support/EventDiscovery');
+    const discovery = new EventDiscovery(this.app);
 
-      const listeners = await discovery.discover(this.discoverEventsWithin());
+    const listeners = await discovery.discover(this.discoverEventsWithin());
+    const classes = discovery.getDiscoveredClasses();
 
-      for (const [event, listenerClasses] of listeners) {
-        for (const listener of listenerClasses) {
-          events.listen(event, listener);
-        }
+    for (const [event, listenerClasses] of listeners) {
+      for (const listener of listenerClasses) {
+        this.bindDiscoveredListener(listener, classes.get(listener));
+        events.listen(event, listener);
       }
-    } catch (error: any) {
-      // EventDiscovery not implemented yet (Task 6)
-      // Silently skip discovery for now
-      if (error.code !== 'MODULE_NOT_FOUND') {
-        throw error;
-      }
+    }
+  }
+
+  /**
+   * Make a discovered listener resolvable from its discovery-path string
+   *
+   * @param name - Discovery path used as the container/registry binding name
+   * @param listenerClass - The class EventDiscovery loaded from the file, if any
+   */
+  protected bindDiscoveredListener(name: string, listenerClass?: any): void {
+    if (listenerClass === undefined) {
+      return;
+    }
+
+    registerListener(name, listenerClass);
+
+    if (typeof listenerClass === 'function' && !this.app.bound(name)) {
+      this.app.bind(name, () => new listenerClass());
     }
   }
 
@@ -193,13 +222,7 @@ export abstract class EventServiceProvider extends ServiceProvider {
    * @returns {boolean} True if cached events file exists
    */
   protected eventsAreCached(): boolean {
-    const cachePath = this.app.storagePath('framework/events.json');
-    try {
-      fs.accessSync(cachePath, fs.constants.F_OK);
-      return true;
-    } catch {
-      return false;
-    }
+    return this.getEventCache().exists();
   }
 
   /**
@@ -210,19 +233,14 @@ export abstract class EventServiceProvider extends ServiceProvider {
    * @returns {Map<string, string[]>} Map of event names to listener class names
    */
   protected getCachedEvents(): Map<string, string[]> {
-    const cachePath = this.app.storagePath('framework/events.json');
+    return this.getEventCache().load();
+  }
 
-    if (!fs.existsSync(cachePath)) {
-      return new Map();
-    }
-
-    try {
-      const cached = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
-      // Convert array of entries back to Map
-      return new Map(cached);
-    } catch {
-      return new Map();
-    }
+  /**
+   * Cache store for discovered event-listener mappings
+   */
+  protected getEventCache(): EventDiscoveryCache {
+    return new EventDiscoveryCache(this.app);
   }
 
   /**

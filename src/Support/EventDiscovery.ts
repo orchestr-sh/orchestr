@@ -20,7 +20,24 @@ import 'reflect-metadata';
  * ```
  */
 export class EventDiscovery {
+  /**
+   * Listener classes loaded during the last `discover()` run, keyed by the
+   * same discovery-path name the event map uses. Providers bind these into
+   * the container so registered string listeners actually resolve at dispatch
+   * and inside queued `CallQueuedListener` jobs.
+   */
+  protected discoveredClasses: Map<string, any> = new Map();
+
   constructor(protected app: Application) {}
+
+  /**
+   * Get the listener classes loaded by the most recent discovery run
+   *
+   * @returns Map of discovery-path names to loaded listener classes
+   */
+  getDiscoveredClasses(): Map<string, any> {
+    return this.discoveredClasses;
+  }
 
   /**
    * Discover all event listeners within the given directories
@@ -82,12 +99,17 @@ export class EventDiscovery {
         if (!listenerClass) continue;
 
         const events = this.extractEventTypes(listenerClass);
+        const name = this.getListenerName(file);
 
         for (const event of events) {
           if (!listeners.has(event)) {
             listeners.set(event, []);
           }
-          listeners.get(event)!.push(this.getListenerName(file));
+          listeners.get(event)!.push(name);
+        }
+
+        if (events.length > 0) {
+          this.discoveredClasses.set(name, listenerClass);
         }
       } catch (error) {
         // Skip files that can't be loaded
@@ -171,10 +193,13 @@ export class EventDiscovery {
   protected async loadListenerClass(file: string): Promise<any> {
     const module = await import(file);
 
-    // Try to find the default export or named export
-    return (
-      module.default || Object.values(module).find((exp) => typeof exp === 'function' && this.isListenerClass(exp))
-    );
+    // Prefer a default export that actually looks like a listener, then fall
+    // back to the first named listener export.
+    if (module.default && this.isListenerClass(module.default)) {
+      return module.default;
+    }
+
+    return Object.values(module).find((exp) => typeof exp === 'function' && this.isListenerClass(exp));
   }
 
   /**

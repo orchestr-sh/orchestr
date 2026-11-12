@@ -10,16 +10,16 @@
  * @example
  * ```typescript
  * // Dispatch an event
- * UserRegistered.dispatch(user);
+ * await UserRegistered.dispatch(user);
  *
  * // Conditional dispatch
- * UserRegistered.dispatchIf(shouldNotify, user);
+ * await UserRegistered.dispatchIf(shouldNotify, user);
  *
  * // Dispatch unless condition is true
- * UserRegistered.dispatchUnless(user.isAdmin, user);
+ * await UserRegistered.dispatchUnless(user.isAdmin, user);
  *
  * // Dispatch and wait for first response
- * const result = UserRegistered.until(user);
+ * const result = await UserRegistered.until(user);
  * ```
  */
 
@@ -49,10 +49,10 @@ export class Dispatchable {
    * }
    *
    * // Dispatch the event
-   * UserRegistered.dispatch(user);
+   * await UserRegistered.dispatch(user);
    * ```
    */
-  static dispatch(...args: any[]): any[] {
+  static async dispatch(...args: any[]): Promise<any[]> {
     const app = Facade.getFacadeApplication();
     if (!app) {
       throw new Error('Application not initialized. Cannot dispatch event.');
@@ -66,18 +66,18 @@ export class Dispatchable {
    *
    * @param condition - Boolean or function that returns boolean
    * @param args - Constructor arguments for the event
-   * @returns Array of listener responses or empty array if condition is false
+   * @returns Promise resolving to the array of listener responses, or empty array if condition is false
    *
    * @example
    * ```typescript
    * // Dispatch if condition is true
-   * UserRegistered.dispatchIf(user.isActive, user);
+   * await UserRegistered.dispatchIf(user.isActive, user);
    *
    * // Dispatch if function returns true
-   * UserRegistered.dispatchIf(() => shouldNotify(), user);
+   * await UserRegistered.dispatchIf(() => shouldNotify(), user);
    * ```
    */
-  static dispatchIf(condition: boolean | (() => boolean), ...args: any[]): any[] {
+  static async dispatchIf(condition: boolean | (() => boolean), ...args: any[]): Promise<any[]> {
     const shouldDispatch = typeof condition === 'function' ? condition() : condition;
 
     if (shouldDispatch) {
@@ -92,18 +92,18 @@ export class Dispatchable {
    *
    * @param condition - Boolean or function that returns boolean
    * @param args - Constructor arguments for the event
-   * @returns Array of listener responses or empty array if condition is true
+   * @returns Promise resolving to the array of listener responses, or empty array if condition is true
    *
    * @example
    * ```typescript
    * // Dispatch unless user is admin
-   * UserRegistered.dispatchUnless(user.isAdmin, user);
+   * await UserRegistered.dispatchUnless(user.isAdmin, user);
    *
    * // Dispatch unless function returns true
-   * UserRegistered.dispatchUnless(() => user.hasRole('admin'), user);
+   * await UserRegistered.dispatchUnless(() => user.hasRole('admin'), user);
    * ```
    */
-  static dispatchUnless(condition: boolean | (() => boolean), ...args: any[]): any[] {
+  static async dispatchUnless(condition: boolean | (() => boolean), ...args: any[]): Promise<any[]> {
     const shouldNotDispatch = typeof condition === 'function' ? condition() : condition;
 
     if (!shouldNotDispatch) {
@@ -119,18 +119,18 @@ export class Dispatchable {
    * This is useful when you want to get a response from an event listener
    *
    * @param args - Constructor arguments for the event
-   * @returns First non-null listener response
+   * @returns Promise resolving to the first non-null listener response
    *
    * @example
    * ```typescript
    * // Get a response from the first listener
-   * const result = UserRegistered.until(user);
+   * const result = await UserRegistered.until(user);
    * if (result === false) {
    *   // Listener vetoed the operation
    * }
    * ```
    */
-  static until(...args: any[]): any {
+  static async until(...args: any[]): Promise<any> {
     const app = Facade.getFacadeApplication();
     if (!app) {
       throw new Error('Application not initialized. Cannot dispatch event.');

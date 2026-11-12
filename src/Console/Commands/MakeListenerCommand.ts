@@ -95,6 +95,9 @@ export class MakeListenerCommand extends Command {
  * This listener will be queued automatically
  */
 export class {{className}} implements ShouldQueue {
+  // Runtime marker that routes this listener through the queue
+  public readonly queued = true;
+
   // Queue configuration
   public connection = 'default';
   public queue = 'listeners';

@@ -29,6 +29,17 @@
  */
 export abstract class Event {
   /**
+   * Runtime registry of event classes by class name
+   *
+   * TypeScript interfaces are erased at compile time, so queued listeners
+   * store the event as plain JSON plus its class name. The registry lets the
+   * worker rebuild a typed instance from that payload. Subclasses register
+   * themselves on instantiation, so any process that has dispatched an event
+   * once can restore it; worker-only processes can call `registerClass`.
+   */
+  private static readonly classRegistry: Map<string, new (...args: any[]) => Event> = new Map();
+
+  /**
    * Properties to exclude from serialization
    * Override in child classes to specify which properties should not be serialized
    */
@@ -51,6 +62,39 @@ export abstract class Event {
    * Used when queueing event listeners
    */
   public delay?: number;
+
+  constructor() {
+    // Registering on construction keeps the registry populated for any event
+    // that has been dispatched at least once in this process, which covers
+    // enqueue -> work within the same application instance.
+    Event.registerClass(this.constructor as new (...args: any[]) => Event);
+  }
+
+  /**
+   * Register an event class so queued listeners can restore it by name
+   *
+   * @param eventClass - Event class constructor to register
+   * @returns The same class, so it can be used as a wrapper around a definition
+   *
+   * @example
+   * ```typescript
+   * Event.registerClass(UserRegistered);
+   * ```
+   */
+  static registerClass<T extends new (...args: any[]) => Event>(eventClass: T): T {
+    Event.classRegistry.set(eventClass.name, eventClass);
+    return eventClass;
+  }
+
+  /**
+   * Look up a previously registered event class by name
+   *
+   * @param name - Event class name
+   * @returns The registered class constructor, or undefined when unknown
+   */
+  static registeredClass(name: string): (new (...args: any[]) => Event) | undefined {
+    return Event.classRegistry.get(name);
+  }
 
   /**
    * Convert event to JSON for queue serialization
@@ -167,6 +211,11 @@ export abstract class Event {
   protected static deserializeValue(value: any): any {
     // Handle null/undefined
     if (value === null || value === undefined) {
+      return value;
+    }
+
+    // Already-rehydrated dates (e.g. restored inside a queue job payload)
+    if (value instanceof Date) {
       return value;
     }
 
@@ -309,14 +358,14 @@ applyDispatchable(Event);
  * }
  *
  * // TypeScript will recognize these:
- * UserRegistered.dispatch(user);
- * UserRegistered.dispatchIf(condition, user);
+ * await UserRegistered.dispatch(user);
+ * await UserRegistered.dispatchIf(condition, user);
  * ```
  */
 export type EventClass<T extends Event = Event> = typeof Event & {
   new (...args: any[]): T;
-  dispatch(...args: any[]): any[];
-  dispatchIf(condition: boolean | (() => boolean), ...args: any[]): any[];
-  dispatchUnless(condition: boolean | (() => boolean), ...args: any[]): any[];
-  until(...args: any[]): any;
+  dispatch(...args: any[]): Promise<any[]>;
+  dispatchIf(condition: boolean | (() => boolean), ...args: any[]): Promise<any[]>;
+  dispatchUnless(condition: boolean | (() => boolean), ...args: any[]): Promise<any[]>;
+  until(...args: any[]): Promise<any>;
 };

@@ -8,9 +8,14 @@ import type { ShouldQueue } from './ShouldQueue';
  *
  * This combines the behavior of ShouldQueue with transaction awareness.
  *
+ * Implementations must carry the runtime markers the dispatcher checks:
+ * `queued = true` (inherited from `ShouldQueue`) and `afterCommit = true`.
+ *
  * @example
  * ```typescript
  * export class SendWelcomeEmail implements ShouldQueueAfterCommit {
+ *   public readonly queued = true;
+ *   public readonly afterCommit = true;
  *   public tries = 3;
  *   public timeout = 30;
  *
@@ -22,5 +27,6 @@ import type { ShouldQueue } from './ShouldQueue';
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ShouldQueueAfterCommit extends ShouldQueue {
-  // Marker interface - inherits all ShouldQueue properties
+  // Marker interface - inherits all ShouldQueue properties, requires `queued`
+  // and `afterCommit` runtime markers (see ShouldQueue)
 }

@@ -1,7 +1,7 @@
 import type { Container } from '@/Container/Container';
 import type { DispatcherContract } from '@/Events/Contracts/Dispatcher';
 import type { Event } from '@/Events/Event';
-import type { EventListener } from '@/Events/types';
+import type { EventListener, EventNameOrClass, RegisteredListener } from '@/Events/types';
 
 /**
  * Dispatched Event Record
@@ -47,6 +47,11 @@ export class EventFake implements DispatcherContract {
   protected dispatched: Map<string, DispatchedEvent[]> = new Map();
 
   /**
+   * Dispatches that had at least one queued listener registered for them
+   */
+  protected queued: Map<string, DispatchedEvent[]> = new Map();
+
+  /**
    * Events that should be faked (empty = fake all)
    */
   protected fakedEvents: string[] = [];
@@ -62,9 +67,9 @@ export class EventFake implements DispatcherContract {
   protected originalDispatcher?: DispatcherContract;
 
   /**
-   * Registered listeners (for assertListening)
+   * Registered listeners (for assertListening and queued assertions)
    */
-  protected listeners: Map<string, EventListener[]> = new Map();
+  protected listeners: Map<string, RegisteredListener[]> = new Map();
 
   constructor(protected container: Container) {}
 
@@ -119,19 +124,22 @@ export class EventFake implements DispatcherContract {
   /**
    * Register an event listener
    *
-   * @param events - Event name(s) to listen for
+   * @param events - Event name(s) or class(es) to listen for
    * @param listener - The listener to call
+   * @param queued - Whether the listener would go through the queue when dispatched
    */
-  listen(events: string | string[], listener: EventListener): void {
+  listen(events: EventNameOrClass | EventNameOrClass[], listener: EventListener, queued?: boolean): void {
     // Store listeners for assertListening
     const eventArray = Array.isArray(events) ? events : [events];
 
     for (const event of eventArray) {
-      if (!this.listeners.has(event)) {
-        this.listeners.set(event, []);
+      const eventName = typeof event === 'string' ? event : event.name;
+
+      if (!this.listeners.has(eventName)) {
+        this.listeners.set(eventName, []);
       }
 
-      this.listeners.get(event)!.push(listener);
+      this.listeners.get(eventName)!.push({ listener, queued });
     }
   }
 
@@ -158,12 +166,16 @@ export class EventFake implements DispatcherContract {
   /**
    * Dispatch an event
    *
+   * The dispatch is recorded instead of reaching listeners. Async listeners
+   * are irrelevant here since none are invoked, but the method mirrors the
+   * async dispatcher contract and resolves to an empty response array.
+   *
    * @param event - The event instance or name
    * @param payload - Additional arguments to pass
    * @param halt - Stop on first non-null response
-   * @returns Array of listener results
+   * @returns Promise resolving to an empty array (no listener ran)
    */
-  dispatch(event: string | Event, payload: any[] = [], halt: boolean = false): any[] {
+  async dispatch(event: string | Event, payload: any[] = [], halt: boolean = false): Promise<any[]> {
     const eventName = this.getEventName(event);
 
     if (!this.shouldFake(eventName)) {
@@ -174,16 +186,28 @@ export class EventFake implements DispatcherContract {
       return [];
     }
 
+    const record: DispatchedEvent = {
+      event,
+      payload,
+      timestamp: Date.now(),
+    };
+
     // Record the dispatch
     if (!this.dispatched.has(eventName)) {
       this.dispatched.set(eventName, []);
     }
 
-    this.dispatched.get(eventName)!.push({
-      event,
-      payload,
-      timestamp: Date.now(),
-    });
+    this.dispatched.get(eventName)!.push(record);
+
+    // Mirror queue routing so assertions can check which dispatches the real
+    // dispatcher would have pushed onto the queue.
+    if (this.hasQueuedListener(eventName)) {
+      if (!this.queued.has(eventName)) {
+        this.queued.set(eventName, []);
+      }
+
+      this.queued.get(eventName)!.push(record);
+    }
 
     return [];
   }
@@ -191,12 +215,16 @@ export class EventFake implements DispatcherContract {
   /**
    * Dispatch an event until the first non-null response
    *
+   * Faked dispatches never run listeners, so this records the event and
+   * resolves to null, matching the async contract of the real dispatcher.
+   *
    * @param event - The event instance or name
    * @param payload - Additional arguments to pass
-   * @returns The first non-null listener result
+   * @returns Promise resolving to null
    */
-  until(event: string | Event, payload: any[] = []): any {
-    return this.dispatch(event, payload, true)[0] || null;
+  async until(event: string | Event, payload: any[] = []): Promise<any> {
+    await this.dispatch(event, payload, true);
+    return null;
   }
 
   /**
@@ -214,7 +242,7 @@ export class EventFake implements DispatcherContract {
    *
    * @param event - The event name to flush
    */
-  flush(event: string): void {
+  async flush(event: string): Promise<void> {
     // Not implemented for faked dispatcher
   }
 
@@ -225,6 +253,7 @@ export class EventFake implements DispatcherContract {
    */
   forget(event: string): void {
     this.dispatched.delete(event);
+    this.queued.delete(event);
     this.listeners.delete(event);
   }
 
@@ -241,7 +270,51 @@ export class EventFake implements DispatcherContract {
    * @returns Map of event names to listeners
    */
   getRawListeners(): Map<string, EventListener[]> {
-    return this.listeners;
+    const raw = new Map<string, EventListener[]>();
+
+    for (const [event, entries] of this.listeners) {
+      raw.set(
+        event,
+        entries.map((entry) => entry.listener)
+      );
+    }
+
+    return raw;
+  }
+
+  /**
+   * Determine whether any listener registered for an event is queued
+   *
+   * Recognizes the queued registration flag plus wildcard patterns, mirroring
+   * how the real dispatcher routes `ShouldQueue` listeners.
+   *
+   * @param eventName - The event name being dispatched
+   * @returns True when at least one matching listener would be queued
+   */
+  protected hasQueuedListener(eventName: string): boolean {
+    for (const [pattern, entries] of this.listeners) {
+      if ((pattern === eventName || this.wildcardMatch(pattern, eventName)) && entries.some((e) => e.queued)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if an event name matches a wildcard pattern
+   *
+   * @param pattern - Wildcard pattern (e.g., 'user.*')
+   * @param eventName - Event name to test
+   * @returns True if the pattern matches
+   */
+  protected wildcardMatch(pattern: string, eventName: string): boolean {
+    if (!pattern.includes('*')) {
+      return pattern === eventName;
+    }
+
+    const regexPattern = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+    return new RegExp(`^${regexPattern}$`).test(eventName);
   }
 
   /**
@@ -403,7 +476,7 @@ export class EventFake implements DispatcherContract {
    */
   assertListening(event: string | (new (...args: any[]) => Event), listener?: string | EventListener): void {
     const eventName = typeof event === 'string' ? event : event.name;
-    const eventListeners = this.listeners.get(eventName) || [];
+    const eventListeners = (this.listeners.get(eventName) || []).map((entry) => entry.listener);
 
     if (eventListeners.length === 0) {
       throw new Error(`No listeners are registered for event [${eventName}].`);
@@ -420,6 +493,74 @@ export class EventFake implements DispatcherContract {
         throw new Error(`Listener [${listenerName}] is not registered for event [${eventName}].`);
       }
     }
+  }
+
+  /**
+   * Assert that a dispatch was routed to the queue
+   *
+   * A dispatch counts as queued when at least one listener registered for it
+   * (directly or via a wildcard) is a queued listener. Use `Event.listen()`
+   * with the third `queued` argument, or register the same listener class the
+   * real dispatcher would detect as `ShouldQueue`.
+   *
+   * @param event - The event name or class
+   * @param callback - Optional callback to filter events
+   * @throws Error if no queued dispatch matched
+   *
+   * @example
+   * ```typescript
+   * fake.listen(OrderPlaced, SendReceipt, true);
+   * await Event.dispatch(new OrderPlaced(order));
+   * fake.assertDispatchedToQueue(OrderPlaced);
+   * ```
+   */
+  assertDispatchedToQueue(event: string | (new (...args: any[]) => Event), callback?: (event: Event) => boolean): void {
+    const eventName = typeof event === 'string' ? event : event.name;
+    const events = this.queued.get(eventName) || [];
+
+    if (events.length === 0) {
+      const queuedList = Array.from(this.queued.keys()).join(', ') || 'none';
+      throw new Error(`Event [${eventName}] was not dispatched to the queue.\n` + `Queued events: ${queuedList}`);
+    }
+
+    if (callback) {
+      const matching = events.filter((e) => {
+        const eventObj = typeof e.event === 'string' ? null : e.event;
+        return eventObj && callback(eventObj);
+      });
+
+      if (matching.length === 0) {
+        throw new Error(
+          `Event [${eventName}] was queued ${events.length} time(s) ` + `but none matched the provided callback.`
+        );
+      }
+    }
+  }
+
+  /**
+   * Assert that no dispatch of an event was routed to the queue
+   *
+   * @param event - The event name or class
+   * @throws Error if a queued dispatch exists for the event
+   */
+  assertNotDispatchedToQueue(event: string | (new (...args: any[]) => Event)): void {
+    const eventName = typeof event === 'string' ? event : event.name;
+    const events = this.queued.get(eventName) || [];
+
+    if (events.length > 0) {
+      throw new Error(`Event [${eventName}] was unexpectedly dispatched to the queue ${events.length} time(s).`);
+    }
+  }
+
+  /**
+   * Get the dispatches of an event that were routed to the queue
+   *
+   * @param event - The event name or class
+   * @returns Array of queued dispatch records
+   */
+  getQueuedDispatched(event: string | (new (...args: any[]) => Event)): DispatchedEvent[] {
+    const eventName = typeof event === 'string' ? event : event.name;
+    return this.queued.get(eventName) || [];
   }
 
   /**
@@ -492,6 +633,7 @@ export class EventFake implements DispatcherContract {
    */
   clear(): void {
     this.dispatched.clear();
+    this.queued.clear();
   }
 
   /**

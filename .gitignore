@@ -142,6 +142,9 @@ tests/**/*.js
 tests/**/*.d.ts
 tests/**/*.d.ts.map
 
+# Checked-in plain-JS test fixtures (e.g. EventDiscovery listener samples)
+!tests/Events/fixtures/**/*.js
+
 # Playwright
 playwright-report/
 test-results/
