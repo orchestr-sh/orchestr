@@ -187,6 +187,12 @@ export type {
   ObserverRegistration,
 } from './Database/Ensemble/Observers';
 export type { Scope, GlobalScopeCallback, AnyGlobalScope } from './Database/Ensemble/Scope';
+export type {
+  AggregateConstraints,
+  AggregateFunction,
+  AggregateLoad,
+  AggregateRelations,
+} from './Database/Ensemble/Aggregates';
 
 // Ensemble Relations
 export { Relation, HasOne, HasMany, BelongsTo, BelongsToMany } from './Database/Ensemble/Relations';

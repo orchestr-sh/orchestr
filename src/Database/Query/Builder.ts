@@ -14,6 +14,7 @@
 import { DatabaseAdapter } from '@/Database/Contracts/DatabaseAdapter';
 import {
   QueryBuilderInterface,
+  SubSelect,
   WhereOperator,
   OrderDirection,
   JoinType,
@@ -131,15 +132,22 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
   /**
    * Add a where in clause
    */
-  whereIn(column: string, values: any[]): this {
-    return this.addWhereClause('and', column, 'in', values);
+  whereIn(column: string, values: any[], boolean: 'and' | 'or' = 'and'): this {
+    return this.addWhereClause(boolean, column, 'in', values);
   }
 
   /**
    * Add a where not in clause
    */
-  whereNotIn(column: string, values: any[]): this {
-    return this.addWhereClause('and', column, 'not in', values);
+  whereNotIn(column: string, values: any[], boolean: 'and' | 'or' = 'and'): this {
+    return this.addWhereClause(boolean, column, 'not in', values);
+  }
+
+  /**
+   * Add an "or where in" clause
+   */
+  orWhereIn(column: string, values: any[]): this {
+    return this.whereIn(column, values, 'or');
   }
 
   /**
@@ -189,6 +197,97 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
     });
 
     this.addBindings(bindings, 'where');
+
+    return this;
+  }
+
+  /**
+   * Add a where clause comparing two columns
+   *
+   * The comparison side is never bound: both halves are identifiers the
+   * grammar wraps, which is what lets a sub-select refer back to the row the
+   * outer query is looking at.
+   */
+  whereColumn(first: string, operator?: any, second?: any, boolean: 'and' | 'or' = 'and'): this {
+    if (arguments.length === 2) {
+      second = operator;
+      operator = '=';
+    }
+
+    this._wheres.push({
+      column: first,
+      operator: operator as string,
+      value: second,
+      boolean,
+      compare: 'column',
+    });
+
+    return this;
+  }
+
+  /**
+   * Add an "or where" clause comparing two columns
+   */
+  orWhereColumn(first: string, operator?: any, second?: any): this {
+    if (arguments.length === 2) {
+      return this.whereColumn(first, '=', operator, 'or');
+    }
+
+    return this.whereColumn(first, operator, second, 'or');
+  }
+
+  /**
+   * Add a where clause keeping only rows a sub-select matches
+   *
+   * The sub-select's bindings join this clause's own place in the where list,
+   * so the flattened bindings always line up with the compiled statement.
+   */
+  whereExists(sub: SubSelect, boolean: 'and' | 'or' = 'and', not: boolean = false): this {
+    this._wheres.push({
+      column: new Expression(sub.toSql()),
+      operator: not ? 'not exists' : 'exists',
+      value: null,
+      boolean,
+    });
+
+    this.addBindings(sub.getBindings(), 'where');
+
+    return this;
+  }
+
+  /**
+   * Add a where clause keeping only rows a sub-select matches no result for
+   */
+  whereNotExists(sub: SubSelect, boolean: 'and' | 'or' = 'and'): this {
+    return this.whereExists(sub, boolean, true);
+  }
+
+  /**
+   * Add an "or where" clause for a sub-select existence check
+   */
+  orWhereExists(sub: SubSelect, not: boolean = false): this {
+    return this.whereExists(sub, 'or', not);
+  }
+
+  /**
+   * Add a where clause comparing a scalar sub-select with a value
+   *
+   * `where` cannot take an expression column, and the sub-select's bindings
+   * have to precede the compared value; this keeps both orders straight.
+   */
+  whereSub(sub: SubSelect, operator: string, value: any, boolean: 'and' | 'or' = 'and'): this {
+    this._wheres.push({
+      column: new Expression(`(${sub.toSql()})`),
+      operator,
+      value,
+      boolean,
+    });
+
+    this.addBindings(sub.getBindings(), 'where');
+
+    if (value !== undefined) {
+      this.addBinding(value, 'where');
+    }
 
     return this;
   }

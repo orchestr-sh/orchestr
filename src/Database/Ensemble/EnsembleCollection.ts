@@ -8,6 +8,7 @@
  */
 
 import { Collection } from '@/Support/Collection';
+import { createAggregateLoads, type AggregateRelations } from './Aggregates';
 import { Ensemble } from './Ensemble';
 
 export class EnsembleCollection<T extends Ensemble> extends Collection<T> {
@@ -74,6 +75,70 @@ export class EnsembleCollection<T extends Ensemble> extends Collection<T> {
     // TODO: Implement eager loading
     // This will be implemented when we add relationship support
     return this;
+  }
+
+  // -------------------------------------------------------------------------
+  // Relationship aggregates
+  // -------------------------------------------------------------------------
+
+  /**
+   * Attach aggregate values of a relationship to every model in the collection
+   *
+   * The whole collection is aggregated by one grouped query per relation, so
+   * loading counts on a hundred models still costs one select.
+   */
+  protected async loadAggregate(type: string, relations: AggregateRelations, column: string = '*'): Promise<this> {
+    const models = this.all();
+
+    if (models.length === 0) {
+      return this;
+    }
+
+    await models[0].newQuery().loadAggregates(models, createAggregateLoads(type, relations, column));
+
+    return this;
+  }
+
+  /**
+   * Load the number of related rows onto every model
+   */
+  async loadCount(relations: AggregateRelations): Promise<this> {
+    return this.loadAggregate('count', relations);
+  }
+
+  /**
+   * Load the sum of a related column onto every model
+   */
+  async loadSum(relations: AggregateRelations, column: string): Promise<this> {
+    return this.loadAggregate('sum', relations, column);
+  }
+
+  /**
+   * Load the average of a related column onto every model
+   */
+  async loadAvg(relations: AggregateRelations, column: string): Promise<this> {
+    return this.loadAggregate('avg', relations, column);
+  }
+
+  /**
+   * Load the smallest value of a related column onto every model
+   */
+  async loadMin(relations: AggregateRelations, column: string): Promise<this> {
+    return this.loadAggregate('min', relations, column);
+  }
+
+  /**
+   * Load the largest value of a related column onto every model
+   */
+  async loadMax(relations: AggregateRelations, column: string): Promise<this> {
+    return this.loadAggregate('max', relations, column);
+  }
+
+  /**
+   * Load whether each model has related rows
+   */
+  async loadExists(relations: AggregateRelations): Promise<this> {
+    return this.loadAggregate('exists', relations);
   }
 
   /**

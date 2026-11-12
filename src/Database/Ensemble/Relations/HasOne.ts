@@ -45,6 +45,35 @@ export class HasOne<TRelated extends Ensemble, TParent extends Ensemble> extends
   }
 
   /**
+   * Correlate a sub-select on the parent's local key, not its primary key:
+   * `posts.id = comments.post_id`, or whichever pair the relationship names.
+   */
+  protected getQualifiedParentKeyName(): string {
+    return this.qualifyColumn(this.localKey, this.parent.getTable());
+  }
+
+  /**
+   * The related column a sub-select correlates with the parent
+   */
+  protected getExistenceCompareKey(): string {
+    return this.qualifyColumn(this.foreignKey);
+  }
+
+  /**
+   * Aggregates group related rows by their foreign key
+   */
+  getAggregateKeyColumn(): string {
+    return this.getExistenceCompareKey();
+  }
+
+  /**
+   * The parent attribute a foreign key value belongs to
+   */
+  getAggregateParentKey(): string {
+    return this.localKey;
+  }
+
+  /**
    * Set the constraints for an eager load of the relation
    */
   addEagerConstraints(models: TParent[]): void {

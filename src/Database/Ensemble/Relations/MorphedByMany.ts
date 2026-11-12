@@ -89,4 +89,12 @@ export class MorphedByMany<TRelated extends Ensemble, TParent extends Ensemble> 
       );
     }
   }
+
+  /**
+   * The inverse relation stores the parent's key in the other pivot column, so
+   * sub-selects correlate on that one.
+   */
+  protected getExistenceCompareKey(): string {
+    return this.getQualifiedRelatedPivotKeyName();
+  }
 }

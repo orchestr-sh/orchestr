@@ -71,6 +71,31 @@ export class MorphTo<TParent extends Ensemble> extends Relation<Ensemble, TParen
   }
 
   /**
+   * A polymorphic inverse relation has no single table to correlate with.
+   *
+   * The related table is chosen by each row's own type column, so an existence
+   * check or aggregate would need one sub-select per type - Eloquent does that
+   * with `hasMorph`, and Orchestr does not implement it yet.
+   */
+  getRelationExistenceQuery(): EnsembleBuilder<Ensemble> {
+    throw this.subqueryNotSupported();
+  }
+
+  /**
+   * @see getRelationExistenceQuery
+   */
+  getAggregateKeyColumn(): string {
+    throw this.subqueryNotSupported();
+  }
+
+  /**
+   * @see getRelationExistenceQuery
+   */
+  getAggregateParentKey(): string {
+    throw this.subqueryNotSupported();
+  }
+
+  /**
    * Set the constraints for an eager load of the relation
    */
   addEagerConstraints(models: TParent[]): void {

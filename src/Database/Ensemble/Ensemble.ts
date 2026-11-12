@@ -249,6 +249,20 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
   }
 
   /**
+   * Record a value the query computed for this row
+   *
+   * Relationship aggregates are read-only results rather than model changes,
+   * so the original attributes take the value alongside the current ones:
+   * `getDirty()` never reports a computed column and a later `save()` never
+   * tries to write one back to the table.
+   */
+  setComputedAttribute(key: string, value: any): this {
+    this.attributes[key] = value;
+    this.original[key] = value;
+    return this;
+  }
+
+  /**
    * Encrypt an attribute value for storage, leaving already-encrypted
    * payloads untouched so copying raw attributes never double-encrypts
    * Laravel: HasAttributes::castAttributeAsEncryptedString()

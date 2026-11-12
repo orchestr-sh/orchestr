@@ -28,12 +28,18 @@ export type JoinType = 'inner' | 'left' | 'right' | 'cross';
 export interface WhereClause {
   /**
    * The column the operator is applied to. A `whereRaw()` clause stores the
-   * raw SQL as an expression here so the grammar can pass it through untouched.
+   * raw SQL as an expression here so the grammar can pass it through untouched,
+   * and an `exists` clause stores the sub-select the grammar wraps.
    */
   column: string | Expression;
   operator: WhereOperator | string;
   value: any;
   boolean: 'and' | 'or';
+  /**
+   * Set by `whereColumn()`: the clause compares two columns, so `value` holds
+   * the name of the other column and nothing is bound for it.
+   */
+  compare?: 'column';
 }
 
 export interface JoinClause {
@@ -53,6 +59,16 @@ export interface HavingClause {
   column: string;
   operator: string;
   value: any;
+}
+
+/**
+ * The sub-select a where clause embeds: anything that hands over compiled SQL
+ * together with the bindings that go with it. The builders satisfy it, so a
+ * sub-select can be another query builder of any dialect.
+ */
+export interface SubSelect {
+  toSql(): string;
+  getBindings(): any[];
 }
 
 export interface QueryBuilderInterface<T = any> {
@@ -89,12 +105,17 @@ export interface QueryBuilderInterface<T = any> {
   /**
    * Add a where in clause
    */
-  whereIn(column: string, values: any[]): this;
+  whereIn(column: string, values: any[], boolean?: 'and' | 'or'): this;
 
   /**
    * Add a where not in clause
    */
-  whereNotIn(column: string, values: any[]): this;
+  whereNotIn(column: string, values: any[], boolean?: 'and' | 'or'): this;
+
+  /**
+   * Add an "or where in" clause
+   */
+  orWhereIn(column: string, values: any[]): this;
 
   /**
    * Add a where null clause
@@ -115,6 +136,36 @@ export interface QueryBuilderInterface<T = any> {
    * Add a raw where clause
    */
   whereRaw(sql: string, bindings?: any[]): this;
+
+  /**
+   * Add a where clause that compares two columns
+   */
+  whereColumn(first: string, operator?: any, second?: any, boolean?: 'and' | 'or'): this;
+
+  /**
+   * Add an "or where" clause that compares two columns
+   */
+  orWhereColumn(first: string, operator?: any, second?: any): this;
+
+  /**
+   * Add a where clause that keeps only rows with a matching sub-select result
+   */
+  whereExists(sub: SubSelect, boolean?: 'and' | 'or', not?: boolean): this;
+
+  /**
+   * Add a where clause that keeps only rows without a matching sub-select
+   */
+  whereNotExists(sub: SubSelect, boolean?: 'and' | 'or'): this;
+
+  /**
+   * Add an "or where" clause for a sub-select existence check
+   */
+  orWhereExists(sub: SubSelect, not?: boolean): this;
+
+  /**
+   * Add a where clause comparing a scalar sub-select with a value
+   */
+  whereSub(sub: SubSelect, operator: string, value: any, boolean?: 'and' | 'or'): this;
 
   /**
    * Add a join clause

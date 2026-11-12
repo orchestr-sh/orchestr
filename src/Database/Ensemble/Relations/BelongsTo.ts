@@ -57,6 +57,47 @@ export class BelongsTo<TRelated extends Ensemble, TParent extends Ensemble> exte
   }
 
   /**
+   * Correlate a sub-select through the foreign key the parent carries
+   *
+   * The inverse relationship points the other way: the related table holds the
+   * row that is looked up, so its owner key is compared with the parent's
+   * foreign key (`users.id = posts.user_id`).
+   */
+  getRelationExistenceQuery(query: EnsembleBuilder<TRelated>): EnsembleBuilder<TRelated> {
+    this.assertCorrelatable();
+
+    return query.whereColumn(this.getQualifiedOwnerKeyName(), '=', this.getQualifiedParentForeignKey());
+  }
+
+  /**
+   * Aggregates group owner rows by their owner key
+   */
+  getAggregateKeyColumn(): string {
+    return this.getQualifiedOwnerKeyName();
+  }
+
+  /**
+   * The parent attribute that points at the owner row
+   */
+  getAggregateParentKey(): string {
+    return this.foreignKey;
+  }
+
+  /**
+   * The related table's key the relationship is defined on
+   */
+  getQualifiedOwnerKeyName(): string {
+    return this.qualifyColumn(this.ownerKey);
+  }
+
+  /**
+   * The parent table's foreign key column
+   */
+  getQualifiedParentForeignKey(): string {
+    return this.qualifyColumn(this.foreignKey, this.parent.getTable());
+  }
+
+  /**
    * Set the constraints for an eager load of the relation
    */
   addEagerConstraints(models: TParent[]): void {

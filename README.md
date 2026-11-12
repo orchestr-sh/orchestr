@@ -377,6 +377,105 @@ const comment = await Comment.find(1);
 const parent = await comment.commentable; // Returns Post or Video
 ```
 
+### Relationship Existence Queries
+
+Filter by whether a relation has rows, the way Eloquent's `has` family does. Each
+condition runs as a correlated sub-select, so a filtered query is still one
+statement however many rows it matches:
+
+```typescript
+// Only posts that have at least one comment
+const posts = await Post.query().has('comments').get();
+
+// Count conditions: >=, =, < with any number of rows (a bare number means `>= n`)
+const popular = await Post.query().has('comments', '>=', 5).get();
+const commented = await Post.query().has('comments', 2).get(); // two or more
+const single = await Post.query().has('comments', '=', 1).get(); // exactly one
+
+// Invert it
+const silent = await Post.query().doesntHave('comments').get();
+
+// Constrain the related query with a callback
+const reviewed = await Post.query()
+  .whereHas('comments', (query) => query.where('approved', true))
+  .get();
+
+// ...or by a plain column, without writing the closure
+const approved = await Post.query().whereRelation('comments', 'approved', true).get();
+
+// OR variants
+await Post.query().where('title', '=', 'Hello').orHas('comments').get();
+await Post.query().where('title', '=', 'Hello').orWhereHas('comments', (q) => q.where('spam', false)).get();
+await Post.query().where('title', '=', 'Hello').orDoesntHave('comments').get();
+await Post.query().where('title', '=', 'Hello').orWhereDoesntHave('comments').get();
+
+// Nested paths nest one sub-select per step: users with posts that have comments
+const chatty = await User.query().whereHas('posts.comments').get();
+const quiet = await User.query().whereDoesntHave('posts.comments').get();
+
+// Inverse relations by the related model itself
+const mine = await Post.query().whereBelongsTo(user).get();
+const ours = await Post.query().whereBelongsTo([user, teammate]).get();
+```
+
+`whereBelongsTo` takes a model or a list of models (or an `EnsembleCollection`),
+resolves the relationship from the related class name, and compares the parent's
+foreign key with the owner keys. Existence checks exclude soft-deleted related
+rows and apply the related model's global scopes; `withTrashedRelations()` opts
+those sub-selects back in.
+
+A polymorphic inverse relation (`morphTo`) picks its table from each row's type
+column, so it has no single sub-select to correlate and throws instead of
+guessing. The same applies to relations whose parent and child share one table:
+inside a correlated sub-select the alias the outer row needs does not exist yet.
+Aggregates are unaffected by that, since they group by a key instead of
+correlating.
+
+### Relationship Aggregates
+
+`withCount` and friends add one grouped query per relation and write the result
+onto every model, so a page of a hundred models still costs one select:
+
+```typescript
+const posts = await Post.query().withCount('comments').get();
+posts[0].getAttribute('comments_count'); // 12
+
+// Column aggregates are named after relation, function and column
+await Post.query().withSum('comments', 'votes').get(); // comments_sum_votes
+await Post.query().withAvg('comments', 'votes').get(); // comments_avg_votes
+await Post.query().withMin('comments', 'votes').get(); // comments_min_votes
+await Post.query().withMax('comments', 'votes').get(); // comments_max_votes
+
+// Existence as a boolean
+await Post.query().withExists('comments').get(); // comments_exists: true | false
+
+// Several relations at once
+await User.query().withCount(['posts', 'comments']).get();
+
+// Aliases, either in the name or as the value of the map
+await Post.query().withCount('comments as total_comments').get();
+await Post.query().withCount({ comments: 'total_comments' }).get();
+
+// Constrain what is aggregated
+await Post.query()
+  .withCount({ 'comments as approved_count': (query) => query.where('approved', true) })
+  .get();
+
+// And on models or collections you already have, without a query per model
+await post.loadCount('comments');
+await post.loadSum('comments', 'votes');
+
+const users = new EnsembleCollection(await User.query().get());
+await users.loadCount(['posts', 'comments']); // one query per relation, not per user
+```
+
+Counts attach `0`, existence flags `false` and the column aggregates `null` when a
+relation has no rows. Values land as ordinary attributes (`toObject()` includes
+them) without marking the model dirty, so a later `save()` never tries to write a
+computed column. Aggregates respect the related model's soft-delete scope and
+global scopes; `withTrashedRelations()` lifts the soft-delete exclusion just as it
+does for eager loads.
+
 ## @DynamicRelation Decorator
 
 The `@DynamicRelation` decorator enables dual-mode access to relationships:
@@ -1588,6 +1687,8 @@ user.save()               // Save changes
 user.delete()             // Delete record
 user.refresh()            // Reload from database
 user.load('posts')        // Lazy load relationship
+user.loadCount('posts')   // Lazy load an aggregate of a relationship
+user.loadSum('comments', 'votes') // ...sums, averages, minimums, maximums, existence
 user.toObject()           // Convert to plain object
 ```
 
@@ -1600,6 +1701,11 @@ user.toObject()           // Convert to plain object
 .whereIn(column, array)
 .whereBetween(column, [min, max])
 .whereNull(column)
+.whereColumn(first, operator, second)  // Compare two columns
+.orWhereColumn(first, operator, second)
+.whereExists(subQuery)                 // Correlated sub-select
+.whereNotExists(subQuery)
+.orWhereExists(subQuery)
 .orderBy(column, direction)
 .limit(number)
 .offset(number)
@@ -1612,6 +1718,13 @@ user.toObject()           // Convert to plain object
 .avg(column)
 .min(column)
 .max(column)
+.has('comments')                       // Relationship existence filters
+.whereHas('comments', (query) => query.where('approved', true))
+.whereRelation('comments', 'approved', true)
+.whereBelongsTo(user)
+.withCount('comments')                 // Relationship aggregates
+.withSum('comments', 'votes')
+.withExists('comments')
 .toSql()                  // Compiled statement, with bindings separate
 .toRawSql()               // Same statement with bindings interpolated in, for debugging only
 ```
@@ -1707,6 +1820,15 @@ table.change(column)                // Redefine existing column(s)
 .with('relation')         // Eager load
 .with(['relation1', 'relation2'])
 .with({ relation: (q) => q.where(...) })
+
+// On the model query, for any relationship
+.has('relation')          // Keep rows the relation has rows for
+.doesntHave('relation')   // ...and the inverse
+.whereHas('relation', (q) => q.where(...)) // ...constrained by the related query
+.whereRelation('relation', 'column', value) // ...by a single column
+.whereBelongsTo(model)    // ...by the related model of an inverse relation
+.withCount('relation')    // Eager load an aggregate of the relation
+.loadCount('relation')    // ...onto models you already have
 ```
 
 ### Available Relationships
@@ -2580,6 +2702,8 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Ensemble ORM (ActiveRecord)
 - ✅ Relationships (Standard + Polymorphic)
 - ✅ Eager/Lazy Loading
+- ✅ Relationship Existence Queries (`has`, `whereHas`, `whereRelation`, `whereBelongsTo`)
+- ✅ Relationship Aggregates (`withCount`, `withSum`, `withExists`, `loadCount`, ...)
 - ✅ Migrations with Schema Builder
 - ✅ Database Seeders
 - ✅ Events & Listeners
