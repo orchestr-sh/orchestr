@@ -137,6 +137,35 @@ export class BelongsToMany<TRelated extends Ensemble, TParent extends Ensemble> 
   }
 
   /**
+   * Correlated sub-queries reach the related table through the pivot, so the
+   * pivot join the relationship itself uses is part of their SQL shape.
+   */
+  constrainRelatedQuery(query: EnsembleBuilder<TRelated>): void {
+    this.performJoin(query);
+  }
+
+  /**
+   * The pivot column holding the parent's key
+   */
+  protected getExistenceCompareKey(): string {
+    return this.getQualifiedForeignPivotKeyName();
+  }
+
+  /**
+   * Aggregates group pivot rows by the parent key stored on them
+   */
+  getAggregateKeyColumn(): string {
+    return this.getExistenceCompareKey();
+  }
+
+  /**
+   * The parent attribute a pivot row's foreign key belongs to
+   */
+  getAggregateParentKey(): string {
+    return this.parentKey;
+  }
+
+  /**
    * Set the constraints for an eager load of the relation
    */
   addEagerConstraints(models: TParent[]): void {

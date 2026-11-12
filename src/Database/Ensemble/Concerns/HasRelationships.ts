@@ -4,12 +4,18 @@
  * Provides relationship functionality to Ensemble models
  */
 
+import { createAggregateLoads, type AggregateRelations } from '@/Database/Ensemble/Aggregates';
 import { Ensemble } from '@/Database/Ensemble/Ensemble';
 import { EnsembleBuilder } from '@/Database/Ensemble/EnsembleBuilder';
 import { BelongsTo } from '@/Database/Ensemble/Relations/BelongsTo';
 import { BelongsToMany } from '@/Database/Ensemble/Relations/BelongsToMany';
 import { HasMany } from '@/Database/Ensemble/Relations/HasMany';
 import { HasOne } from '@/Database/Ensemble/Relations/HasOne';
+import { MorphedByMany } from '@/Database/Ensemble/Relations/MorphedByMany';
+import { MorphMany } from '@/Database/Ensemble/Relations/MorphMany';
+import { MorphOne } from '@/Database/Ensemble/Relations/MorphOne';
+import { MorphTo } from '@/Database/Ensemble/Relations/MorphTo';
+import { MorphToMany } from '@/Database/Ensemble/Relations/MorphToMany';
 import { Relation } from '@/Database/Ensemble/Relations/Relation';
 
 export interface RelationshipConfig {
@@ -161,14 +167,19 @@ export abstract class HasRelationshipsMixin {
     type?: string | null,
     id?: string | null,
     localKey?: string
-  ): import('@/Database/Ensemble/Relations/MorphOne').MorphOne<TRelated, any> {
+  ): MorphOne<TRelated, any> {
     const instance = new related();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphOne } = require('@/Database/Ensemble/Relations/MorphOne');
 
     const finalLocalKey = localKey || (this as any).getKeyName();
 
-    return new MorphOne(instance.newQuery() as EnsembleBuilder<TRelated>, this as any, name, type, id, finalLocalKey);
+    return new MorphOne(
+      instance.newQuery() as EnsembleBuilder<TRelated>,
+      this as any,
+      name,
+      type ?? null,
+      id ?? null,
+      finalLocalKey
+    );
   }
 
   /**
@@ -180,28 +191,25 @@ export abstract class HasRelationshipsMixin {
     type?: string | null,
     id?: string | null,
     localKey?: string
-  ): import('@/Database/Ensemble/Relations/MorphMany').MorphMany<TRelated, any> {
+  ): MorphMany<TRelated, any> {
     const instance = new related();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphMany } = require('@/Database/Ensemble/Relations/MorphMany');
 
     const finalLocalKey = localKey || (this as any).getKeyName();
 
-    return new MorphMany(instance.newQuery() as EnsembleBuilder<TRelated>, this as any, name, type, id, finalLocalKey);
+    return new MorphMany(
+      instance.newQuery() as EnsembleBuilder<TRelated>,
+      this as any,
+      name,
+      type ?? null,
+      id ?? null,
+      finalLocalKey
+    );
   }
 
   /**
    * Define a polymorphic inverse relationship
    */
-  protected morphTo(
-    name: string,
-    type?: string,
-    id?: string,
-    ownerKey?: string
-  ): import('@/Database/Ensemble/Relations/MorphTo').MorphTo<any> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphTo } = require('@/Database/Ensemble/Relations/MorphTo');
-
+  protected morphTo(name: string, type?: string, id?: string, ownerKey?: string): MorphTo<any> {
     const finalType = type || `${name}_type`;
     const finalId = id || `${name}_id`;
     const finalOwnerKey = ownerKey || 'id';
@@ -222,10 +230,8 @@ export abstract class HasRelationshipsMixin {
     parentKey?: string,
     relatedKey?: string,
     inverse: boolean = false
-  ): import('@/Database/Ensemble/Relations/MorphToMany').MorphToMany<TRelated, any> {
+  ): MorphToMany<TRelated, any> {
     const instance = new related();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphToMany } = require('@/Database/Ensemble/Relations/MorphToMany');
 
     const finalTable = table || `${name}s`;
     const finalForeignPivotKey = foreignPivotKey || `${name}_id`;
@@ -260,10 +266,8 @@ export abstract class HasRelationshipsMixin {
     relatedPivotKey?: string,
     parentKey?: string,
     relatedKey?: string
-  ): import('@/Database/Ensemble/Relations/MorphedByMany').MorphedByMany<TRelated, any> {
+  ): MorphedByMany<TRelated, any> {
     const instance = new related();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { MorphedByMany } = require('@/Database/Ensemble/Relations/MorphedByMany');
 
     const finalTable = table || `${name}s`;
     const finalForeignPivotKey = foreignPivotKey || `${name}_id`;
@@ -377,6 +381,65 @@ export abstract class HasRelationshipsMixin {
     }
 
     return this as any;
+  }
+
+  // -------------------------------------------------------------------------
+  // Relationship aggregates
+  // -------------------------------------------------------------------------
+
+  /**
+   * Eager load aggregate values of a relationship onto this model
+   *
+   * The query that writes the values is the same one `withCount` and friends
+   * run after a select, so `loadCount` on a model and `withCount` on a query
+   * agree on names, scopes and empty values.
+   */
+  protected async loadAggregate(type: string, relations: AggregateRelations, column: string = '*'): Promise<this> {
+    await this.newQuery().loadAggregates([this as any], createAggregateLoads(type, relations, column));
+
+    return this as any;
+  }
+
+  /**
+   * Load the number of related rows onto this model
+   */
+  public async loadCount(relations: AggregateRelations): Promise<this> {
+    return this.loadAggregate('count', relations);
+  }
+
+  /**
+   * Load the sum of a related column onto this model
+   */
+  public async loadSum(relations: AggregateRelations, column: string): Promise<this> {
+    return this.loadAggregate('sum', relations, column);
+  }
+
+  /**
+   * Load the average of a related column onto this model
+   */
+  public async loadAvg(relations: AggregateRelations, column: string): Promise<this> {
+    return this.loadAggregate('avg', relations, column);
+  }
+
+  /**
+   * Load the smallest value of a related column onto this model
+   */
+  public async loadMin(relations: AggregateRelations, column: string): Promise<this> {
+    return this.loadAggregate('min', relations, column);
+  }
+
+  /**
+   * Load the largest value of a related column onto this model
+   */
+  public async loadMax(relations: AggregateRelations, column: string): Promise<this> {
+    return this.loadAggregate('max', relations, column);
+  }
+
+  /**
+   * Load whether this model has related rows onto it
+   */
+  public async loadExists(relations: AggregateRelations): Promise<this> {
+    return this.loadAggregate('exists', relations);
   }
 
   /**

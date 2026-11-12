@@ -43,6 +43,116 @@ export abstract class Relation<TRelated extends Ensemble, TParent extends Ensemb
   }
 
   /**
+   * Run a callback with relationship constraints switched off
+   *
+   * Sub-selects (existence checks, aggregates) correlate the related table with
+   * the parent's in their own way, so they need the relation's keys without the
+   * eager-load or single-parent constraints layered on top.
+   */
+  static noConstraints<T>(callback: () => T): T {
+    const previous = Relation.constraints;
+
+    Relation.constraints = false;
+
+    try {
+      return callback();
+    } finally {
+      Relation.constraints = previous;
+    }
+  }
+
+  /**
+   * Correlate a fresh related query with the parent's rows
+   *
+   * This is the shape every existence check runs on: the relation owns the keys
+   * and joins that connect its table to the parent's, so the builder can wrap
+   * the result in `exists (...)` - or a counted sub-select - without knowing
+   * which relation type it is looking at.
+   */
+  getRelationExistenceQuery(query: EnsembleBuilder<TRelated>): EnsembleBuilder<TRelated> {
+    this.assertCorrelatable();
+    this.constrainRelatedQuery(query);
+
+    return query.whereColumn(this.getQualifiedParentKeyName(), '=', this.getExistenceCompareKey());
+  }
+
+  /**
+   * Add the relation's own SQL shape - pivot joins, morph type restrictions -
+   * to a query used as a sub-select or for aggregation. Relationships whose
+   * query is a single table need nothing here.
+   */
+  constrainRelatedQuery(query: EnsembleBuilder<TRelated>): void {
+    // Nothing beyond the related table itself.
+  }
+
+  /**
+   * Name a column with the table it lives on
+   *
+   * Sub-selects correlate across tables, so their columns have to be qualified.
+   * Keys declared with their table already (`comments.post_id`) pass through.
+   */
+  protected qualifyColumn(column: string, table: string = this.related.getTable()): string {
+    return column.includes('.') ? column : `${table}.${column}`;
+  }
+
+  /**
+   * The column an aggregate wraps, named where it lives
+   *
+   * `count(*)` has no column to name; every other aggregate needs the related
+   * table in front of it to stay unambiguous once the query joins.
+   */
+  qualifyAggregateColumn(column: string): string {
+    return column === '*' ? '*' : this.qualifyColumn(column);
+  }
+
+  /**
+   * The column on the related side a sub-select correlates with the parent key
+   */
+  protected getExistenceCompareKey(): string {
+    throw this.subqueryNotSupported();
+  }
+
+  /**
+   * The column an aggregate groups related rows by to line them up with their
+   * parents
+   */
+  getAggregateKeyColumn(): string {
+    throw this.subqueryNotSupported();
+  }
+
+  /**
+   * The parent attribute whose value `getAggregateKeyColumn()` matches
+   */
+  getAggregateParentKey(): string {
+    throw this.subqueryNotSupported();
+  }
+
+  /**
+   * Throw unless this relationship's tables can be correlated at all.
+   *
+   * An existence sub-select reads the outer row from inside, so a relation whose
+   * related table is also the parent's own table would need a table alias to
+   * stay correlated. Ensemble builders do not generate one yet, so the check
+   * says so instead of quietly matching rows of the wrong query. Aggregates do
+   * not correlate - they group by a key - so they are not affected.
+   */
+  protected assertCorrelatable(): void {
+    if (this.related.getTable() === this.parent.getTable()) {
+      throw new Error(
+        `Relationship between [${this.parent.getTable()}] and [${this.related.getTable()}] shares its parent ` +
+          'table, which a correlated existence sub-select cannot resolve without a table alias.'
+      );
+    }
+  }
+
+  /**
+   * The error for relationship types with no single table to correlate.
+   */
+  protected subqueryNotSupported(): Error {
+    return new Error(`Relationship [${this.constructor.name}] does not support existence or aggregate sub-queries.`);
+  }
+
+  /**
    * Initialize the relation and prepare for constraint application
    * Should be called by child classes after setting their properties
    */

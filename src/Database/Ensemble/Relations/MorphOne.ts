@@ -68,6 +68,42 @@ export class MorphOne<TRelated extends Ensemble, TParent extends Ensemble> exten
   }
 
   /**
+   * Correlate a sub-select on the parent's local key, not its primary key
+   */
+  protected getQualifiedParentKeyName(): string {
+    return this.qualifyColumn(this.localKey, this.parent.getTable());
+  }
+
+  /**
+   * The related column a sub-select correlates with the parent
+   */
+  protected getExistenceCompareKey(): string {
+    return this.qualifyColumn(this.foreignKey);
+  }
+
+  /**
+   * A polymorphic sub-select is only the rows of this parent's type, so the
+   * morph type column joins the correlation.
+   */
+  constrainRelatedQuery(query: EnsembleBuilder<TRelated>): void {
+    query.where(this.qualifyColumn(this.morphType), '=', this.morphClass);
+  }
+
+  /**
+   * Aggregates group related rows by their morph foreign key
+   */
+  getAggregateKeyColumn(): string {
+    return this.getExistenceCompareKey();
+  }
+
+  /**
+   * The parent attribute a morph key value belongs to
+   */
+  getAggregateParentKey(): string {
+    return this.localKey;
+  }
+
+  /**
    * Set the constraints for an eager load of the relation
    */
   addEagerConstraints(models: TParent[]): void {

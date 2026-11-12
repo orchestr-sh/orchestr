@@ -8,10 +8,12 @@ import type { QueryGrammar } from '@/Database/Query/Grammars';
 import { DatabaseAdapter } from '@/Database/Contracts/DatabaseAdapter';
 import { Builder as QueryBuilder } from '@/Database/Query/Builder';
 import { Str } from '@/Support/Str';
+import { aggregateFunction, createAggregateLoads, type AggregateLoad, type AggregateRelations } from './Aggregates';
 import { Ensemble } from './Ensemble';
 import { EnsembleCollection } from './EnsembleCollection';
 import { GlobalScopeRegistry } from './GlobalScopeRegistry';
 import { Relation } from './Relations';
+import { BelongsTo } from './Relations/BelongsTo';
 import { SoftDeletingScope } from './SoftDeletingScope';
 
 /**
@@ -19,6 +21,12 @@ import { SoftDeletingScope } from './SoftDeletingScope';
  * return only them
  */
 type TrashedState = 'without' | 'with' | 'only';
+
+/**
+ * The rows a belongs-to condition compares the foreign key with: one model, a
+ * list of them, or a loaded collection of them.
+ */
+type RelatedModels = Ensemble | Ensemble[] | EnsembleCollection<any>;
 
 export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
   /**
@@ -52,6 +60,11 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
    * Whether eager-loaded relations include trashed rows as well
    */
   protected eagerLoadTrashed: boolean = false;
+
+  /**
+   * Aggregate columns eager loaded onto the models of this query
+   */
+  protected aggregateLoads: AggregateLoad[] = [];
 
   constructor(adapter: DatabaseAdapter, grammar: QueryGrammar, model: T) {
     super(adapter, grammar);
@@ -223,6 +236,10 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
       await this.eagerLoadRelations(models);
     }
 
+    if (this.aggregateLoads.length > 0) {
+      await this.loadAggregates(models, this.aggregateLoads);
+    }
+
     return models;
   }
 
@@ -271,6 +288,21 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
     }
     this._columns.push(...columns);
     return this;
+  }
+
+  /**
+   * Add a raw select statement, replacing the default star the way
+   * `addSelect()` does.
+   *
+   * Aggregate sub-selects project a single expression, so the implicit `*` has
+   * to go the same way it does for a list of columns.
+   */
+  addSelectRaw(sql: string, bindings: any[] = []): this {
+    if (this._columns.length === 1 && this._columns[0] === '*') {
+      this._columns = [];
+    }
+
+    return this.selectRaw(sql, bindings);
   }
 
   /**
@@ -388,26 +420,438 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
   /**
    * Get the relation instance for the given relation name
    */
-  protected getRelation(model: T, name: string): Relation<any, any> {
+  protected getRelation(model: Ensemble, name: string): Relation<any, any> {
     const relationMethod = (model as any)[name];
 
     if (typeof relationMethod !== 'function') {
       throw new Error(`Call to undefined relationship [${name}] on model [${model.constructor.name}]`);
     }
 
-    const relation = relationMethod.call(model);
+    // Built with the relationship's own constraints switched off: sub-selects
+    // and eager loads supply the keys they need, never the parent's where clause.
+    return Relation.noConstraints(() => {
+      const relation = relationMethod.call(model);
 
-    if (!(relation instanceof Relation)) {
-      throw new Error(`Relationship method [${name}] must return a Relation instance`);
+      if (!(relation instanceof Relation)) {
+        throw new Error(`Relationship method [${name}] must return a Relation instance`);
+      }
+
+      return relation;
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Relationship existence queries
+  // -------------------------------------------------------------------------
+
+  /**
+   * Add a relationship count or exists condition to the query
+   *
+   * `has('comments')` keeps the rows the relation has at least one row for;
+   * `has('comments', '>=', 2)` compares a counted sub-select instead, and
+   * `has('comments', 2)` is the same query written the shorter way.
+   */
+  has(
+    relation: string,
+    operator: string | number = '>=',
+    count: number = 1,
+    boolean: 'and' | 'or' = 'and',
+    callback?: (query: any) => void
+  ): this {
+    return this.addHasWhere(relation, operator, count, boolean, callback);
+  }
+
+  /**
+   * Add a relationship existence condition joined with `or`
+   */
+  orHas(relation: string, operator: string | number = '>=', count: number = 1): this {
+    return this.addHasWhere(relation, operator, count, 'or');
+  }
+
+  /**
+   * Add a relationship condition that the relation has no rows
+   */
+  doesntHave(relation: string, boolean: 'and' | 'or' = 'and', callback?: (query: any) => void): this {
+    return this.addHasWhere(relation, '<', 1, boolean, callback);
+  }
+
+  /**
+   * Add a "does not have" relationship condition joined with `or`
+   */
+  orDoesntHave(relation: string, callback?: (query: any) => void): this {
+    return this.doesntHave(relation, 'or', callback);
+  }
+
+  /**
+   * Add a relationship condition with constraints on the related query
+   */
+  whereHas(
+    relation: string,
+    callback?: (query: any) => void,
+    operator: string | number = '>=',
+    count: number = 1
+  ): this {
+    return this.addHasWhere(relation, operator, count, 'and', callback);
+  }
+
+  /**
+   * Add a constrained relationship condition joined with `or`
+   */
+  orWhereHas(
+    relation: string,
+    callback?: (query: any) => void,
+    operator: string | number = '>=',
+    count: number = 1
+  ): this {
+    return this.addHasWhere(relation, operator, count, 'or', callback);
+  }
+
+  /**
+   * Add a "does not have" relationship condition with constraints on the
+   * related query
+   */
+  whereDoesntHave(relation: string, callback?: (query: any) => void): this {
+    return this.doesntHave(relation, 'and', callback);
+  }
+
+  /**
+   * Add a constrained "does not have" condition joined with `or`
+   */
+  orWhereDoesntHave(relation: string, callback?: (query: any) => void): this {
+    return this.doesntHave(relation, 'or', callback);
+  }
+
+  /**
+   * Add a relationship condition that constrains the related query by a column
+   *
+   * `whereRelation('comments', 'approved', '=', true)` reads the same as the
+   * `whereHas` it delegates to, which is the point: a basic constraint should
+   * not cost the caller a closure.
+   */
+  whereRelation(relation: string, column: string, operator?: any, value?: any): this {
+    return this.addHasWhere(relation, '>=', 1, 'and', (query) => this.constrainColumn(query, column, operator, value));
+  }
+
+  /**
+   * Add a column constraint on a related query joined with `or`
+   */
+  orWhereRelation(relation: string, column: string, operator?: any, value?: any): this {
+    return this.addHasWhere(relation, '>=', 1, 'or', (query) => this.constrainColumn(query, column, operator, value));
+  }
+
+  /**
+   * Add a condition on an inverse relationship by the related model itself
+   *
+   * The parent's foreign key is compared with the owner keys of the models
+   * handed in, so `whereBelongsTo($user)` needs no query of its own.
+   */
+  whereBelongsTo(related: RelatedModels, relationshipName?: string, boolean: 'and' | 'or' = 'and'): this {
+    const models =
+      related instanceof Ensemble ? [related] : related instanceof EnsembleCollection ? related.all() : related;
+
+    if (models.length === 0) {
+      throw new Error('The models given to whereBelongsTo may not be empty.');
     }
 
-    // Disable default constraints for eager loading
-    const originalConstraints = Relation['constraints'];
-    Relation['constraints'] = false;
-    const freshRelation = relationMethod.call(model);
-    Relation['constraints'] = originalConstraints;
+    const name = relationshipName ?? Str.camel(models[0].constructor.name);
+    const relation = this.getRelation(this.model, name);
 
-    return freshRelation;
+    if (!(relation instanceof BelongsTo)) {
+      throw new Error(
+        `Relationship [${name}] on model [${this.model.constructor.name}] is not a belongs-to relationship.`
+      );
+    }
+
+    const keys = models
+      .map((model) => model.getAttribute(relation.getOwnerKeyName()))
+      .filter((key) => key !== null && key !== undefined);
+
+    if (keys.length === 0) {
+      throw new Error('The models given to whereBelongsTo carry no owner key to compare against.');
+    }
+
+    return this.whereIn(relation.getQualifiedParentForeignKey(), keys, boolean);
+  }
+
+  /**
+   * Add an inverse-relationship condition joined with `or`
+   */
+  orWhereBelongsTo(related: RelatedModels, relationshipName?: string): this {
+    return this.whereBelongsTo(related, relationshipName, 'or');
+  }
+
+  /**
+   * Build the existence or counted sub-select a `has` style call runs
+   *
+   * Nested paths are split at the first segment and the rest is pushed into the
+   * sub-select as its own constraint, which is how `posts.comments` keeps
+   * correlating row by row all the way down.
+   */
+  protected addHasWhere(
+    relation: string,
+    operator: string | number,
+    count: number,
+    boolean: 'and' | 'or',
+    callback?: (query: any) => void
+  ): this {
+    let normalizedOperator = operator;
+
+    if (typeof normalizedOperator === 'number') {
+      count = normalizedOperator;
+      normalizedOperator = '>=';
+    }
+
+    if (relation.includes('.')) {
+      return this.addNestedHasWhere(relation, normalizedOperator as string, count, boolean, callback);
+    }
+
+    const query = this.existenceQuery(relation, callback);
+
+    if (this.canUseExistsForExistenceCheck(normalizedOperator as string, count)) {
+      return this.whereExists(query, boolean, normalizedOperator === '<');
+    }
+
+    return this.whereSub(
+      query.addSelectRaw(this.grammar.compileAggregate('count', '*')),
+      normalizedOperator as string,
+      count,
+      boolean
+    );
+  }
+
+  /**
+   * Nest one existence check inside the next, so a dotted relation path
+   * constrains every step of it.
+   */
+  protected addNestedHasWhere(
+    relation: string,
+    operator: string,
+    count: number,
+    boolean: 'and' | 'or',
+    callback?: (query: any) => void
+  ): this {
+    const [first, ...rest] = relation.split('.');
+
+    // `doesntHave` on a path asks for no rows at the deepest level, so the
+    // outer steps are checked with a plain existence test and the caller's
+    // operator belongs to the last segment only.
+    const doesntHave = operator === '<' && count === 1;
+    const deepest = { operator: doesntHave ? '>=' : operator, count: doesntHave ? 1 : count };
+
+    // Each remaining segment becomes an existence check inside the previous
+    // one's sub-select, which is what keeps the whole path correlated row by
+    // row instead of matching any row of the last table.
+    const constrain = (query: EnsembleBuilder<any>, segments: string[]): void => {
+      const [segment, ...next] = segments;
+
+      if (next.length > 0) {
+        query.has(segment, '>=', 1, 'and', (child: EnsembleBuilder<any>) => constrain(child, next));
+        return;
+      }
+
+      query.has(segment, deepest.operator, deepest.count, 'and', callback);
+    };
+
+    return this.has(first, doesntHave ? '<' : '>=', 1, boolean, (query) => constrain(query, rest));
+  }
+
+  /**
+   * The sub-select of the rows related to this query's rows
+   */
+  protected existenceQuery(relation: string, callback?: (query: any) => void): EnsembleBuilder<any> {
+    const instance = this.getRelation(this.model, relation);
+    const query = instance.getRelated().newQuery();
+
+    // Trashed-aware queries lift the soft-delete exclusion on the relation too
+    if (this.eagerLoadTrashed) {
+      query.withTrashed();
+    }
+
+    instance.getRelationExistenceQuery(query);
+
+    if (callback) {
+      callback(query);
+    }
+
+    // Scopes are applied here rather than at execution: the compiled text is
+    // embedded in this query as it stands.
+    query.applyScopes();
+
+    return query;
+  }
+
+  /**
+   * Whether the condition can be answered by `exists` instead of a count
+   */
+  protected canUseExistsForExistenceCheck(operator: string, count: number): boolean {
+    return (operator === '>=' || operator === '<') && count === 1;
+  }
+
+  /**
+   * Add one column constraint to a related query, with or without an operator
+   */
+  protected constrainColumn(query: EnsembleBuilder<any>, column: string, operator?: any, value?: any): void {
+    if (operator === undefined) {
+      throw new Error(`The relation constraint on [${column}] needs a value to compare it with.`);
+    }
+
+    if (value === undefined) {
+      query.where(column, operator);
+      return;
+    }
+
+    query.where(column, operator, value);
+  }
+
+  // -------------------------------------------------------------------------
+  // Relationship aggregates
+  // -------------------------------------------------------------------------
+
+  /**
+   * Eager load an aggregate of a relationship onto the models
+   *
+   * Every aggregate entry point funnels through here, so a new aggregate is a
+   * descriptor in the function registry plus a wrapper: the sub-select, the
+   * grouping and the matching are written once.
+   */
+  withAggregate(relations: AggregateRelations, column: string, type: string): this {
+    this.aggregateLoads.push(...createAggregateLoads(type, relations, column));
+
+    return this;
+  }
+
+  /**
+   * Eager load the number of related rows, as `{relation}_count`
+   */
+  withCount(relations: AggregateRelations): this {
+    return this.withAggregate(relations, '*', 'count');
+  }
+
+  /**
+   * Eager load the sum of a related column
+   */
+  withSum(relations: AggregateRelations, column: string): this {
+    return this.withAggregate(relations, column, 'sum');
+  }
+
+  /**
+   * Eager load the average of a related column
+   */
+  withAvg(relations: AggregateRelations, column: string): this {
+    return this.withAggregate(relations, column, 'avg');
+  }
+
+  /**
+   * Eager load the smallest value of a related column
+   */
+  withMin(relations: AggregateRelations, column: string): this {
+    return this.withAggregate(relations, column, 'min');
+  }
+
+  /**
+   * Eager load the largest value of a related column
+   */
+  withMax(relations: AggregateRelations, column: string): this {
+    return this.withAggregate(relations, column, 'max');
+  }
+
+  /**
+   * Eager load whether the relation has any rows, as `{relation}_exists`
+   */
+  withExists(relations: AggregateRelations): this {
+    return this.withAggregate(relations, '*', 'exists');
+  }
+
+  /**
+   * Attach aggregate values to already loaded models
+   *
+   * One grouped query per aggregate covers every model handed in, which is what
+   * keeps `loadCount` on a collection at one query rather than one per model.
+   */
+  async loadAggregates(models: Ensemble[], loads: AggregateLoad[]): Promise<void> {
+    if (models.length === 0) {
+      return;
+    }
+
+    for (const load of loads) {
+      await this.loadAggregate(models, load);
+    }
+  }
+
+  /**
+   * Run one aggregate load and write its value onto every model
+   */
+  protected async loadAggregate(models: Ensemble[], load: AggregateLoad): Promise<void> {
+    const relation = this.getRelation(models[0], load.relation);
+    const fn = aggregateFunction(load.type);
+
+    const keys = [
+      ...new Set(
+        models
+          .map((model) => model.getAttribute(relation.getAggregateParentKey()))
+          .filter((key) => key !== null && key !== undefined)
+      ),
+    ];
+
+    if (keys.length === 0) {
+      for (const model of models) {
+        model.setComputedAttribute(load.as, fn.empty);
+      }
+
+      return;
+    }
+
+    const query = relation.getRelated().newQuery();
+
+    if (this.eagerLoadTrashed) {
+      query.withTrashed();
+    }
+
+    relation.constrainRelatedQuery(query);
+
+    // Constraints belong to the related query, so they run before the keys the
+    // grouped select filters by and keep the binding order of the statement.
+    if (load.constraints) {
+      load.constraints(query);
+    }
+
+    const keyColumn = relation.getAggregateKeyColumn();
+
+    query
+      .select(`${keyColumn} as aggregate_key`)
+      .addSelectRaw(this.grammar.compileAggregate(fn.func, relation.qualifyAggregateColumn(load.column)))
+      .whereIn(keyColumn, keys)
+      .groupBy(keyColumn);
+
+    query.applyScopes();
+
+    const grouped = new Map<string, any>();
+
+    for (const row of await this.plainRows(query)) {
+      grouped.set(String(row['aggregate_key']), row['aggregate']);
+    }
+
+    const parentKey = relation.getAggregateParentKey();
+
+    for (const model of models) {
+      const key = model.getAttribute(parentKey);
+      const value = key === null || key === undefined ? undefined : grouped.get(String(key));
+
+      model.setComputedAttribute(load.as, value === undefined ? fn.empty : fn.cast ? fn.cast(value) : value);
+    }
+  }
+
+  /**
+   * Run an Ensemble query as a plain select
+   *
+   * Aggregate rows are a key and a number, not models: hydrating them would
+   * fire retrieved events and cast columns nobody asked for.
+   */
+  protected async plainRows(query: EnsembleBuilder<any>): Promise<any[]> {
+    const raw = new QueryBuilder<any>(query.adapter, query.grammar);
+    query.copyStateInto(raw);
+
+    return raw.get();
   }
 
   /**
@@ -550,6 +994,7 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
     const cloned = new EnsembleBuilder<T>(this.adapter, this.grammar, this.model);
     this.copyStateInto(cloned);
     cloned.eagerLoad = { ...this.eagerLoad };
+    cloned.aggregateLoads = [...this.aggregateLoads];
     cloned.removedGlobalScopes = new Set(this.removedGlobalScopes);
     cloned.scopesApplied = this.scopesApplied;
     cloned.trashedState = this.trashedState;

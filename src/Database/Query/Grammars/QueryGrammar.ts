@@ -33,7 +33,9 @@ export interface QueryState {
 
 /**
  * Operators a grammar is willing to compile. Anything else is rejected, so an
- * operator can never smuggle raw SQL into a statement.
+ * operator can never smuggle raw SQL into a statement. `exists` and
+ * `not exists` are the clause shapes a sub-select is wrapped in; the sub-select
+ * itself always arrives as an expression.
  */
 const OPERATORS = new Set([
   '=',
@@ -52,6 +54,8 @@ const OPERATORS = new Set([
   'not between',
   'is null',
   'is not null',
+  'exists',
+  'not exists',
   'raw',
 ]);
 
@@ -186,6 +190,14 @@ export abstract class QueryGrammar {
 
         if (operator === 'raw') {
           return boolean + this.rawSql(where.column);
+        }
+
+        if (operator === 'exists' || operator === 'not exists') {
+          return `${boolean}${operator.toUpperCase()} (${this.requireSubSelect(where.column, operator)})`;
+        }
+
+        if (where.compare === 'column') {
+          return `${boolean}${this.wrap(where.column)} ${operator} ${this.wrap(this.requireColumn(where.value, operator))}`;
         }
 
         if (operator === 'in' || operator === 'not in') {
@@ -558,6 +570,30 @@ export abstract class QueryGrammar {
    */
   protected rawSql(value: string | Expression): string {
     return this.isExpression(value) ? value.getValue() : value;
+  }
+
+  /**
+   * The sub-select an `exists` clause wraps. Only an expression the builder put
+   * there qualifies: a bare string would skip every check the grammar makes.
+   */
+  protected requireSubSelect(value: string | Expression, operator: string): string {
+    if (!this.isExpression(value)) {
+      throw new Error(`The "${operator}" operator compiles a sub-select, got [${String(value)}].`);
+    }
+
+    return value.getValue();
+  }
+
+  /**
+   * The other column of a `whereColumn` comparison, validated as an identifier
+   * by wrapping it.
+   */
+  protected requireColumn(value: any, operator: string): string {
+    if (!this.isString(value)) {
+      throw new Error(`The "${operator}" column comparison expects a column name, got [${String(value)}].`);
+    }
+
+    return value;
   }
 
   /**
