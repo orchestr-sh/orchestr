@@ -63,6 +63,12 @@ export class Rule {
   static array(): RuleReturn {
     return new ArrayRule();
   }
+  static list(): RuleReturn {
+    return 'list';
+  }
+  static requiredArrayKeys(keys: string[]): RuleReturn {
+    return `required_array_keys:${keys.join(',')}`;
+  }
   static distinct(): RuleReturn {
     return 'distinct';
   }
@@ -209,6 +215,12 @@ export class Rule {
   static excludeUnless(field: string, value: string | number | boolean): RuleReturn {
     return `exclude_unless:${field},${value}`;
   }
+  static excludeWith(...fields: string[]): RuleReturn {
+    return `exclude_with:${fields.join(',')}`;
+  }
+  static excludeWithout(...fields: string[]): RuleReturn {
+    return `exclude_without:${fields.join(',')}`;
+  }
   static anyOf(rules: Array<string | ValidationRuleObject>): RuleReturn {
     return new AnyOfRule(rules);
   }
@@ -246,7 +258,15 @@ export class Rule {
   static can(ability: string, ...args: any[]): RuleReturn {
     return new CanRule(ability, ...args);
   }
-  static password(): RuleReturn {
+  static currentPassword(guard?: string): RuleReturn {
+    return guard ? `current_password:${guard}` : 'current_password';
+  }
+  /**
+   * The fluent password rule; typed as PasswordRule so the option methods
+   * (letters/mixedCase/numbers/symbols/uncompromised) chain, like
+   * Laravel's Rule::password()
+   */
+  static password(): PasswordRule {
     return new PasswordRule();
   }
   static requiredIf(field: string, value: string | number | boolean): RuleReturn {

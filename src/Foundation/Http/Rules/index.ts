@@ -1,4 +1,6 @@
 export * from './Base';
+export * from './Registry';
+export * from './BuiltIn';
 export * from './EmailRule';
 export * from './NumericRule';
 export * from './InRule';
