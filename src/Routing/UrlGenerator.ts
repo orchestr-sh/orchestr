@@ -229,6 +229,25 @@ export class UrlGenerator {
    * string, PHP http_build_query style (arrays and objects nest in brackets)
    */
   private buildQuery(values: Record<string, any>, used: Set<string>): string {
+    const unused: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(values)) {
+      if (!used.has(key)) {
+        unused[key] = value;
+      }
+    }
+
+    return UrlGenerator.toQuery(unused);
+  }
+
+  /**
+   * The shared query-string writer: serialise a parameter record PHP
+   * http_build_query style (arrays and objects nest in brackets, models bind
+   * by route key). Pagination uses it too, so query-string handling lives in
+   * exactly one place.
+   * Laravel: UrlGenerator::toQuery()
+   */
+  static toQuery(parameters: Record<string, any>): string {
     const pairs: string[] = [];
 
     const append = (key: string, value: any): void => {
@@ -252,10 +271,8 @@ export class UrlGenerator {
       pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(resolved))}`);
     };
 
-    for (const [key, value] of Object.entries(values)) {
-      if (!used.has(key)) {
-        append(key, value);
-      }
+    for (const [key, value] of Object.entries(parameters)) {
+      append(key, value);
     }
 
     return pairs.join('&');

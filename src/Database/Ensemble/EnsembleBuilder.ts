@@ -4,9 +4,17 @@
  * Extends the query builder to work with Ensemble models
  */
 
+import type { OrderByClause, OrderDirection } from '@/Database/Contracts/QueryBuilderInterface';
 import type { QueryGrammar } from '@/Database/Query/Grammars';
+import type { PaginationOptions } from '@/Pagination/AbstractPaginator';
+import type { CursorDirection } from '@/Pagination/Cursor';
+import type { LengthAwareOptions } from '@/Pagination/LengthAwarePaginator';
 import { DatabaseAdapter } from '@/Database/Contracts/DatabaseAdapter';
 import { Builder as QueryBuilder } from '@/Database/Query/Builder';
+import { Cursor, InvalidCursorException } from '@/Pagination/Cursor';
+import { CursorPaginator } from '@/Pagination/CursorPaginator';
+import { LengthAwarePaginator } from '@/Pagination/LengthAwarePaginator';
+import { Paginator } from '@/Pagination/Paginator';
 import { Str } from '@/Support/Str';
 import { aggregateFunction, createAggregateLoads, type AggregateLoad, type AggregateRelations } from './Aggregates';
 import { Ensemble } from './Ensemble';
@@ -929,37 +937,189 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
 
   /**
    * Get a paginated result
+   *
+   * The total runs through the same aggregate path as `count()` - scopes
+   * included - and the page itself is fetched with the query's own wheres,
+   * orders, and eager loads.
+   * Laravel: Eloquent\Builder::paginate()
    */
   async paginate(
     perPage: number = 15,
-    page: number = 1
-  ): Promise<{
-    data: T[];
-    total: number;
-    perPage: number;
-    currentPage: number;
-    lastPage: number;
-    from: number;
-    to: number;
-  }> {
+    page: number = 1,
+    columns: string[] = ['*'],
+    options: LengthAwareOptions = {}
+  ): Promise<LengthAwarePaginator<T>> {
     const total = await this.clone().count();
-    const offset = (page - 1) * perPage;
 
-    const data = await this.clone().offset(offset).limit(perPage).get();
+    const items =
+      total > 0
+        ? await this.clone()
+            .select(...columns)
+            .forPage(page, perPage)
+            .get()
+        : [];
 
-    const lastPage = Math.ceil(total / perPage);
-    const from = total > 0 ? offset + 1 : 0;
-    const to = Math.min(offset + perPage, total);
+    return new LengthAwarePaginator<T>(items, total, perPage, page, options);
+  }
 
-    return {
-      data,
-      total,
-      perPage,
-      currentPage: page,
-      lastPage,
-      from,
-      to,
-    };
+  /**
+   * Get a simply paginated result: one extra row answers whether a next page
+   * exists, so no count query runs
+   * Laravel: Eloquent\Builder::simplePaginate()
+   */
+  async simplePaginate(
+    perPage: number = 15,
+    page: number = 1,
+    columns: string[] = ['*'],
+    options: PaginationOptions = {}
+  ): Promise<Paginator<T>> {
+    const rows = await this.clone()
+      .select(...columns)
+      .offset((page - 1) * perPage)
+      .limit(perPage + 1)
+      .get();
+
+    return new Paginator<T>(rows, perPage, page, options);
+  }
+
+  /**
+   * Get a cursor-paginated result
+   *
+   * Pages move by ordered points instead of offsets, so inserts and deletes
+   * cannot shift rows into the wrong page. The query's own order columns form
+   * the cursor index (falling back to the primary key), and a cursor marked
+   * as travelling backwards flips the comparisons and the order.
+   * Laravel: Eloquent\Builder::cursorPaginate()
+   */
+  async cursorPaginate(
+    perPage: number = 15,
+    cursor?: string | Cursor | null,
+    columns: string[] = ['*'],
+    options: PaginationOptions & { cursorName?: string } = {}
+  ): Promise<CursorPaginator<T>> {
+    const query = this.clone();
+    const decoded =
+      cursor === null || cursor === undefined || cursor === ''
+        ? null
+        : typeof cursor === 'string'
+          ? Cursor.fromEncoded(cursor)
+          : cursor;
+
+    let orders = query.getOrderings();
+
+    if (orders.length === 0) {
+      const keyColumn = this.model.getKeyName();
+
+      query.orderBy(keyColumn, 'asc');
+      orders = [{ column: keyColumn, direction: 'asc' }];
+    }
+
+    const index: Record<string, CursorDirection> = {};
+    for (const order of orders) {
+      index[order.column] = order.direction === 'desc' ? 'desc' : 'asc';
+    }
+
+    if (decoded !== null) {
+      // Scopes land before the cursor comparison, the way Eloquent's globals
+      // frame the query before pagination constraints are added
+      query.applyScopes();
+      this.constrainByCursor(query, decoded, orders);
+    }
+
+    const back = decoded !== null && decoded.isBackward();
+
+    // The walk direction decides the ORDER BY: backwards pages fetch in the
+    // reverse order and flip the result back for display
+    query.reorder();
+    for (const order of orders) {
+      query.orderBy(order.column, back ? this.oppositeDirection(order.direction) : order.direction);
+    }
+
+    const rows = await query
+      .select(...columns)
+      .limit(perPage + 1)
+      .get();
+
+    let items: T[];
+    let hasMore: boolean;
+    let hasPrevious: boolean;
+
+    if (back) {
+      // The extra row sits at the far end of the walk, first once flipped
+      hasPrevious = rows.length > perPage;
+      const forward = [...rows].reverse();
+      items = hasPrevious ? forward.slice(1) : forward;
+      hasMore = items.length > 0;
+    } else {
+      hasMore = rows.length > perPage;
+      items = hasMore ? rows.slice(0, perPage) : rows;
+      hasPrevious = decoded !== null;
+    }
+
+    return new CursorPaginator<T>(items, perPage, decoded, { ...options, index, hasMore, hasPrevious });
+  }
+
+  /**
+   * Keep only the rows after (or before) the point a cursor encodes
+   *
+   * Each ordered column adds one OR-group: the rows that tie on every
+   * column before it and then continue strictly in that column's direction.
+   * The whole condition goes in as one raw clause because the groups nest
+   * with OR inside a single AND to the query's other wheres.
+   */
+  protected constrainByCursor(query: EnsembleBuilder<any>, cursor: Cursor, orders: OrderByClause[]): void {
+    const groups: string[] = [];
+    const bindings: any[] = [];
+
+    orders.forEach((order, position) => {
+      const operator = this.cursorOperator(order.direction, cursor.isBackward());
+      const parts: string[] = [];
+
+      for (let tie = 0; tie < position; tie++) {
+        parts.push(`${this.grammar.wrap(orders[tie].column)} = ?`);
+        bindings.push(this.cursorParameter(cursor, orders[tie].column));
+      }
+
+      parts.push(`${this.grammar.wrap(order.column)} ${operator} ?`);
+      bindings.push(this.cursorParameter(cursor, order.column));
+
+      groups.push(`(${parts.join(' AND ')})`);
+    });
+
+    // A single ordered column needs no outer group of its own
+    query.whereRaw(groups.length === 1 ? groups[0] : `(${groups.join(' OR ')})`, bindings);
+  }
+
+  /**
+   * The comparison a cursor column runs: the direction it walks in decides
+   * whether "after this point" means greater or smaller
+   */
+  protected cursorOperator(direction: OrderDirection, back: boolean): '>' | '<' {
+    const forward: '>' | '<' = direction === 'desc' ? '<' : '>';
+
+    if (!back) {
+      return forward;
+    }
+
+    return forward === '>' ? '<' : '>';
+  }
+
+  /**
+   * One ordered column's value out of the cursor's point
+   */
+  protected cursorParameter(cursor: Cursor, column: string): any {
+    if (!(column in cursor.parameters)) {
+      throw new InvalidCursorException(cursor.toEncoded());
+    }
+
+    return cursor.parameters[column];
+  }
+
+  /**
+   * The direction opposite to the one given
+   */
+  protected oppositeDirection(direction: OrderDirection): OrderDirection {
+    return direction === 'desc' ? 'asc' : 'desc';
   }
 
   /**
