@@ -176,7 +176,8 @@
     "typescript": ">=5.0.0",
     "bcrypt": ">=5.0.0",
     "argon2": ">=0.30.0",
-    "@faker-js/faker": ">=8.0.0"
+    "@faker-js/faker": ">=8.0.0",
+    "ioredis": ">=5.0.0"
   },
   "peerDependenciesMeta": {
     "bcrypt": {
@@ -186,6 +187,9 @@
       "optional": true
     },
     "@faker-js/faker": {
+      "optional": true
+    },
+    "ioredis": {
       "optional": true
     }
   },

@@ -11,7 +11,7 @@ import { randomUUID } from 'crypto';
 import type { Connection } from '@/Database/Connection';
 import type { DatabaseManager } from '@/Database/DatabaseManager';
 import type { Application } from '@/Foundation/Application';
-import type { QueueDriver, QueueDriverJob } from '@/Queue/Contracts/QueueDriver';
+import type { QueueDriver, QueueDriverJob, TransactionAwareConnection } from '@/Queue/Contracts/QueueDriver';
 import type { Job } from '@/Queue/Job';
 import type { QueueConnectionConfig } from '@/Queue/QueueManager';
 import { JobPayload } from '@/Queue/JobPayload';
@@ -207,5 +207,18 @@ export class DatabaseDriver implements QueueDriver {
 
   getQueue(queue?: string): string {
     return queue || this.defaultQueue;
+  }
+
+  /**
+   * The database connection backing the jobs table. The QueueManager uses
+   * it to defer `after_commit` dispatches until the outermost transaction
+   * on this very connection commits.
+   */
+  getTransactionConnection(): TransactionAwareConnection | null {
+    try {
+      return this.getConnection();
+    } catch {
+      return null;
+    }
   }
 }

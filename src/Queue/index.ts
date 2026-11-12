@@ -17,19 +17,28 @@ export type { JobPayloadData } from './JobPayload';
 
 // Contracts
 export type { QueueableJob } from './Contracts/QueueableJob';
-export type { QueueDriver, QueueDriverJob } from './Contracts/QueueDriver';
+export type { QueueDriver, QueueDriverJob, TransactionAwareConnection } from './Contracts/QueueDriver';
 export type { ShouldBeUnique, ShouldBeUniqueUntilProcessing } from './Contracts/ShouldBeUnique';
-export { isShouldBeUnique } from './Contracts/ShouldBeUnique';
+export { isShouldBeUnique, isShouldBeUniqueUntilProcessing } from './Contracts/ShouldBeUnique';
 
 // Drivers
 export { SyncDriver } from './Drivers/SyncDriver';
 export { DatabaseDriver } from './Drivers/DatabaseDriver';
 export { NullDriver } from './Drivers/NullDriver';
+export { RedisDriver, REDIS_POP_SCRIPT, REDIS_RELEASE_SCRIPT } from './Drivers/RedisDriver';
+export type { RedisClient } from './Drivers/RedisDriver';
 
 // Workers
 export { Worker } from './Workers/Worker';
 export type { WorkerOptions } from './Workers/WorkerOptions';
 export { DEFAULT_WORKER_OPTIONS } from './Workers/WorkerOptions';
+
+// Exceptions
+export { TimeoutExceededException } from './Exceptions/TimeoutExceededException';
+
+// Uniqueness
+export { UniqueLock } from './UniqueLock';
+export type { UniqueLockToken } from './UniqueLock';
 
 // Middleware
 export type { JobMiddleware } from './Middleware/JobMiddleware';

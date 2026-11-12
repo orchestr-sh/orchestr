@@ -7,11 +7,25 @@
  * Mirrors Laravel's Illuminate\Queue\QueueManager.
  */
 
-import type { QueueDriver } from './Contracts/QueueDriver';
+import type { Container } from '@/Container/Container';
+import type { QueueDriver, TransactionAwareConnection } from './Contracts/QueueDriver';
 import type { Job } from './Job';
 import type { Worker } from './Workers/Worker';
 import type { WorkerOptions } from './Workers/WorkerOptions';
-import { JobPayload } from './JobPayload';
+import { isShouldBeUnique } from './Contracts/ShouldBeUnique';
+import { UniqueLock, type UniqueLockToken } from './UniqueLock';
+
+/**
+ * Minimal shape of a database manager used to resolve a transaction
+ * connection for after-commit dispatch. Duck-typed through the container
+ * so the Queue subsystem does not hard-depend on Database at import time.
+ */
+interface DatabaseManagerLike {
+  connection(name?: string): {
+    getTransactionLevel?(): number;
+    afterCommit?(callback: () => any): void | Promise<void>;
+  };
+}
 
 export interface QueueConnectionConfig {
   driver: string;
@@ -48,6 +62,7 @@ export class QueueManager {
   protected connections: Map<string, QueueDriver> = new Map();
   protected driverFactories: Map<string, DriverFactory> = new Map();
   protected jobRegistry: Map<string, new (...args: any[]) => Job> = new Map();
+  protected uniqueLock: UniqueLock | null = null;
 
   /**
    * Event callbacks
@@ -57,7 +72,10 @@ export class QueueManager {
   protected failingCallbacks: Array<(connectionName: string, job: Job, error: Error) => void> = [];
   protected loopingCallbacks: Array<() => void> = [];
 
-  constructor(protected config: QueueConfig) {}
+  constructor(
+    protected config: QueueConfig,
+    protected container?: Container
+  ) {}
 
   /**
    * Register a queue driver factory
@@ -122,17 +140,15 @@ export class QueueManager {
 
   /**
    * Dispatch a job to its configured connection and queue
+   *
+   * Before the job reaches the driver this honors:
+   * - ShouldBeUnique cache-lock enforcement (duplicate dispatches are skipped)
+   * - after_commit deferral via the transaction system
    */
   async dispatch(job: Job): Promise<string> {
-    const connectionName = job.connection || this.config.default;
-    const driver = this.connection(connectionName);
-    const queue = job.queue;
-
-    if (job.delay) {
-      return driver.later(job.delay, job, queue);
-    }
-
-    return driver.push(job, queue);
+    return this.route(job, (driver) =>
+      job.delay ? driver.later(job.delay, job, job.queue) : driver.push(job, job.queue)
+    );
   }
 
   /**
@@ -153,8 +169,7 @@ export class QueueManager {
    * Push a job onto a specific queue
    */
   async push(job: Job, queue?: string): Promise<string> {
-    const connectionName = job.connection || this.config.default;
-    return this.connection(connectionName).push(job, queue);
+    return this.route(job, (driver) => driver.push(job, queue));
   }
 
   /**
@@ -169,16 +184,177 @@ export class QueueManager {
    * Push a job after a delay
    */
   async later(delay: number | Date, job: Job, queue?: string): Promise<string> {
-    const connectionName = job.connection || this.config.default;
-    return this.connection(connectionName).later(delay, job, queue);
+    return this.route(job, (driver) => driver.later(delay, job, queue));
   }
 
   /**
    * Push multiple jobs onto the queue
    */
   async bulk(jobs: Job[], queue?: string): Promise<void> {
-    const connectionName = this.config.default;
-    return this.connection(connectionName).bulk(jobs, queue);
+    for (const job of jobs) {
+      await this.push(job, queue);
+    }
+  }
+
+  /**
+   * Run a job through uniqueness enforcement, after-commit deferral, and
+   * the driver call. Shared by dispatch()/push()/later().
+   *
+   * @param job - The job being queued
+   * @param call - Performs the actual driver push once allowed
+   */
+  protected async route(job: Job, call: (driver: QueueDriver) => Promise<string>): Promise<string> {
+    const connectionName = job.connection || this.config.default;
+    const driver = this.connection(connectionName);
+
+    const token = await this.acquireUniqueLock(job);
+
+    if (token === 'locked') {
+      // Another copy of the job is already waiting on the queue; the
+      // duplicate dispatch is silently skipped.
+      return job.uuid;
+    }
+
+    const dispatchNow = async (): Promise<string> => {
+      const id = await call(driver);
+
+      // Inline drivers (sync) execute the job during push; no worker pops
+      // the job, so the unique lock is released as soon as the push completes.
+      if (token && driver.executesInline?.() === true) {
+        await this.releaseUniqueLock(token);
+      }
+
+      return id;
+    };
+
+    try {
+      return await this.runOrDeferUntilCommit(connectionName, driver, job, dispatchNow);
+    } catch (error) {
+      if (token) {
+        await this.releaseUniqueLock(token);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Acquire the ShouldBeUnique cache lock for a job when required.
+   *
+   * @returns The lock token, 'locked' when the dispatch is a duplicate,
+   * or null when the job is not unique.
+   */
+  protected async acquireUniqueLock(job: Job): Promise<UniqueLockToken | 'locked' | null> {
+    if (!isShouldBeUnique(job)) {
+      return null;
+    }
+
+    const token = await this.uniqueLockResolver().acquire(job);
+
+    if (token === 'not-unique') {
+      return null;
+    }
+
+    if (token === 'locked') {
+      return 'locked';
+    }
+
+    // Stash the lock handle on the job so JobPayload.create() embeds it in
+    // the serialized envelope; the worker releases it after processing.
+    (job as any)._lockKey = token.key;
+    (job as any)._lockOwner = token.owner;
+
+    return token;
+  }
+
+  /**
+   * Release a previously acquired unique lock (best effort)
+   */
+  protected async releaseUniqueLock(token: UniqueLockToken): Promise<void> {
+    if (this.container) {
+      await this.uniqueLockResolver().release(token);
+    }
+  }
+
+  /**
+   * Lazily create the UniqueLock bound to the application container
+   */
+  protected uniqueLockResolver(): UniqueLock {
+    if (!this.container) {
+      throw new Error('ShouldBeUnique jobs require the QueueManager to be constructed with the application container.');
+    }
+
+    this.uniqueLock ??= new UniqueLock(this.container);
+
+    return this.uniqueLock;
+  }
+
+  /**
+   * Execute the push now, or defer it until the queue connection's
+   * database transaction commits when `after_commit` is in effect.
+   *
+   * @returns The job id. When deferred, the payload uuid is returned
+   * immediately; a rollback means the job is never queued.
+   */
+  protected async runOrDeferUntilCommit(
+    connectionName: string,
+    driver: QueueDriver,
+    job: Job,
+    dispatchNow: () => Promise<string>
+  ): Promise<string> {
+    const shouldDefer = job.afterCommit === true || this.getConnectionConfig(connectionName).after_commit === true;
+
+    if (shouldDefer) {
+      const connection = this.resolveTransactionConnection(driver);
+
+      if (connection && connection.getTransactionLevel() > 0) {
+        await connection.afterCommit(async () => {
+          try {
+            await dispatchNow();
+          } catch (error) {
+            console.error(`[Queue] Failed to dispatch job [${job.displayName()}] after commit:`, error);
+          }
+        });
+
+        return job.uuid;
+      }
+    }
+
+    return dispatchNow();
+  }
+
+  /**
+   * Resolve the transaction-aware connection governing after-commit
+   * dispatch: the driver's own database connection when it exposes one
+   * (DatabaseDriver), otherwise the application's default db connection.
+   */
+  protected resolveTransactionConnection(driver: QueueDriver): TransactionAwareConnection | null {
+    const fromDriver = driver.getTransactionConnection?.();
+
+    if (
+      fromDriver &&
+      typeof fromDriver.getTransactionLevel === 'function' &&
+      typeof fromDriver.afterCommit === 'function'
+    ) {
+      return fromDriver;
+    }
+
+    if (!this.container || !this.container.bound('db')) {
+      return null;
+    }
+
+    try {
+      const db = this.container.make<DatabaseManagerLike>('db');
+      const connection = db.connection();
+
+      if (typeof connection.getTransactionLevel !== 'function' || typeof connection.afterCommit !== 'function') {
+        return null;
+      }
+
+      return connection as unknown as TransactionAwareConnection;
+    } catch {
+      // Database not bootable in this context; dispatch straight through
+      return null;
+    }
   }
 
   /**

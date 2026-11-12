@@ -14,7 +14,10 @@ import type { FailedJobProvider } from '@/Queue/Failed/FailedJobProvider';
 import type { Job } from '@/Queue/Job';
 import type { JobMiddleware } from '@/Queue/Middleware/JobMiddleware';
 import type { QueueManager } from '@/Queue/QueueManager';
+import type { UniqueLockToken } from '@/Queue/UniqueLock';
+import { TimeoutExceededException } from '@/Queue/Exceptions/TimeoutExceededException';
 import { JobPayload, type JobPayloadData } from '@/Queue/JobPayload';
+import { UniqueLock } from '@/Queue/UniqueLock';
 import type { WorkerOptions } from './WorkerOptions';
 import { DEFAULT_WORKER_OPTIONS } from './WorkerOptions';
 
@@ -23,6 +26,7 @@ export class Worker {
   protected paused: boolean = false;
   protected jobsProcessed: number = 0;
   protected startTime: number = 0;
+  protected uniqueLock: UniqueLock | null = null;
 
   constructor(
     protected manager: QueueManager,
@@ -145,6 +149,12 @@ export class Worker {
     job.uuid = payload.uuid;
     job.attempts = rawJob.attempts;
 
+    // ShouldBeUniqueUntilProcessing: the lock is released as soon as the
+    // job is popped, before it runs, so a new copy may be queued again.
+    if (payload.uniqueUntilProcessing && payload.lockKey && payload.lockOwner) {
+      await this.releaseUniqueLock({ key: payload.lockKey, owner: payload.lockOwner });
+    }
+
     // Determine max tries
     const maxTries = job.tries ?? options.tries;
 
@@ -164,15 +174,29 @@ export class Worker {
       // Check if the job was explicitly deleted
       if (job.isDeleted()) {
         await driver.delete(rawJob.id);
+        await this.releaseUniqueLock(this.uniqueLockTokenFor(payload));
         return;
       }
 
       // Job completed successfully
       await driver.delete(rawJob.id);
 
+      // ShouldBeUnique jobs hold their lock until they finish processing
+      await this.releaseUniqueLock(this.uniqueLockTokenFor(payload));
+
       // Fire after callbacks
       this.manager.fireAfterCallbacks(connectionName, job);
     } catch (error) {
+      if (error instanceof TimeoutExceededException) {
+        // The job ran past its timeout. Its cancellation signal has been
+        // aborted; non-cooperative jobs keep running until the process
+        // exits (see executeWithTimeout), so the job is marked failed here
+        // to keep it from occupying the queue a second time.
+        this.manager.fireFailingCallbacks(connectionName, job, error);
+        await this.failJob(connectionName, driver, rawJob, job, payload, error);
+        return;
+      }
+
       await this.handleJobException(connectionName, driver, rawJob, job, payload, maxTries, error as Error);
     }
   }
@@ -185,7 +209,7 @@ export class Worker {
     const timeout = job.timeout ?? options.timeout;
 
     // Build middleware pipeline
-    const pipeline = this.buildMiddlewarePipeline(middleware, async () => {
+    const pipeline = this.buildMiddlewarePipeline(middleware, job, async () => {
       // Execute the job with timeout
       await this.executeWithTimeout(job, timeout);
     });
@@ -195,18 +219,38 @@ export class Worker {
 
   /**
    * Build a middleware pipeline
+   *
+   * Composes the middleware around the destination so that every
+   * middleware executes exactly once, in declaration order, wrapped
+   * around the job: the first middleware is the outermost layer and
+   * each receives the job instance and a `next` continuation that
+   * invokes the following middleware (or the destination).
    */
   protected buildMiddlewarePipeline(
     middleware: JobMiddleware[],
+    job: Job,
     destination: () => Promise<void>
   ): () => Promise<void> {
     return middleware.reduceRight((next: () => Promise<void>, mw: JobMiddleware) => {
-      return () => mw.handle(middleware[0] as any, next);
+      return () => mw.handle(job, next);
     }, destination);
   }
 
   /**
    * Execute a job with a timeout
+   *
+   * A cancellation signal (AbortSignal) is installed on the job and also
+   * passed to `handle()`, so cooperative jobs can abort their work when the
+   * timeout elapses. A JavaScript promise cannot be cancelled in-process:
+   * non-cooperative jobs keep running until completion even after the
+   * worker has given up on them and marked the job failed. Truly enforcing
+   * timeouts (killing runaway work) requires process isolation - running
+   * each job in a child process/worker thread whose timeout is enforced by
+   * termination, the way Laravel's queue worker uses pcntl fork. The worker
+   * here keeps the pipeline moving and marks the job failed on timeout;
+   * deploy long-running or untrusted jobs on an isolated runner.
+   *
+   * @throws TimeoutExceededException when the deadline passes before the job resolves
    */
   protected async executeWithTimeout(job: Job, timeout: number): Promise<void> {
     if (timeout <= 0) {
@@ -215,19 +259,53 @@ export class Worker {
     }
 
     const timeoutMs = timeout * 1000;
+    const controller = new AbortController();
 
-    await Promise.race([
-      job.handle(),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(
-            new Error(
-              `Job [${job.displayName()}] has been attempted too long or run too long. The job may have previously timed out.`
-            )
-          );
-        }, timeoutMs);
-      }),
-    ]);
+    job.setCancellationSignal(controller.signal);
+
+    // Run handle() inside a settled promise; a late rejection after the
+    // timeout must never surface as an unhandled rejection.
+    let settle!: () => void;
+    let rejectJob!: (error: unknown) => void;
+
+    const jobFinished = new Promise<void>((resolve, reject) => {
+      settle = resolve;
+      rejectJob = reject;
+    });
+
+    Promise.resolve()
+      .then(() => job.handle(controller.signal))
+      .then(settle, rejectJob);
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const timedOut = await new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(true), timeoutMs);
+        jobFinished.then(
+          () => resolve(false),
+          () => resolve(false)
+        );
+      });
+
+      if (timedOut) {
+        // Ask cooperative jobs to stop before the failure propagates.
+        controller.abort();
+
+        throw new TimeoutExceededException(
+          `Job [${job.displayName()}] has been attempted too long or run too long. The job may have previously timed out.`
+        );
+      }
+
+      // Propagate job errors exactly as if handle() had been awaited
+      await jobFinished;
+    } finally {
+      // Always clear the timeout timer so a successful (or failed) run
+      // does not keep the event loop - or a stale rejection - alive.
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
   }
 
   /**
@@ -281,6 +359,9 @@ export class Worker {
     // Delete from the queue
     await driver.delete(rawJob.id);
 
+    // A unique job that will never run again releases its lock
+    await this.releaseUniqueLock(this.uniqueLockTokenFor(payload));
+
     // Call the job's failed method
     if (job.failed) {
       try {
@@ -303,6 +384,34 @@ export class Worker {
     console.error(
       `[Queue] Job [${job.displayName()}] has failed after ${rawJob.attempts} attempt(s). ` + `Error: ${error.message}`
     );
+  }
+
+  /**
+   * Extract the unique-lock handle stored in the payload, if any
+   */
+  protected uniqueLockTokenFor(payload: JobPayloadData): UniqueLockToken | null {
+    if (!payload.lockKey || !payload.lockOwner) {
+      return null;
+    }
+
+    return { key: payload.lockKey, owner: payload.lockOwner };
+  }
+
+  /**
+   * Release a ShouldBeUnique cache lock (best effort; safe to call twice)
+   */
+  protected async releaseUniqueLock(token: UniqueLockToken | null): Promise<void> {
+    if (!token) {
+      return;
+    }
+
+    if (!this.app.bound('cache')) {
+      return;
+    }
+
+    this.uniqueLock ??= new UniqueLock(this.app);
+
+    await this.uniqueLock.release(token);
   }
 
   /**

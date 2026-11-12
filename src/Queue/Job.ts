@@ -121,6 +121,12 @@ export abstract class Job implements QueueableJob {
    */
   protected _failed: boolean = false;
 
+  /**
+   * Internal: the cancellation signal installed by the worker while the
+   * job is executing. Underscore-prefixed, so it is never serialized.
+   */
+  protected _signal?: AbortSignal;
+
   constructor() {
     this.uuid = randomUUID();
   }
@@ -139,6 +145,32 @@ export abstract class Job implements QueueableJob {
    * Get the middleware the job should pass through
    */
   middleware?(): JobMiddleware[];
+
+  /**
+   * The cancellation signal for the current run, when executed by a worker.
+   *
+   * The signal is aborted when the job exceeds its timeout. Cooperative
+   * jobs should watch it (directly or via the argument passed to
+   * `handle()`) and stop early; see the process-isolation note on
+   * `Worker.executeWithTimeout()` for non-cooperative jobs.
+   */
+  get signal(): AbortSignal | undefined {
+    return this._signal;
+  }
+
+  /**
+   * Determine whether the worker has requested cancellation (timeout)
+   */
+  get cancelled(): boolean {
+    return this._signal?.aborted === true;
+  }
+
+  /**
+   * Install the cancellation signal. Called by the Worker before execution.
+   */
+  setCancellationSignal(signal: AbortSignal): void {
+    this._signal = signal;
+  }
 
   /**
    * Get the display name of the job

@@ -74,4 +74,12 @@ export class SyncDriver implements QueueDriver {
   getQueue(queue?: string): string {
     return queue || this.config.queue || 'default';
   }
+
+  /**
+   * The sync driver runs the job immediately during push; there is no
+   * worker that could later release unique-job locks.
+   */
+  executesInline(): boolean {
+    return true;
+  }
 }
