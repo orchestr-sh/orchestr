@@ -56,4 +56,21 @@ export interface Store {
    * Get the cache key prefix
    */
   getPrefix(): string;
+
+  /**
+   * Store an item only if the key does not already exist.
+   * Atomic on stores that support it (used for mutual-exclusion locks).
+   */
+  add?<T = any>(key: string, value: T, seconds: number): Promise<boolean>;
+
+  /**
+   * Extend the lifetime of an existing key without changing its value.
+   * A null `seconds` makes the key live forever.
+   */
+  touch?(key: string, seconds: number | null): Promise<boolean>;
+
+  /**
+   * Change the cache key prefix
+   */
+  setPrefix?(prefix: string): void;
 }

@@ -5,6 +5,7 @@
  * Mirrors Laravel's Illuminate\Contracts\Cache\Repository.
  */
 
+import type { CacheEventDispatcher } from './EventDispatcher';
 import type { LockContract } from './Lock';
 import type { Store } from './Store';
 
@@ -45,6 +46,11 @@ export interface RepositoryContract extends Store {
   flexible<T = any>(key: string, ttl: [number, number], callback: () => T | Promise<T>): Promise<T>;
 
   /**
+   * Extend the lifetime of an existing key without changing its value
+   */
+  touch(key: string, ttl?: number | Date | null): Promise<boolean>;
+
+  /**
    * Get a lock instance
    */
   lock(name: string, seconds?: number, owner?: string): LockContract;
@@ -68,4 +74,19 @@ export interface RepositoryContract extends Store {
    * Set the default cache time in seconds
    */
   setDefaultCacheTime(seconds: number | null): this;
+
+  /**
+   * Change the key prefix on the underlying store (when supported)
+   */
+  setPrefix(prefix: string): this;
+
+  /**
+   * Set the event dispatcher used to broadcast cache events
+   */
+  setEventDispatcher(events?: CacheEventDispatcher): this;
+
+  /**
+   * Get the event dispatcher used to broadcast cache events
+   */
+  getEventDispatcher(): CacheEventDispatcher | undefined;
 }

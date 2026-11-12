@@ -2529,9 +2529,20 @@ app.register(new CacheServiceProvider(app));
         connection: null,
         table: 'cache',
       },
+      redis: {
+        driver: 'redis',
+        host: '127.0.0.1',
+        port: 6379,
+        password: undefined,
+        db: 0,
+      },
       null: {
         driver: 'null',
       },
+    },
+    remember: {
+      lock: false, // stampede protection for remember()
+      lock_seconds: 30,
     },
   },
 }
@@ -2729,20 +2740,78 @@ npx orchestr cache:forget key-name
 npx orchestr cache:forget key-name --store=redis
 ```
 
+### Redis Store
+
+The `redis` driver is built in and backed by the optional `ioredis` peer
+dependency (install it only when a redis connection is used):
+
+```bash
+npm install ioredis
+```
+
+```typescript
+// config: cache.stores.redis = { driver: 'redis', host, port, password, db }
+await Cache.store('redis').put('key', 'value', 3600);
+
+// Cache.lock() runs as atomic Redis Lua scripts on this store, so two
+// processes can never hold the same lock and only the owner can release it.
+await Cache.store('redis').lock('processing', 120).get(async () => {
+  await processExpensiveOperation();
+});
+
+// Extend a key's TTL without touching its value, or change the prefix live.
+await Cache.touch('key', 3600);
+Cache.setPrefix('app_');
+```
+
+### Stampede-Protected Remember
+
+`remember()`/`rememberForever()` can optionally compute behind a cache lock
+(the cache is re-checked after acquiring, the lock is always released, and
+concurrent callers execute the callback only once):
+
+```typescript
+// config/cache.ts
+export default {
+  // ...
+  remember: {
+    lock: true, // enable stampede protection
+    lock_seconds: 30, // lock TTL while computing
+  },
+};
+```
+
+### Cache Events
+
+Repositories broadcast Laravel-compatible cache events through the event
+dispatcher once the `CacheServiceProvider` wires the `events` service in:
+`CacheHit`, `CacheMissed`, `KeyWritten` (put/forever/increment/decrement),
+`KeyForgotten`, and `CacheFlushed` - each carrying the store name, key,
+value, TTL, and tag names where applicable.
+
+```typescript
+import { Event } from '@orchestr-sh/orchestr/Facades';
+import { KeyWritten } from '@orchestr-sh/orchestr';
+
+Event.listen(KeyWritten, (event: KeyWritten) => {
+  console.log(`[cache:${event.storeName}] wrote ${event.key}`);
+});
+```
+
 ### Custom Cache Drivers
 
-Create custom cache drivers for Redis, Memcached, etc.:
+Create custom cache drivers for Memcached, etc.:
 
 ```typescript
 import { Store } from '@orchestr-sh/orchestr';
 
-class RedisStore implements Store {
+class MemcachedStore implements Store {
   async get(key: string): Promise<any> {
-    // Get from Redis
+    // Get from Memcached
   }
 
   async put(key: string, value: any, seconds: number): Promise<boolean> {
-    // Put to Redis
+    // Put to Memcached
   }
 
   // Implement other methods...
@@ -2750,7 +2819,7 @@ class RedisStore implements Store {
 
 // Register the driver
 const manager = app.make<CacheManager>('cache');
-manager.registerDriver('redis', (config) => new RedisStore(config));
+manager.registerDriver('memcached', (config) => new MemcachedStore(config));
 ```
 
 ### Repository Methods
@@ -2780,6 +2849,9 @@ await Cache.flexible(key, [freshTtl, staleTtl], callback)
 await Cache.increment(key, value?)
 await Cache.decrement(key, value?)
 
+// Extend a TTL without changing the value
+await Cache.touch(key, seconds?)
+
 // Tags and locks
 Cache.tags(names)
 Cache.lock(name, seconds?, owner?)
@@ -2788,6 +2860,7 @@ Cache.restoreLock(name, owner)
 // Store operations
 Cache.store(name?)
 Cache.getPrefix()
+Cache.setPrefix(prefix)
 ```
 
 ## View System

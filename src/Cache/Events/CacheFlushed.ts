@@ -3,9 +3,14 @@
  *
  * Dispatched after all items have been flushed from the cache.
  */
-export class CacheFlushed {
+
+import { Event } from '@/Events/Event';
+
+export class CacheFlushed extends Event {
   constructor(
     public readonly storeName: string,
     public readonly tags: string[] = []
-  ) {}
+  ) {
+    super();
+  }
 }

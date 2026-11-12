@@ -1,8 +1,9 @@
 /**
  * CacheLock
  *
- * Cache store-backed atomic lock implementation.
- * Uses the cache store's add/forget methods for locking.
+ * Cache store-backed lock implementation. Uses the store's atomic
+ * `add()` when the driver provides it (array, redis) and otherwise falls
+ * back to a read-then-write acquire.
  *
  * Mirrors Laravel's Illuminate\Cache\CacheLock.
  */
@@ -21,6 +22,18 @@ export class CacheLock extends Lock {
   }
 
   protected async acquire(): Promise<boolean> {
+    if (typeof this.store.add === 'function') {
+      // Single check-and-set round trip: two processes can never both
+      // claim the lock.
+      if (await this.store.add(this.name, this.ownerValue, this.seconds)) {
+        return true;
+      }
+
+      // The lock exists - it is only still ours when the stored owner
+      // matches.
+      return (await this.store.get(this.name)) === this.ownerValue;
+    }
+
     // Check if already locked
     const existing = await this.store.get(this.name);
 

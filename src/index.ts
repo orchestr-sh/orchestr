@@ -518,16 +518,22 @@ export { Repository as CacheRepository } from './Cache/Repository';
 export type { Store as CacheStore } from './Cache/Contracts/Store';
 export type { RepositoryContract as CacheRepositoryContract } from './Cache/Contracts/Repository';
 export type { LockContract } from './Cache/Contracts/Lock';
+export type { LockProvider, AtomicLockStore } from './Cache/Contracts/LockProvider';
+export { isLockProvider } from './Cache/Contracts/LockProvider';
+export type { CacheEventDispatcher } from './Cache/Contracts/EventDispatcher';
 
 // Cache Stores
 export { ArrayStore } from './Cache/Stores/ArrayStore';
 export { FileStore } from './Cache/Stores/FileStore';
 export { DatabaseStore as DatabaseCacheStore } from './Cache/Stores/DatabaseStore';
 export { NullStore as NullCacheStore } from './Cache/Stores/NullStore';
+export { RedisStore } from './Cache/Stores/RedisStore';
+export type { RedisClient as CacheRedisClient } from './Cache/Stores/RedisStore';
 
 // Cache Locks
 export { Lock as CacheLockBase } from './Cache/Locks/Lock';
 export { CacheLock } from './Cache/Locks/CacheLock';
+export { RedisLock } from './Cache/Locks/RedisLock';
 export { LockTimeoutException } from './Cache/Locks/LockTimeoutException';
 
 // Cache Tags

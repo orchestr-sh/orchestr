@@ -7,11 +7,13 @@
 
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
 import type { CacheConfig } from './CacheManager';
+import type { CacheEventDispatcher } from './Contracts/EventDispatcher';
 import { CacheManager } from './CacheManager';
 import { ArrayStore } from './Stores/ArrayStore';
 import { DatabaseStore } from './Stores/DatabaseStore';
 import { FileStore } from './Stores/FileStore';
 import { NullStore } from './Stores/NullStore';
+import { RedisStore } from './Stores/RedisStore';
 
 export class CacheServiceProvider extends ServiceProvider {
   /**
@@ -29,7 +31,17 @@ export class CacheServiceProvider extends ServiceProvider {
 
       manager.registerDriver('database', (storeConfig) => new DatabaseStore(storeConfig, config.prefix, this.app));
 
+      manager.registerDriver('redis', (storeConfig) => new RedisStore(storeConfig, config.prefix));
+
       manager.registerDriver('null', () => new NullStore());
+
+      // Give repositories the event dispatcher so they can broadcast
+      // cache events. The events service may not be registered yet.
+      try {
+        manager.setEventDispatcher(this.app.make<CacheEventDispatcher>('events'));
+      } catch {
+        // Event dispatcher not available
+      }
 
       return manager;
     });
@@ -52,6 +64,7 @@ export class CacheServiceProvider extends ServiceProvider {
           default: cacheConfig.default || 'array',
           prefix: cacheConfig.prefix || 'orchestr_cache_',
           stores: cacheConfig.stores || { array: { driver: 'array' } },
+          remember: cacheConfig.remember,
         };
       }
     } catch {
@@ -66,6 +79,13 @@ export class CacheServiceProvider extends ServiceProvider {
         array: {
           driver: 'array',
           serialize: false,
+        },
+        redis: {
+          driver: 'redis',
+          host: process.env.REDIS_HOST || '127.0.0.1',
+          port: Number(process.env.REDIS_PORT || 6379),
+          password: process.env.REDIS_PASSWORD || undefined,
+          db: Number(process.env.REDIS_DB || 0),
         },
         null: {
           driver: 'null',

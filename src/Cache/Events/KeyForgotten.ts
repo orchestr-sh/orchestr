@@ -3,10 +3,15 @@
  *
  * Dispatched when a key is removed from the cache.
  */
-export class KeyForgotten {
+
+import { Event } from '@/Events/Event';
+
+export class KeyForgotten extends Event {
   constructor(
     public readonly storeName: string,
     public readonly key: string,
     public readonly tags: string[] = []
-  ) {}
+  ) {
+    super();
+  }
 }
