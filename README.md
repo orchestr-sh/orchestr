@@ -2863,6 +2863,106 @@ Cache.getPrefix()
 Cache.setPrefix(prefix)
 ```
 
+## Task Scheduling
+
+Orchestr ships a Laravel-shaped task scheduler: define recurring closures, console commands, queued jobs, and shell commands once, then fire everything from a single crontab line.
+
+```typescript
+* * * * * orchestr schedule:run
+```
+
+### Configuration
+
+Register the scheduler (or just resolve `schedule` - the `schedule:*` commands create one on demand):
+
+```typescript
+import { ScheduleServiceProvider, Schedule } from '@orchestr-sh/orchestr';
+
+app.register(new ScheduleServiceProvider(app));
+
+const schedule = app.make<Schedule>('schedule');
+```
+
+### Defining Schedules
+
+Each registration method returns a fluent `Event`:
+
+```typescript
+// Closures
+schedule
+  .call(() => refreshStatistics(), 'refresh statistics')
+  .everyFiveMinutes();
+
+// Console commands (run through the container-bound ConsoleKernel)
+schedule.command('report:send', { daily: true }).dailyAt('09:00');
+
+// Queued jobs (instance, or class + constructor args)
+schedule.job(new PruneOldRecords()).weeklyOn(0, '02:00');
+schedule.job(ProcessUploads, [uploadId]).everyTenMinutes();
+
+// Shell commands
+schedule.exec('php pattern_check.php').hourlyAt(30);
+
+// Grouped definitions
+schedule.group((group) => {
+  group.command('cache:prune').hourly();
+  group.command('logs:archive').daily();
+});
+```
+
+Available frequency helpers: `cron`, `everyMinute`, `everyFiveMinutes`, `everyTenMinutes`, `everyFifteenMinutes`, `everyThirtyMinutes`, `hourly`, `hourlyAt`, `daily`, `dailyAt`, `twiceDaily`, `weekly`, `weeklyOn`, `monthly`, `monthlyOn`, `quarterly`, `yearly`, `weekdays`, `weekends`, `days`, `mondays()`..`sundays`, plus `timezone`, `between`, and `unlessBetween`.
+
+Cron expressions support the five standard fields with `*`, lists (`0,15`), ranges (`1-5`), steps (`*/5`, `1-10/2`, `5/15`), month names (`JAN`-`DEC`), weekday names (`SUN`-`SAT`), Sunday as `0` or `7`, and POSIX day-of-month / day-of-week semantics.
+
+### Task Modifiers
+
+```typescript
+schedule
+  .command('imports:run')
+  .everyFifteenMinutes()
+  .withoutOverlapping() // cache lock held for the duration of the run
+  .onOneServer() // cache lock keeps other servers from claiming the run
+  .runInBackground() // shell tasks detach; closures keep running without blocking
+  .evenInMaintenanceMode() // still runs while storage/framework/down exists
+  .when((now) => isTradingDay(now)) // conditional execution
+  .skip(() => featureDisabled)
+  .before((event) => log(`starting ${event.getDescription()}`))
+  .onSuccess((event) => notify(`${event.getDescription()} done`))
+  .onFailure((error, event) => alert(event.getDescription(), error))
+  .after(() => cleanup());
+```
+
+`withoutOverlapping()` and `onOneServer()` both take their mutual exclusion from cache locks (the `cache` container binding), so they work across processes and across machines sharing a cache store.
+
+### The `Schedule` Facade
+
+```typescript
+import { ScheduleFacade as Schedule } from '@orchestr-sh/orchestr';
+
+Schedule.command('queue:restart').hourly();
+const due = Schedule.dueEvents();
+```
+
+### Console Commands
+
+| Command | Description |
+| ------- | ----------- |
+| `schedule:run` | Run all due tasks once (the crontab entry) |
+| `schedule:work` | Long-running loop that runs due tasks every minute |
+| `schedule:list` | List registered tasks with expressions and next run times (`--timezone=...`) |
+| `schedule:test <task>` | Run a specific task immediately, regardless of schedule |
+
+### Programmatic Execution
+
+```typescript
+const due = schedule.dueEvents(new Date());
+const results = await schedule.run(new Date());
+
+for (const { event, outcome } of results) {
+  if (outcome.status === 'failure') console.error(event.getDescription(), outcome.error);
+}
+```
+
 ## View System
 
 Orchestr includes a view system for rendering HTML templates, mirroring Laravel's Blade. Views are stored in `resources/views/` and use dot-notation for resolution (e.g., `'layouts.app'` resolves to `resources/views/layouts/app.html`).
@@ -3025,6 +3125,7 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Event Testing (Fakes & Assertions)
 - ✅ Queue System (Jobs, Chains, Batches, Workers, Redis driver, Unique jobs, Testing fakes)
 - ✅ Cache System (Tags, Locks, Flexible Caching)
+- ✅ Task Scheduling (cron parser, closures/commands/jobs/shell, overlap & one-server cache locks)
 - ✅ View System (Templates, Layouts, Directives)
 - ✅ Soft Deletes
 - ✅ Attribute Casting

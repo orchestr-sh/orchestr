@@ -11,6 +11,10 @@ export class ConsoleKernel {
   protected commands: Map<string, Command> = new Map();
 
   constructor(protected app: Application) {
+    // Expose the kernel in the container so subsystems (task scheduling,
+    // programmatic command calls) can dispatch through it, mirroring
+    // Laravel's binding of the console kernel contract.
+    this.app.instance('console', this);
     this.registerCommands();
   }
 

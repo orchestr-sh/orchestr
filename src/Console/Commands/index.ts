@@ -53,6 +53,10 @@ import { QueueRestartCommand } from './QueueRestartCommand';
 import { QueueRetryCommand } from './QueueRetryCommand';
 import { QueueTableCommand } from './QueueTableCommand';
 import { QueueWorkCommand } from './QueueWorkCommand';
+import { ScheduleListCommand } from './ScheduleListCommand';
+import { ScheduleRunCommand } from './ScheduleRunCommand';
+import { ScheduleTestCommand } from './ScheduleTestCommand';
+import { ScheduleWorkCommand } from './ScheduleWorkCommand';
 import { SeedCommand } from './SeedCommand';
 
 /**
@@ -100,6 +104,11 @@ export function coreCommands(app: Application): Command[] {
     new CacheClearCommand(app),
     new CacheForgetCommand(app),
     new CacheTableCommand(app),
+    // Schedule commands
+    new ScheduleRunCommand(app),
+    new ScheduleWorkCommand(app),
+    new ScheduleListCommand(app),
+    new ScheduleTestCommand(app),
     // View commands
     new MakeViewCommand(app),
   ];

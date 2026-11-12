@@ -84,6 +84,7 @@ export { Auth } from './Facades/Auth';
 export { Gate as GateFacade } from './Facades/Gate';
 export { Hash } from './Facades/Hash';
 export { Crypt } from './Facades/Crypt';
+export { Schedule as ScheduleFacade } from './Facades/Schedule';
 
 // Helpers
 export {
@@ -342,6 +343,12 @@ export { CacheClearCommand } from './Console/Commands/CacheClearCommand';
 export { CacheForgetCommand } from './Console/Commands/CacheForgetCommand';
 export { CacheTableCommand } from './Console/Commands/CacheTableCommand';
 
+// Console Commands - Schedule
+export { ScheduleRunCommand } from './Console/Commands/ScheduleRunCommand';
+export { ScheduleWorkCommand } from './Console/Commands/ScheduleWorkCommand';
+export { ScheduleListCommand } from './Console/Commands/ScheduleListCommand';
+export { ScheduleTestCommand } from './Console/Commands/ScheduleTestCommand';
+
 // Console Commands - View
 export { MakeViewCommand } from './Console/Commands/MakeViewCommand';
 
@@ -546,6 +553,24 @@ export { CacheMissed } from './Cache/Events/CacheMissed';
 export { KeyWritten } from './Cache/Events/KeyWritten';
 export { KeyForgotten } from './Cache/Events/KeyForgotten';
 export { CacheFlushed } from './Cache/Events/CacheFlushed';
+
+// Scheduling
+export { Schedule, resolveSchedule } from './Scheduling/Schedule';
+export type { CommandParameter, EventRunResult } from './Scheduling/Schedule';
+export { ScheduleServiceProvider } from './Scheduling/ScheduleServiceProvider';
+export { Event as ScheduledEvent, parseClockTime } from './Scheduling/Event';
+export type { EventCallback, EventFailureCallback, EventFilter, EventRunOutcome } from './Scheduling/Event';
+export { CronExpression } from './Scheduling/CronExpression';
+export type { CronTimeParts } from './Scheduling/CronExpression';
+export { CacheEventMutex } from './Scheduling/CacheEventMutex';
+export type { Locker as CacheLocker } from './Scheduling/CacheEventMutex';
+export { CallbackTask } from './Scheduling/Tasks/CallbackTask';
+export type { ScheduleClosure } from './Scheduling/Tasks/CallbackTask';
+export { ConsoleCommandTask, parseCommandString } from './Scheduling/Tasks/ConsoleCommandTask';
+export { ExecTask } from './Scheduling/Tasks/ExecTask';
+export { JobTask } from './Scheduling/Tasks/JobTask';
+export type { ScheduledJobClass } from './Scheduling/Tasks/JobTask';
+export type { ScheduledTask, TaskRunOptions } from './Scheduling/Contracts/ScheduledTask';
 
 // Session
 export { SessionManager, SESSION_DEFAULTS } from './Session/SessionManager';
