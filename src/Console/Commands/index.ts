@@ -14,6 +14,8 @@ import type { Command } from '../Command';
 import { CacheClearCommand } from './CacheClearCommand';
 import { CacheForgetCommand } from './CacheForgetCommand';
 import { CacheTableCommand } from './CacheTableCommand';
+import { ConfigCacheCommand } from './ConfigCacheCommand';
+import { ConfigClearCommand } from './ConfigClearCommand';
 import { DeployCommand } from './DeployCommand';
 import { DeployEnvCommand } from './DeployEnvCommand';
 import { DeployInitCommand } from './DeployInitCommand';
@@ -104,6 +106,9 @@ export function coreCommands(app: Application): Command[] {
     new CacheClearCommand(app),
     new CacheForgetCommand(app),
     new CacheTableCommand(app),
+    // Config commands
+    new ConfigCacheCommand(app),
+    new ConfigClearCommand(app),
     // Schedule commands
     new ScheduleRunCommand(app),
     new ScheduleWorkCommand(app),

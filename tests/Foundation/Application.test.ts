@@ -1,5 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { afterEach, describe, beforeEach, expect, it } from 'vitest';
 import { Application } from '@/Foundation/Application';
+import { Env } from '@/Foundation/Env/Env';
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
 
 class TestProvider extends ServiceProvider {
@@ -186,20 +190,146 @@ describe('Application', () => {
   });
 
   describe('environment helpers', () => {
-    it('returns version', () => {
-      expect(app.version()).toBe('0.1.0');
+    const managedKeys = ['APP_ENV', 'NODE_ENV', 'APP_DEBUG', 'FROM_BASE', 'FROM_EXTRA', 'SHARED'];
+    let snapshot: Record<string, string | undefined>;
+
+    beforeEach(() => {
+      snapshot = {};
+      for (const key of managedKeys) {
+        snapshot[key] = process.env[key];
+      }
+    });
+
+    afterEach(() => {
+      for (const key of managedKeys) {
+        if (snapshot[key] === undefined) {
+          Env.forget(key);
+        } else {
+          process.env[key] = snapshot[key];
+        }
+      }
+    });
+
+    it('reads the version from package.json', () => {
+      const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf-8'));
+
+      expect(app.version()).toBe(pkg.version);
     });
 
     it('returns environment file', () => {
       expect(app.environmentFile()).toBe('.env');
     });
 
-    it('returns environment', () => {
-      expect(typeof app.environment()).toBe('string');
+    it('prefers APP_ENV over NODE_ENV', () => {
+      Env.set('APP_ENV', 'local');
+      Env.set('NODE_ENV', 'production');
+
+      expect(app.environment()).toBe('local');
     });
 
-    it('returns runningInConsole', () => {
-      expect(typeof app.runningInConsole()).toBe('boolean');
+    it('falls back to NODE_ENV, then production', () => {
+      Env.forget('APP_ENV');
+      Env.set('NODE_ENV', 'development');
+      expect(app.environment()).toBe('development');
+
+      Env.forget('APP_ENV');
+      Env.forget('NODE_ENV');
+      expect(app.environment()).toBe('production');
+    });
+
+    it('compares the current environment against names', () => {
+      Env.set('APP_ENV', 'testing');
+
+      expect(app.environment('local', 'testing')).toBe(true);
+      expect(app.environment('production')).toBe(false);
+    });
+
+    it('supports wildcard patterns in environment()', () => {
+      Env.set('APP_ENV', 'staging-eu');
+
+      expect(app.environment('staging*', 'production')).toBe(true);
+    });
+
+    it('reports local/production/testing flags', () => {
+      Env.set('APP_ENV', 'local');
+      expect(app.isLocal()).toBe(true);
+      expect(app.isProduction()).toBe(false);
+      expect(app.isTesting()).toBe(false);
+
+      Env.set('APP_ENV', 'production');
+      expect(app.isProduction()).toBe(true);
+      expect(app.isLocal()).toBe(false);
+
+      Env.set('APP_ENV', 'testing');
+      expect(app.isTesting()).toBe(true);
+      expect(app.isProduction()).toBe(false);
+    });
+
+    it('reads debug mode from APP_DEBUG', () => {
+      Env.forget('APP_DEBUG');
+      expect(app.isDebug()).toBe(false);
+
+      Env.set('APP_DEBUG', 'true');
+      expect(app.isDebug()).toBe(true);
+
+      Env.set('APP_DEBUG', 'false');
+      expect(app.isDebug()).toBe(false);
+    });
+
+    it('bootstraps .env and .env.{APP_ENV} from the base path', () => {
+      const root = mkdtempSync(join(tmpdir(), 'orchestr-application-env-'));
+
+      try {
+        writeFileSync(join(root, '.env'), 'APP_ENV=local\nFROM_BASE=base-value\nSHARED=from-base\n');
+        writeFileSync(join(root, '.env.local'), 'FROM_BASE=specific-value\nFROM_EXTRA=yes\n');
+
+        const envApp = new Application(root);
+
+        expect(envApp.hasBeenBootstrapped()).toBe(true);
+        expect(envApp.environment()).toBe('local');
+        expect(envApp.isLocal()).toBe(true);
+        expect(Env.get('FROM_BASE')).toBe('specific-value');
+        expect(Env.get('FROM_EXTRA')).toBe('yes');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('does not let .env override real process variables during bootstrap', () => {
+      const root = mkdtempSync(join(tmpdir(), 'orchestr-application-env-'));
+
+      try {
+        process.env.SHARED = 'from-process';
+        writeFileSync(join(root, '.env'), 'SHARED=from-file\nFROM_BASE=irrelevant\n');
+
+        new Application(root);
+
+        expect(Env.get('SHARED')).toBe('from-process');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('detects console execution from CLI-style arguments', () => {
+      const originalArgv = process.argv;
+
+      try {
+        process.argv = ['/usr/bin/node', '/app/server.js'];
+        expect(new Application('/test/base').runningInConsole()).toBe(false);
+
+        process.argv = ['/usr/bin/node', '/app/orchestr.mjs', 'migrate'];
+        expect(new Application('/test/base').runningInConsole()).toBe(true);
+      } finally {
+        process.argv = originalArgv;
+      }
+    });
+
+    it('honours an explicit console mode marker', () => {
+      app.setRunningInConsole(false);
+      expect(app.runningInConsole()).toBe(false);
+
+      app.setRunningInConsole(true);
+      expect(app.runningInConsole()).toBe(true);
     });
   });
 

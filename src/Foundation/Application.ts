@@ -1,5 +1,10 @@
+import { existsSync } from 'fs';
 import { Container } from '@/Container/Container';
 import { setGlobalApp } from '@/Support/helpers';
+import { Str } from '@/Support/Str';
+import { ConfigServiceProvider } from './Config/ConfigServiceProvider';
+import { Env } from './Env/Env';
+import { packageVersion } from './PackageVersion';
 import { ServiceProvider } from './ServiceProvider';
 
 /**
@@ -9,9 +14,19 @@ import { ServiceProvider } from './ServiceProvider';
 export class Application extends Container {
   private basePath: string;
   private booted: boolean = false;
+  private bootstrapped: boolean = false;
+  private environmentFileName: string = '.env';
+  private runningInConsoleMode: boolean | null = null;
   private serviceProviders: ServiceProvider[] = [];
   private loadedProviders: Map<string, boolean> = new Map();
   private eventDiscoveryPaths: string[] = [];
+
+  /**
+   * Bootstrappers run once, before any service provider boots. Loading the
+   * environment first mirrors Laravel's `LoadEnvironmentVariables` step so
+   * `APP_ENV`, `APP_DEBUG`, and `APP_KEY` are available everywhere after.
+   */
+  private bootstrappers: Array<(app: Application) => void> = [(app) => app.loadEnvironmentVariables()];
 
   constructor(basePath: string = process.cwd()) {
     super();
@@ -21,6 +36,11 @@ export class Application extends Container {
 
     // Set this as the global app instance for helper functions
     setGlobalApp(this);
+
+    // Bootstrapping the environment is synchronous and side-effect-light, so
+    // doing it in the constructor keeps `environment()`/`isDebug()` accurate
+    // even for apps that never call `boot()` (CLI tools, programmatic use).
+    this.bootstrap();
   }
 
   /**
@@ -86,6 +106,31 @@ export class Application extends Container {
   }
 
   /**
+   * Get the path to the bootstrap directory (cache files, etc.)
+   */
+  bootstrapPath(path: string = ''): string {
+    return `${this.basePath}/bootstrap${path ? '/' + path : ''}`;
+  }
+
+  /**
+   * Get the path where the cached configuration snapshot lives. The
+   * `APP_CONFIG_CACHE` environment variable points at an explicit snapshot;
+   * otherwise the conventional `bootstrap/cache/config.json` is used.
+   */
+  getCachedConfigPath(): string {
+    const fromEnv = Env.get('APP_CONFIG_CACHE');
+
+    return typeof fromEnv === 'string' && fromEnv !== '' ? fromEnv : this.bootstrapPath('cache/config.json');
+  }
+
+  /**
+   * Determine if a configuration cache file exists
+   */
+  configurationIsCached(): boolean {
+    return existsSync(this.getCachedConfigPath());
+  }
+
+  /**
    * Register a service provider with the application
    * Laravel: $app->register(provider)
    */
@@ -130,6 +175,18 @@ export class Application extends Container {
       return;
     }
 
+    this.bootstrap();
+
+    // The configuration provider boots the config repository from files (or
+    // its cached snapshot), so it must run before every other provider.
+    // Applications that did not register one get it prepended here.
+    if (!this.loadedProviders.has(ConfigServiceProvider.name)) {
+      const configProvider = new ConfigServiceProvider(this);
+      configProvider.register();
+      this.serviceProviders.unshift(configProvider);
+      this.loadedProviders.set(ConfigServiceProvider.name, true);
+    }
+
     for (const provider of this.serviceProviders) {
       await this.bootProvider(provider);
     }
@@ -157,6 +214,22 @@ export class Application extends Container {
   }
 
   /**
+   * Run the application bootstrappers (load the environment, ...)
+   * Laravel: $app->bootstrap()
+   */
+  bootstrap(): void {
+    if (this.bootstrapped) {
+      return;
+    }
+
+    for (const bootstrapper of this.bootstrappers) {
+      bootstrapper(this);
+    }
+
+    this.bootstrapped = true;
+  }
+
+  /**
    * Register a terminating callback
    * Laravel: $app->terminating(callback)
    */
@@ -177,35 +250,130 @@ export class Application extends Container {
    * Get the version number of the application
    */
   version(): string {
-    return '0.1.0';
+    return packageVersion();
   }
 
   /**
-   * Determine if the application is running in the console
+   * Determine if the application is running in the console.
+   *
+   * `process.argv` is defined in every Node process, so the entry script's
+   * presence alone proves nothing. We instead look for command arguments
+   * after the script (a CLI invocation such as `node orchestr.mjs migrate`),
+   * which a bare `node server.mjs` HTTP entry never produces; the console
+   * kernel additionally marks the mode explicitly for certainty.
    */
   runningInConsole(): boolean {
-    return process.argv[1] !== undefined;
+    if (this.runningInConsoleMode === null) {
+      this.runningInConsoleMode = this.detectRunningInConsole();
+    }
+
+    return this.runningInConsoleMode;
+  }
+
+  /**
+   * Explicitly declare whether the application is running in the console
+   */
+  setRunningInConsole(running: boolean): this {
+    this.runningInConsoleMode = running;
+    return this;
+  }
+
+  /**
+   * Detect console execution from the process arguments
+   */
+  private detectRunningInConsole(): boolean {
+    return Array.isArray(process.argv) && process.argv.length > 2;
   }
 
   /**
    * Get the environment file the application is using
    */
   environmentFile(): string {
-    return '.env';
+    return this.environmentFileName;
   }
 
   /**
-   * Get the environment the application is running in
+   * Set the environment file the application should load
    */
-  environment(): string {
-    return process.env.NODE_ENV || 'production';
+  setEnvironmentFile(file: string): this {
+    this.environmentFileName = file;
+    return this;
   }
 
   /**
-   * Determine if the application is in debug mode
+   * Get the environment the application is running in, or compare the current
+   * environment against the given names (wildcards allowed, like Str::is).
+   * Laravel: $app->environment() / $app->environment('local', 'testing')
+   *
+   * `APP_ENV` takes precedence over `NODE_ENV`; production is the default.
+   */
+  environment(): string;
+  environment(...names: string[]): boolean;
+  environment(...names: string[]): string | boolean {
+    const current = this.currentEnvironment();
+
+    if (names.length === 0) {
+      return current;
+    }
+
+    return names.some((pattern) => Str.is(pattern, current));
+  }
+
+  /**
+   * Resolve the current environment name
+   */
+  private currentEnvironment(): string {
+    const current = Env.get('APP_ENV') || Env.get('NODE_ENV');
+
+    return typeof current === 'string' && current !== '' ? current : 'production';
+  }
+
+  /**
+   * Load `.env` and, when an environment is selected, `.env.{APP_ENV}` into
+   * the environment. Existing process environment variables win; the more
+   * specific file wins over the generic one (both non-destructive defaults).
+   */
+  private loadEnvironmentVariables(): void {
+    const basePath = `${this.basePath}/${this.environmentFile()}`;
+
+    Env.load(basePath);
+
+    const specific = `${basePath}.${this.currentEnvironment()}`;
+
+    if (specific !== basePath) {
+      Env.load(specific);
+    }
+  }
+
+  /**
+   * Determine if the application is running locally
+   */
+  isLocal(): boolean {
+    return this.environment() === 'local';
+  }
+
+  /**
+   * Determine if the application is running in production
+   */
+  isProduction(): boolean {
+    return this.environment() === 'production';
+  }
+
+  /**
+   * Determine if the application is running in testing mode
+   */
+  isTesting(): boolean {
+    return this.environment() === 'testing';
+  }
+
+  /**
+   * Determine if the application is in debug mode.
+   * Laravel: `APP_DEBUG=true`
    */
   isDebug(): boolean {
-    return process.env.DEBUG === 'true';
+    const debug = Env.get('APP_DEBUG', false);
+
+    return debug === true || debug === '1';
   }
 
   /**
@@ -219,7 +387,7 @@ export class Application extends Container {
    * Determine if the application has been bootstrapped before
    */
   hasBeenBootstrapped(): boolean {
-    return this.booted;
+    return this.bootstrapped;
   }
 
   /**
