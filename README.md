@@ -864,7 +864,8 @@ await Fake.load();
 
 ## Events and Listeners
 
-Laravel-style event system with listeners, subscribers, and automatic discovery.
+Laravel-style event system with async-aware dispatch, queued listeners,
+subscribers, and automatic discovery.
 
 ### Creating Events
 
@@ -885,7 +886,8 @@ npx orchestr make:event UserRegistered
 
 ### Creating Listeners
 
-Listeners handle events with a `handle` method.
+Listeners handle events with a `handle` method. Async listeners are fully
+supported - the dispatcher awaits each one in registration order.
 
 ```typescript
 export class SendWelcomeEmail {
@@ -937,32 +939,84 @@ Event.listen(['UserRegistered', 'UserUpdated'], LogUserActivity);
 Event.listen('user.*', (event) => {
   // Handles user.registered, user.updated, etc.
 });
+
+// Queued listener - pushed to the queue instead of running inline
+Event.listen(UserRegistered, SendWelcomeEmail, true);
 ```
 
 ### Dispatching Events
+
+`dispatch()` and `until()` are async: every listener is awaited in
+registration order (direct listeners first, then wildcard listeners) before
+the returned promise resolves.
 
 ```typescript
 import { Event } from '@orchestr-sh/orchestr';
 
 // Dispatch via facade
-Event.dispatch(new UserRegistered(user));
+await Event.dispatch(new UserRegistered(user));
 
 // Static dispatch on event class
-UserRegistered.dispatch(user);
+await UserRegistered.dispatch(user);
 
 // Conditional dispatch
-UserRegistered.dispatchIf(user.isActive, user);
-UserRegistered.dispatchUnless(user.isAdmin, user);
+await UserRegistered.dispatchIf(user.isActive, user);
+await UserRegistered.dispatchUnless(user.isAdmin, user);
 
 // Dispatch until first non-null response (halting)
-const result = UserRegistered.until(user);
+const result = await UserRegistered.until(user);
 if (result === false) {
   // Listener vetoed the operation
 }
 
 // Queue events for later
 Event.push('user.registered', [user]);
-Event.flush('user.registered'); // Dispatch all queued
+await Event.flush('user.registered'); // Dispatch all queued
+```
+
+### Queued Listeners
+
+Listeners marked with the `ShouldQueue` contract - or registered with the
+third `queued` argument - are pushed onto the queue as `CallQueuedListener`
+jobs instead of running inline. The event and listener class name are
+serialized into the job payload and restored by the worker. Because
+TypeScript erases interfaces, mark the listener at runtime (the `queued`
+property, or queue configuration properties like `queue`/`tries`):
+
+```typescript
+import { Event, ShouldQueue } from '@orchestr-sh/orchestr';
+
+export class SendWelcomeEmail implements ShouldQueue {
+  public readonly queued = true; // runtime marker for the dispatcher
+  public connection = 'redis';   // optional queue configuration
+  public queue = 'emails';
+  public tries = 3;
+
+  async handle(event: UserRegistered): Promise<void> {
+    // Runs inside a queue worker, not the request
+  }
+}
+```
+
+Queued listeners contribute no inline response: they never halt a halting
+dispatch and `until()` skips them.
+
+### Dispatching After Commit
+
+Events implementing `ShouldDispatchAfterCommit` (carrying the runtime marker
+property) wait for the active database transaction to commit before their
+listeners run. Queued listeners can opt in to the same behavior with
+`ShouldQueueAfterCommit` (`queued` + `afterCommit` markers) so the job is
+only pushed once the data behind it is durable:
+
+```typescript
+class UserRegistered extends Event implements ShouldDispatchAfterCommit {
+  public readonly shouldDispatchAfterCommit = true;
+}
+
+// Inside Ensemble.transaction(...): nothing fires until commit(),
+// and a rollback discards the deferred dispatch entirely.
+await UserRegistered.dispatch(user);
 ```
 
 ### Event Subscribers
@@ -1000,7 +1054,10 @@ protected subscribe = [
 
 ### Model Events
 
-Ensemble models automatically dispatch lifecycle events:
+Ensemble models automatically dispatch lifecycle events. `save()`, `delete()`,
+`restore()`, and `forceDelete()` await the dispatcher, so async listeners
+complete - and a `false` response halts the operation - before the lifecycle
+continues:
 
 ```typescript
 import { Event, ModelCreated, ModelUpdated, ModelDeleting } from '@orchestr-sh/orchestr';
@@ -1039,7 +1096,8 @@ Available model events:
 
 ### Testing Events
 
-Use `Event.fake()` to test event dispatching:
+Use `Event.fake()` to test event dispatching. The fake mirrors the async
+dispatcher, so await your code under test as usual; no listener ever runs:
 
 ```typescript
 import { Event } from '@orchestr-sh/orchestr';
@@ -1071,6 +1129,14 @@ const [result, fake] = await Event.fakeFor(async (fake) => {
   return 'done';
 });
 fake.assertDispatched(UserRegistered);
+
+// Queued-listener assertions: record which dispatches the real dispatcher
+// would have routed to the queue
+const fake = Event.fake();
+fake.listen(UserRegistered, SendWelcomeEmail, true);
+await UserRegistered.dispatch(user);
+fake.assertDispatchedToQueue(UserRegistered);
+fake.assertNotDispatchedToQueue(UserDeleted);
 ```
 
 ### Console Commands

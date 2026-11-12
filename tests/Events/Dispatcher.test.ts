@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Container } from '@/Container/Container';
 import { Dispatcher } from '@/Events/Dispatcher';
+import { Event } from '@/Events/Event';
+
+class UserRegistered extends Event {
+  constructor(public readonly name: string) {
+    super();
+  }
+}
 
 describe('Dispatcher', () => {
   let container: Container;
@@ -30,115 +37,139 @@ describe('Dispatcher', () => {
       dispatcher.listen('user.*', listener);
       expect(dispatcher.hasListeners('user.created')).toBe(true);
     });
+
+    it('registers by event class reference and dispatches object events to it', async () => {
+      const listener = vi.fn();
+      dispatcher.listen(UserRegistered, listener);
+
+      expect(dispatcher.hasListeners('UserRegistered')).toBe(true);
+
+      const event = new UserRegistered('Ada');
+      await dispatcher.dispatch(event);
+
+      expect(listener).toHaveBeenCalledWith(event);
+    });
+
+    it('mixes class references with names and wildcard patterns', async () => {
+      const direct = vi.fn();
+      const wildcard = vi.fn();
+      dispatcher.listen([UserRegistered, 'user.created'], direct);
+      dispatcher.listen('*', wildcard);
+
+      await dispatcher.dispatch(new UserRegistered('Grace'));
+
+      expect(direct).toHaveBeenCalledTimes(1);
+      expect(wildcard).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('dispatch()', () => {
-    it('calls registered listeners with string events', () => {
+    it('calls registered listeners with string events', async () => {
       const listener = vi.fn();
       dispatcher.listen('test.event', listener);
-      dispatcher.dispatch('test.event');
+      await dispatcher.dispatch('test.event');
       expect(listener).toHaveBeenCalledOnce();
     });
 
-    it('passes event name and payload to listener', () => {
+    it('passes event name and payload to listener', async () => {
       const listener = vi.fn();
       dispatcher.listen('test.event', listener);
-      dispatcher.dispatch('test.event', ['arg1', 'arg2']);
+      await dispatcher.dispatch('test.event', ['arg1', 'arg2']);
       expect(listener).toHaveBeenCalledWith('test.event', 'arg1', 'arg2');
     });
 
-    it('calls multiple listeners', () => {
+    it('calls multiple listeners', async () => {
       const listener1 = vi.fn();
       const listener2 = vi.fn();
       dispatcher.listen('test', listener1);
       dispatcher.listen('test', listener2);
-      dispatcher.dispatch('test');
+      await dispatcher.dispatch('test');
       expect(listener1).toHaveBeenCalled();
       expect(listener2).toHaveBeenCalled();
     });
 
-    it('collects non-null responses', () => {
+    it('collects non-null responses', async () => {
       dispatcher.listen('test', () => 'a');
       dispatcher.listen('test', () => 'b');
-      const results = dispatcher.dispatch('test');
+      const results = await dispatcher.dispatch('test');
       expect(results).toEqual(['a', 'b']);
     });
 
-    it('halts on false when halt=true', () => {
+    it('halts on false when halt=true', async () => {
       const listener1 = vi.fn(() => false);
       const listener2 = vi.fn(() => 'after');
       dispatcher.listen('test', listener1);
       dispatcher.listen('test', listener2);
-      dispatcher.dispatch('test', [], true);
+      await dispatcher.dispatch('test', [], true);
       expect(listener1).toHaveBeenCalled();
       expect(listener2).not.toHaveBeenCalled();
     });
 
-    it('dispatches to wildcard listeners', () => {
+    it('dispatches to wildcard listeners', async () => {
       const listener = vi.fn();
       dispatcher.listen('user.*', listener);
-      dispatcher.dispatch('user.created');
+      await dispatcher.dispatch('user.created');
       expect(listener).toHaveBeenCalled();
     });
 
-    it('dispatches to both direct and wildcard listeners', () => {
+    it('dispatches to both direct and wildcard listeners', async () => {
       const direct = vi.fn();
       const wildcard = vi.fn();
       dispatcher.listen('user.created', direct);
       dispatcher.listen('user.*', wildcard);
-      dispatcher.dispatch('user.created');
+      await dispatcher.dispatch('user.created');
       expect(direct).toHaveBeenCalled();
       expect(wildcard).toHaveBeenCalled();
     });
 
-    it('dispatches class instance listeners with handle method', () => {
+    it('dispatches class instance listeners with handle method', async () => {
       class MyListener {
         handle = vi.fn();
       }
       const instance = new MyListener();
       dispatcher.listen('test', instance);
-      dispatcher.dispatch('test');
+      await dispatcher.dispatch('test');
       expect(instance.handle).toHaveBeenCalled();
     });
   });
 
   describe('until()', () => {
-    it('returns first non-null response', () => {
+    it('returns first non-null response', async () => {
       dispatcher.listen('test', () => null);
       dispatcher.listen('test', () => 'found');
       dispatcher.listen('test', () => 'also');
-      const result = dispatcher.until('test');
+      const result = await dispatcher.until('test');
       expect(result).toBe('found');
     });
 
-    it('returns null if no listener returns value', () => {
+    it('returns null if no listener returns value', async () => {
       dispatcher.listen('test', () => null);
-      const result = dispatcher.until('test');
+      const result = await dispatcher.until('test');
       expect(result).toBeNull();
     });
   });
 
   describe('push() / flush()', () => {
-    it('queues events and flushes them', () => {
+    it('queues events and flushes them', async () => {
       const listener = vi.fn();
       dispatcher.listen('deferred', listener);
       dispatcher.push('deferred', ['data']);
       expect(listener).not.toHaveBeenCalled();
 
-      dispatcher.flush('deferred');
+      await dispatcher.flush('deferred');
       expect(listener).toHaveBeenCalledWith('deferred', 'data');
     });
 
-    it('does not fail when flushing empty queue', () => {
-      expect(() => dispatcher.flush('nonexistent')).not.toThrow();
+    it('does not fail when flushing empty queue', async () => {
+      await expect(dispatcher.flush('nonexistent')).resolves.toBeUndefined();
     });
 
-    it('clears queue after flushing', () => {
+    it('clears queue after flushing', async () => {
       const listener = vi.fn();
       dispatcher.listen('event', listener);
       dispatcher.push('event');
-      dispatcher.flush('event');
-      dispatcher.flush('event');
+      await dispatcher.flush('event');
+      await dispatcher.flush('event');
       expect(listener).toHaveBeenCalledOnce();
     });
   });
@@ -153,18 +184,18 @@ describe('Dispatcher', () => {
   });
 
   describe('forgetPushed()', () => {
-    it('clears all queued events', () => {
+    it('clears all queued events', async () => {
       const listener = vi.fn();
       dispatcher.listen('event', listener);
       dispatcher.push('event');
       dispatcher.forgetPushed();
-      dispatcher.flush('event');
+      await dispatcher.flush('event');
       expect(listener).not.toHaveBeenCalled();
     });
   });
 
   describe('subscribe()', () => {
-    it('registers subscriber that returns mapping', () => {
+    it('registers subscriber that returns mapping', async () => {
       const listener = vi.fn();
       dispatcher.subscribe({
         subscribe: () => ({
@@ -172,12 +203,12 @@ describe('Dispatcher', () => {
           'user.deleted': listener,
         }),
       });
-      dispatcher.dispatch('user.created');
-      dispatcher.dispatch('user.deleted');
+      await dispatcher.dispatch('user.created');
+      await dispatcher.dispatch('user.deleted');
       expect(listener).toHaveBeenCalledTimes(2);
     });
 
-    it('handles subscriber that returns array listeners', () => {
+    it('handles subscriber that returns array listeners', async () => {
       const listener1 = vi.fn();
       const listener2 = vi.fn();
       dispatcher.subscribe({
@@ -185,7 +216,7 @@ describe('Dispatcher', () => {
           test: [listener1, listener2],
         }),
       });
-      dispatcher.dispatch('test');
+      await dispatcher.dispatch('test');
       expect(listener1).toHaveBeenCalled();
       expect(listener2).toHaveBeenCalled();
     });
@@ -210,24 +241,24 @@ describe('Dispatcher', () => {
   });
 
   describe('wildcard matching', () => {
-    it('matches single segment wildcard', () => {
+    it('matches single segment wildcard', async () => {
       const listener = vi.fn();
       dispatcher.listen('app.*', listener);
-      dispatcher.dispatch('app.started');
+      await dispatcher.dispatch('app.started');
       expect(listener).toHaveBeenCalled();
     });
 
-    it('matches multi-segment wildcard', () => {
+    it('matches multi-segment wildcard', async () => {
       const listener = vi.fn();
       dispatcher.listen('app.*', listener);
-      dispatcher.dispatch('app.user.created');
+      await dispatcher.dispatch('app.user.created');
       expect(listener).toHaveBeenCalled();
     });
 
-    it('matches catch-all wildcard', () => {
+    it('matches catch-all wildcard', async () => {
       const listener = vi.fn();
       dispatcher.listen('*', listener);
-      dispatcher.dispatch('anything');
+      await dispatcher.dispatch('anything');
       expect(listener).toHaveBeenCalled();
     });
   });
@@ -238,6 +269,13 @@ describe('Dispatcher', () => {
       dispatcher.listen('test', listener);
       const raw = dispatcher.getRawListeners();
       expect(raw.get('test')).toContain(listener);
+    });
+
+    it('includes wildcard listeners keyed by their pattern', () => {
+      const listener = vi.fn();
+      dispatcher.listen('user.*', listener);
+      const raw = dispatcher.getRawListeners();
+      expect(raw.get('user.*')).toContain(listener);
     });
   });
 });

@@ -35,6 +35,17 @@ export class Connection {
   protected loggingEnabled: boolean = false;
   protected grammar?: QueryGrammar;
   /**
+   * Depth of open transactions; increments on begin, decrements on commit or
+   * rollback. Mirrors Laravel's TransactionManager level tracking so callers
+   * (like the event dispatcher) can tell whether writes are still pending.
+   */
+  protected transactionLevel: number = 0;
+  /**
+   * Callbacks registered while a transaction is open. They run once the
+   * outermost transaction commits and are discarded when it rolls back.
+   */
+  protected afterCommitCallbacks: Array<() => any> = [];
+  /**
    * Pause between deadlock retries of `transaction()`, mirroring Laravel's
    * 50ms `deadlockRetryInterval`.
    */
@@ -107,20 +118,73 @@ export class Connection {
    */
   async beginTransaction(): Promise<void> {
     await this.adapter.beginTransaction();
+    this.transactionLevel += 1;
   }
 
   /**
    * Commit a transaction
+   *
+   * When the outermost transaction commits, any callbacks registered through
+   * `afterCommit()` run before this method resolves.
    */
   async commit(): Promise<void> {
     await this.adapter.commit();
+    this.transactionLevel = Math.max(0, this.transactionLevel - 1);
+
+    if (this.transactionLevel === 0) {
+      await this.fireAfterCommitCallbacks();
+    }
   }
 
   /**
    * Rollback a transaction
+   *
+   * Rolling back the outermost transaction discards pending `afterCommit`
+   * callbacks: the writes they were waiting for never persisted.
    */
   async rollback(): Promise<void> {
     await this.adapter.rollback();
+    this.transactionLevel = Math.max(0, this.transactionLevel - 1);
+
+    if (this.transactionLevel === 0) {
+      this.afterCommitCallbacks = [];
+    }
+  }
+
+  /**
+   * Get the current transaction nesting level
+   */
+  getTransactionLevel(): number {
+    return this.transactionLevel;
+  }
+
+  /**
+   * Register a callback to run once the outermost transaction commits
+   *
+   * Outside a transaction the callback runs immediately, mirroring the
+   * `ShouldDispatchAfterCommit` behaviour of Laravel's event dispatcher.
+   *
+   * @param callback - Invoked after commit (or immediately when no transaction is open)
+   */
+  async afterCommit(callback: () => any): Promise<void> {
+    if (this.transactionLevel === 0) {
+      await callback();
+      return;
+    }
+
+    this.afterCommitCallbacks.push(callback);
+  }
+
+  /**
+   * Drain and run the pending after-commit callbacks in registration order
+   */
+  protected async fireAfterCommitCallbacks(): Promise<void> {
+    const callbacks = this.afterCommitCallbacks;
+    this.afterCommitCallbacks = [];
+
+    for (const callback of callbacks) {
+      await callback();
+    }
   }
 
   /**

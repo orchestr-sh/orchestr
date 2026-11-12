@@ -4,9 +4,9 @@
  * Discover and cache the application's events and listeners following Laravel's Artisan pattern
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import { Command } from '@/Console/Command';
+import { EventDiscoveryCache } from '@/Events/EventDiscoveryCache';
+import { registerListener } from '@/Events/ListenerRegistry';
 import { Application } from '@/Foundation/Application';
 
 export class EventCacheCommand extends Command {
@@ -20,54 +20,49 @@ export class EventCacheCommand extends Command {
   async handle(): Promise<void> {
     this.info('Discovering events and listeners...');
 
-    try {
-      // Try to dynamically import EventDiscovery (Task 6 dependency)
-      const { EventDiscovery } = await import('@/Support/EventDiscovery');
+    const { EventDiscovery } = await import('@/Support/EventDiscovery');
 
-      const discovery = new EventDiscovery(this.app);
-      const directories = this.app.getEventDiscoveryPaths();
+    const discovery = new EventDiscovery(this.app);
+    const directories = this.app.getEventDiscoveryPaths();
 
-      this.comment(`Scanning directories:`);
-      directories.forEach((dir) => this.comment(`  - ${dir}`));
-      this.newLine();
+    this.comment(`Scanning directories:`);
+    directories.forEach((dir) => this.comment(`  - ${dir}`));
+    this.newLine();
 
-      const listeners = await discovery.discover(directories);
+    const listeners = await discovery.discover(directories);
+    const classes = discovery.getDiscoveredClasses();
 
-      if (listeners.size === 0) {
-        this.warn('No events discovered.');
-        return;
-      }
-
-      // Convert Map to array for JSON serialization
-      const listenersArray = Array.from(listeners.entries());
-
-      // Create cache directory
-      const cachePath = this.app.storagePath('framework/events.json');
-      await fs.mkdir(path.dirname(cachePath), { recursive: true });
-
-      // Write cache file
-      await fs.writeFile(cachePath, JSON.stringify(listenersArray, null, 2));
-
-      this.info(`Events cached successfully!`);
-      this.newLine();
-      this.comment(`Cached ${listeners.size} events to: ${cachePath}`);
-
-      // Show summary
-      let totalListeners = 0;
-      for (const [, listenerList] of listeners) {
-        totalListeners += listenerList.length;
-      }
-
-      this.comment(`Total listeners: ${totalListeners}`);
-    } catch (error: any) {
-      if (error.code === 'MODULE_NOT_FOUND' && error.message?.includes('EventDiscovery')) {
-        this.error('EventDiscovery module not found.');
-        this.comment('The EventDiscovery system (Task 6) must be implemented first.');
-        this.comment('This command will work once EventDiscovery is available.');
-      } else {
-        this.error(`Failed to cache events: ${error.message}`);
-        throw error;
-      }
+    // Registering the loaded classes keeps cached string listeners resolvable
+    // in this process (dispatcher fallback + queued listener jobs).
+    for (const [name, listenerClass] of classes) {
+      registerListener(name, listenerClass);
     }
+
+    if (listeners.size === 0) {
+      this.warn('No events discovered.');
+      return;
+    }
+
+    // Persist through the shared cache store so EventServiceProvider boot and
+    // event:clear read exactly the same format.
+    const cache = new EventDiscoveryCache(this.app);
+    const cachePath = cache.getCachePath();
+
+    if (!cache.store(listeners)) {
+      this.error(`Failed to write the event cache to: ${cachePath}`);
+      return;
+    }
+
+    this.info(`Events cached successfully!`);
+    this.newLine();
+    this.comment(`Cached ${listeners.size} events to: ${cachePath}`);
+
+    // Show summary
+    let totalListeners = 0;
+    for (const [, listenerList] of listeners) {
+      totalListeners += listenerList.length;
+    }
+
+    this.comment(`Total listeners: ${totalListeners}`);
   }
 }

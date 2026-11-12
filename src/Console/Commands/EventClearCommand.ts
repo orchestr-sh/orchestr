@@ -4,8 +4,8 @@
  * Clear all cached events and listeners following Laravel's Artisan pattern
  */
 
-import * as fs from 'fs/promises';
 import { Command } from '@/Console/Command';
+import { EventDiscoveryCache } from '@/Events/EventDiscoveryCache';
 import { Application } from '@/Foundation/Application';
 
 export class EventClearCommand extends Command {
@@ -17,19 +17,17 @@ export class EventClearCommand extends Command {
   }
 
   async handle(): Promise<void> {
-    const cachePath = this.app.storagePath('framework/events.json');
+    const cache = new EventDiscoveryCache(this.app);
 
-    try {
-      await fs.access(cachePath);
-      await fs.unlink(cachePath);
+    if (!cache.exists()) {
+      this.comment('No cached events found.');
+      return;
+    }
+
+    if (cache.clear()) {
       this.info('Cached events cleared successfully.');
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        this.comment('No cached events found.');
-      } else {
-        this.error(`Failed to clear cached events: ${error.message}`);
-        throw error;
-      }
+    } else {
+      this.error(`Failed to clear cached events: ${cache.getCachePath()}`);
     }
   }
 }

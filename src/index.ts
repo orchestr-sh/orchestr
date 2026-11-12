@@ -407,7 +407,12 @@ export type { ProvisionOptions } from './Deploy/Provisioner';
 export { Event } from './Events/Event';
 export type { EventClass } from './Events/Event';
 export { Dispatcher } from './Events/Dispatcher';
+export { NullDispatcher } from './Events/NullDispatcher';
+export { PendingDispatch } from './Events/PendingDispatch';
 export { EventServiceProvider } from './Events/EventServiceProvider';
+export { EventDiscoveryCache } from './Events/EventDiscoveryCache';
+export { CallQueuedListener } from './Events/CallQueuedListener';
+export { registerListener, resolveRegisteredListener } from './Events/ListenerRegistry';
 export { Dispatchable, applyDispatchable } from './Events/Concerns/Dispatchable';
 
 // Model Events
@@ -426,13 +431,18 @@ export {
 
 // Event Contracts & Types
 export type { DispatcherContract } from './Events/Contracts/Dispatcher';
+export type { ShouldDispatchAfterCommit } from './Events/Contracts/ShouldDispatchAfterCommit';
+export { isShouldDispatchAfterCommit } from './Events/Contracts/ShouldDispatchAfterCommit';
 export type {
   EventListener,
+  EventNameOrClass,
   EventSubscriber,
   ListenerInterface,
+  ListenerClass,
   ListenerClosure,
   EventPayload,
   QueuedListener,
+  RegisteredListener,
 } from './Events/types';
 
 // Queue
@@ -485,6 +495,7 @@ export { WorkerStopping } from './Queue/Events/WorkerStopping';
 // Listener Queue Contract
 export { isShouldQueue } from './Listeners/Contracts/ShouldQueue';
 export type { ShouldQueue } from './Listeners/Contracts/ShouldQueue';
+export type { ShouldQueueAfterCommit } from './Listeners/Contracts/ShouldQueueAfterCommit';
 
 // Cache
 export { CacheManager } from './Cache/CacheManager';

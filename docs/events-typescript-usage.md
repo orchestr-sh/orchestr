@@ -14,7 +14,7 @@ class UserRegistered extends Event {
 }
 
 // TypeScript error: Property 'dispatch' does not exist on type 'typeof UserRegistered'
-UserRegistered.dispatch(user);
+await UserRegistered.dispatch(user);
 ```
 
 ## Solution 1: Use type assertion (Quick Fix)
@@ -33,11 +33,11 @@ class UserRegistered extends Event {
 // Cast to EventClass to get proper typing
 const UserRegisteredEvent = UserRegistered as EventClass<UserRegistered>;
 
-// Now TypeScript recognizes the static methods
-UserRegisteredEvent.dispatch(user);
-UserRegisteredEvent.dispatchIf(condition, user);
-UserRegisteredEvent.dispatchUnless(condition, user);
-await UserRegisteredEvent.until(user);
+// Now TypeScript recognizes the static methods (all async)
+await UserRegisteredEvent.dispatch(user);
+await UserRegisteredEvent.dispatchIf(condition, user);
+await UserRegisteredEvent.dispatchUnless(condition, user);
+const result = await UserRegisteredEvent.until(user);
 ```
 
 ## Solution 2: Use Event facade (Recommended)
@@ -55,9 +55,9 @@ class UserRegistered extends Event {
 }
 
 // Dispatch through the facade - fully typed
-Event.dispatch(new UserRegistered(user));
-Event.dispatchIf(condition, new UserRegistered(user));
-Event.dispatchUnless(condition, new UserRegistered(user));
+await Event.dispatch(new UserRegistered(user));
+await Event.dispatchIf(condition, new UserRegistered(user));
+await Event.dispatchUnless(condition, new UserRegistered(user));
 await Event.until(new UserRegistered(user));
 ```
 
@@ -66,7 +66,7 @@ await Event.until(new UserRegistered(user));
 import { EventFacade } from '@orchestr-sh/orchestr';
 
 // Use EventFacade to avoid naming conflict with Event base class
-EventFacade.dispatch(new UserRegistered(user));
+await EventFacade.dispatch(new UserRegistered(user));
 ```
 
 ## Solution 3: Export with proper typing
@@ -94,8 +94,8 @@ Then use it elsewhere:
 import { UserRegistered } from './Events/UserRegistered';
 
 // Full TypeScript support
-UserRegistered.dispatch(user);
-UserRegistered.dispatchIf(condition, user);
+await UserRegistered.dispatch(user);
+await UserRegistered.dispatchIf(condition, user);
 ```
 
 ## Why This Happens
@@ -109,7 +109,7 @@ The `EventClass<T>` type helper provides the correct type information to TypeScr
 For most use cases, we recommend **Solution 2** (using the Event facade):
 
 ```typescript
-Event.dispatch(new UserRegistered(user));
+await Event.dispatch(new UserRegistered(user));
 ```
 
 This approach:
@@ -122,5 +122,9 @@ This approach:
 Reserve the static class methods for cases where you want the syntactic sugar:
 
 ```typescript
-UserRegistered.dispatch(user);  // Shorter, but requires type casting
+await UserRegistered.dispatch(user);  // Shorter, but requires type casting
 ```
+
+> Note: `dispatch()` and `until()` are async. `dispatch()` resolves after every
+> listener (including async listeners and model-event halting checks) has run,
+> so always `await` them when the result or side ordering matters.

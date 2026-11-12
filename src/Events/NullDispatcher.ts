@@ -1,6 +1,6 @@
 import type { DispatcherContract } from './Contracts/Dispatcher';
 import type { Event } from './Event';
-import type { EventListener, EventSubscriber } from './types';
+import type { EventListener, EventNameOrClass, EventSubscriber } from './types';
 
 /**
  * Null Dispatcher
@@ -31,10 +31,11 @@ export class NullDispatcher implements DispatcherContract {
   /**
    * Register an event listener (no-op)
    *
-   * @param events - Event name(s) to listen for (ignored)
+   * @param events - Event name(s) or class(es) to listen for (ignored)
    * @param listener - Listener to invoke (ignored)
+   * @param queued - Queue the listener (ignored)
    */
-  listen(events: string | string[], listener: EventListener): void {
+  listen(events: EventNameOrClass | EventNameOrClass[], listener: EventListener, queued?: boolean): void {
     // No-op
   }
 
@@ -58,25 +59,25 @@ export class NullDispatcher implements DispatcherContract {
   }
 
   /**
-   * Dispatch an event to all listeners (no-op, returns empty array)
+   * Dispatch an event to all listeners (no-op, resolves to an empty array)
    *
    * @param event - Event name or instance (ignored)
    * @param payload - Additional arguments (ignored)
    * @param halt - Stop on false return (ignored)
-   * @returns Empty array
+   * @returns Promise resolving to an empty array
    */
-  dispatch(event: string | Event, payload: any[] = [], halt: boolean = false): any[] {
+  async dispatch(event: string | Event, payload: any[] = [], halt: boolean = false): Promise<any[]> {
     return [];
   }
 
   /**
-   * Dispatch an event until a listener returns a non-null response (always returns null)
+   * Dispatch an event until a listener returns a non-null response (always resolves to null)
    *
    * @param event - Event name or instance (ignored)
    * @param payload - Additional arguments (ignored)
-   * @returns Always null
+   * @returns Promise resolving to null
    */
-  until(event: string | Event, payload: any[] = []): any {
+  async until(event: string | Event, payload: any[] = []): Promise<any> {
     return null;
   }
 
@@ -95,7 +96,7 @@ export class NullDispatcher implements DispatcherContract {
    *
    * @param event - Event name to flush (ignored)
    */
-  flush(event: string): void {
+  async flush(event: string): Promise<void> {
     // No-op
   }
 

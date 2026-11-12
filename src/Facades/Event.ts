@@ -16,12 +16,12 @@ import { EventFake } from '@/Support/Testing/Fakes/EventFake';
  * Event.listen(UserRegistered, SendWelcomeEmail);
  * Event.listen('user.*', (event) => console.log(event));
  *
- * // Dispatch events
- * Event.dispatch(new UserRegistered(user));
- * Event.dispatch('user.registered', [user]);
+ * // Dispatch events (dispatch/until are async)
+ * await Event.dispatch(new UserRegistered(user));
+ * await Event.dispatch('user.registered', [user]);
  *
  * // Dispatch until first non-null response
- * const result = Event.until(new ValidateUser(user));
+ * const result = await Event.until(new ValidateUser(user));
  *
  * // Testing - Fake all events
  * Event.fake();
