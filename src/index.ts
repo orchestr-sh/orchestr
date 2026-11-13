@@ -444,6 +444,12 @@ export {
   ModelSaved,
   ModelDeleting,
   ModelDeleted,
+  ModelSoftDeleting,
+  ModelSoftDeleted,
+  ModelRestoring,
+  ModelRestored,
+  ModelForceDeleting,
+  ModelForceDeleted,
 } from './Database/Ensemble/Events';
 
 // Event Contracts & Types
