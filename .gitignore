@@ -142,8 +142,9 @@ tests/**/*.js
 tests/**/*.d.ts
 tests/**/*.d.ts.map
 
-# Checked-in plain-JS test fixtures (e.g. EventDiscovery listener samples)
-!tests/Events/fixtures/**/*.js
+# Checked-in plain-JS test fixtures (e.g. EventDiscovery listener samples and
+# ConfigLoader config/*.js samples): real sources, not build output.
+!tests/**/fixtures/**/*.js
 
 # Playwright
 playwright-report/
