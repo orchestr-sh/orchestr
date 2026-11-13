@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/orchestr-sh/orchestr/compare/v1.11.26...v1.12.0) (2026-11-13)
+
+
+### Features
+
+* **log:** export the logging API from the package entry ([#61](https://github.com/orchestr-sh/orchestr/issues/61)) ([9f9a90d](https://github.com/orchestr-sh/orchestr/commit/9f9a90d0ee8df7cfb1dfb3e85c7b001951c69092)), closes [#55](https://github.com/orchestr-sh/orchestr/issues/55)
+
 ## [1.11.26](https://github.com/orchestr-sh/orchestr/compare/v1.11.25...v1.11.26) (2026-11-13)
 
 
