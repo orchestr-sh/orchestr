@@ -15,6 +15,11 @@ export class ConsoleKernel {
     // programmatic command calls) can dispatch through it, mirroring
     // Laravel's binding of the console kernel contract.
     this.app.instance('console', this);
+
+    // Creating the kernel *is* console execution; declare it instead of
+    // relying on argv heuristics so runningInConsole() is exact.
+    this.app.setRunningInConsole(true);
+
     this.registerCommands();
   }
 

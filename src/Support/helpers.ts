@@ -16,6 +16,7 @@ import type { View } from '@/View/View';
 import type { ViewFactory } from '@/View/ViewFactory';
 import { resolveModelFactory } from '@/Database/Factories/HasFactory';
 import { Application } from '@/Foundation/Application';
+import { Env } from '@/Foundation/Env/Env';
 import { Arr } from '@/Support/Arr';
 import { Collection, collect as createCollection } from '@/Support/Collection';
 import { Str } from '@/Support/Str';
@@ -37,6 +38,21 @@ export function setGlobalApp(app: Application): void {
  */
 export function getGlobalApp(): Application | null {
   return globalApp;
+}
+
+/**
+ * Get an environment variable value
+ * Laravel: env('APP_ENV') or env('APP_DEBUG', false)
+ *
+ * Delegates to the Env repository so `true`/`false`/`null`/`empty` strings
+ * are coerced exactly like Laravel's helper.
+ *
+ * @param {string} key
+ * @param {any} defaultValue
+ * @returns {any}
+ */
+export function env(key: string, defaultValue?: string): string | boolean | null {
+  return Env.get(key, defaultValue === undefined ? null : defaultValue);
 }
 
 /**

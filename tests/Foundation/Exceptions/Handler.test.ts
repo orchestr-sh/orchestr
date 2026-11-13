@@ -130,7 +130,7 @@ describe('Exception handler', () => {
   });
 
   afterEach(() => {
-    delete process.env.DEBUG;
+    delete process.env.APP_DEBUG;
     vi.restoreAllMocks();
   });
 
@@ -302,7 +302,7 @@ describe('Exception handler', () => {
       const production = handler.render(createRequest({ accept: 'application/json' }), exception);
       expect((production as JsonResponse).data.stack).toBeUndefined();
 
-      process.env.DEBUG = 'true';
+      process.env.APP_DEBUG = 'true';
 
       const debug = handler.render(createRequest({ accept: 'application/json' }), exception);
       expect((debug as JsonResponse).data.stack).toContain('kaboom');
@@ -314,7 +314,7 @@ describe('Exception handler', () => {
       const production = handler.render(createRequest({ accept: 'text/html' }), exception);
       expect(production.content).not.toContain('<pre class="trace">');
 
-      process.env.DEBUG = 'true';
+      process.env.APP_DEBUG = 'true';
 
       const debug = handler.render(createRequest({ accept: 'text/html' }), exception);
       expect(debug.content).toContain('<pre class="trace">');
