@@ -2,12 +2,19 @@
  * Validator - Laravel's validation engine
  * Illuminate\Validation\Validator
  *
- * Provides validation rules and error handling
+ * Provides validation rules and error handling. Rule evaluation itself
+ * lives in the shared rule registry (`Rules/Registry`), so the loop here
+ * stays rule-agnostic: string rules, `Rule` object string forms and
+ * `Validator.extend` extensions all resolve through the same map (DRY),
+ * and new rules plug in without editing this class (OCP). Beyond running
+ * rules it covers Laravel's nested/array validation (`users.*.email`
+ * wildcards expanded to concrete error keys), `bail` /
+ * `stopOnFirstFailure`, `sometimes` and `nullable` semantics, `after()`
+ * hooks and custom message/attribute resolution.
  */
 
-import type { ImageDimensions } from '@/Support/Mimes';
-import { UploadedFile, isUploadedFile } from '@/Routing/UploadedFile';
-import { IMAGE_EXTENSIONS } from '@/Support/Mimes';
+import type { MessageReplacer, RuleContext, RuleDefinition, RuleExtension } from './Rules/Registry';
+import { defaultRegistry } from './Rules/Registry';
 
 export type ValidationRule = string | Array<string | ValidationRuleObject> | ValidationRuleObject;
 export type ValidationRules = Record<string, ValidationRule>;
@@ -15,6 +22,39 @@ export type ValidationRules = Record<string, ValidationRule>;
 export interface ValidationRuleObject {
   rule: string;
   message?: string;
+  [key: string]: any;
+}
+
+/**
+ * A hook registered with `after()`; it receives the running validator and
+ * may add errors through `addError` before validation completes.
+ * Laravel: $validator->after(fn ($validator) => ...)
+ */
+export type AfterHook = (validator: Validator) => void | Promise<void>;
+
+/**
+ * One normalized rule item of an attribute's rule list
+ */
+interface ParsedRuleItem {
+  /** Rule name before the first colon */
+  name: string;
+  /** Parameters after the name (colon split) */
+  params: string[];
+  /** Custom message from a `{ rule, message }` object */
+  customMessage?: string;
+  /** Invokable Rule object (Rule.email(), Rule.can(), custom objects...) */
+  invokable?: ValidationRuleObject & { passes: (...args: any[]) => any; messageFor?: (...args: any[]) => any };
+}
+
+/**
+ * A concrete attribute to validate: the rule pattern with every `*`
+ * replaced by the key found in the data, plus the bindings collected for
+ * wildcard-dependent parameters
+ */
+interface FieldEntry {
+  field: string;
+  pattern: string;
+  bindings: string[];
 }
 
 export class Validator {
@@ -24,6 +64,12 @@ export class Validator {
   private customAttributes: Record<string, string>;
   private errorMessages: Record<string, string[]> = {};
   private validatedFields: Record<string, any> = {};
+
+  /** stopOnFirstFailure flag: abort as soon as any rule fails */
+  private stopsOnFirstFailure: boolean = false;
+
+  /** Hooks registered with after(), run once every attribute has validated */
+  private afterHooks: AfterHook[] = [];
 
   constructor(
     data: Record<string, any>,
@@ -37,6 +83,95 @@ export class Validator {
     this.customAttributes = customAttributes;
   }
 
+  // ---------------------------------------------------------------------
+  // Static API
+  // ---------------------------------------------------------------------
+
+  /**
+   * Build a validator without `new`
+   * Laravel: Validator::make()
+   */
+  static make(
+    data: Record<string, any>,
+    rules: ValidationRules,
+    customMessages: Record<string, string> = {},
+    customAttributes: Record<string, string> = {}
+  ): Validator {
+    return new Validator(data, rules, customMessages, customAttributes);
+  }
+
+  /**
+   * Register a custom rule the Validator can run from string rules
+   * (Laravel: Validator::extend). The callback receives
+   * `(attribute, value, parameters, validator)`; returning false fails the
+   * attribute with the provided message or the resolved default. Custom
+   * rules skip attributes whose value is missing unless registered with
+   * extendImplicit.
+   */
+  static extend(rule: string, callback: RuleExtension, message?: string): void {
+    defaultRegistry.extend(rule, callback, { implicit: false, message });
+  }
+
+  /**
+   * Like extend() but the rule also runs when the attribute is missing or
+   * empty
+   * Laravel: Validator::extendImplicit()
+   */
+  static extendImplicit(rule: string, callback: RuleExtension, message?: string): void {
+    defaultRegistry.extend(rule, callback, { implicit: true, message });
+  }
+
+  /**
+   * Remove a rule registered through extend()/extendImplicit()
+   * Laravel: Validator::forgetExtension()
+   */
+  static forgetExtension(rule: string): void {
+    defaultRegistry.forget(rule);
+  }
+
+  /**
+   * Determine whether a rule name resolves in the shared registry
+   */
+  static hasRule(rule: string): boolean {
+    return defaultRegistry.has(rule);
+  }
+
+  /**
+   * Register a message replacer consulted with every resolved validation
+   * message, e.g. to swap placeholders
+   * Laravel: Validator::replacer()
+   */
+  static replacer(callback: MessageReplacer): void {
+    defaultRegistry.replacer(callback);
+  }
+
+  // ---------------------------------------------------------------------
+  // Fluent configuration
+  // ---------------------------------------------------------------------
+
+  /**
+   * Stop validating the moment the first rule on any attribute fails
+   * Laravel: $validator->stopOnFirstFailure()
+   */
+  stopOnFirstFailure(stop: boolean = true): this {
+    this.stopsOnFirstFailure = stop;
+    return this;
+  }
+
+  /**
+   * Register a hook that runs after all attributes have been validated
+   * and may add further errors via `addError`
+   * Laravel: $validator->after(fn ($validator) => $validator->errors()->add(...))
+   */
+  after(callback: AfterHook): this {
+    this.afterHooks.push(callback);
+    return this;
+  }
+
+  // ---------------------------------------------------------------------
+  // Validation
+  // ---------------------------------------------------------------------
+
   /**
    * Validate the data against the rules
    *
@@ -46,217 +181,329 @@ export class Validator {
     this.errorMessages = {};
     this.validatedFields = {};
 
-    for (const [field, rule] of Object.entries(this.rules)) {
-      const rules = this.parseRules(rule);
-      const items: Array<string | Record<string, any>> =
-        typeof rule === 'string'
-          ? rule.split('|').map((r) => r.trim())
-          : Array.isArray(rule)
-            ? rule
-            : typeof rule === 'object'
-              ? [rule]
-              : [];
-      const value = this.getFieldValue(field);
-      const hasSometimes = rules.includes('sometimes');
-      const hasNullable = rules.includes('nullable');
-      let excluded = false;
+    for (const entry of this.expandFields()) {
+      await this.validateField(entry);
 
-      if (hasSometimes && value === undefined) {
-        continue;
+      if (this.stopsOnFirstFailure && this.fails()) {
+        break;
       }
+    }
 
-      if (hasNullable && (value === undefined || value === null)) {
-        if (rules.includes('required')) {
-          const result = await this.validateRule(field, value, 'required', []);
-          if (!result.passes) {
-            this.addError(field, result.message);
-          } else {
-            this.validatedFields[field] = value;
-          }
-        } else {
-          this.validatedFields[field] = value;
-        }
-        continue;
-      }
-
-      for (const item of items) {
-        if (excluded) {
-          break;
-        }
-        if (typeof item === 'string') {
-          const [ruleKey, ...params] = item.split(':');
-          if (ruleKey === 'exclude') {
-            excluded = true;
-            break;
-          }
-          if (ruleKey === 'exclude_if') {
-            const [otherField, expected] = params;
-            const ov = this.getFieldValue(otherField);
-            if (String(ov) === expected) {
-              excluded = true;
-              break;
-            }
-          }
-          if (ruleKey === 'exclude_unless') {
-            const [otherField, expected] = params;
-            const ov = this.getFieldValue(otherField);
-            if (String(ov) !== expected) {
-              excluded = true;
-              break;
-            }
-          }
-          if (ruleKey === 'exclude_with') {
-            const fields = params
-              .join(':')
-              .split(',')
-              .map((p) => p.trim())
-              .filter((p) => p.length > 0);
-            if (fields.some((f) => this.getFieldValue(f) !== undefined)) {
-              excluded = true;
-              break;
-            }
-          }
-          if (ruleKey === 'exclude_without') {
-            const fields = params
-              .join(':')
-              .split(',')
-              .map((p) => p.trim())
-              .filter((p) => p.length > 0);
-            if (fields.some((f) => this.getFieldValue(f) === undefined)) {
-              excluded = true;
-              break;
-            }
-          }
-          const result = await this.validateRule(field, value, ruleKey, params);
-          if (!result.passes) {
-            this.addError(field, result.message);
-          }
-          continue;
-        }
-        if (
-          typeof item === 'object' &&
-          item &&
-          (item as any).invokable === true &&
-          typeof (item as any).passes === 'function'
-        ) {
-          const attribute = this.getAttribute(field);
-          const ctx = {
-            field,
-            attribute,
-            other: (name: string) => this.getFieldValue(name),
-            helpers: {
-              isPresent: (v: any) => v !== undefined,
-              isEmpty: (v: any) => v === undefined || v === null || v === '',
-              toNumber: (v: any) => (typeof v === 'number' ? v : parseFloat(String(v))),
-              toString: (v: any) => (typeof v === 'string' ? v : String(v)),
-              isDate: (v: any) => {
-                const d = new Date(v);
-                return !isNaN(d.getTime());
-              },
-            },
-          };
-          const passes = await (item as any).passes(attribute, value, ctx);
-          if (!passes) {
-            const custom =
-              typeof (item as any).messageFor === 'function'
-                ? (item as any).messageFor(attribute, value, ctx)
-                : typeof (item as any).message === 'function'
-                  ? (item as any).message(attribute, value, ctx)
-                  : (item as any).message;
-            const msg = custom || this.getMessage(field, (item as any).rule || 'rule', `The ${attribute} is invalid.`);
-            this.addError(field, msg);
-          }
-          continue;
-        }
-        if (typeof item === 'object' && item && 'rule' in item) {
-          const [ruleKey, ...params] = String((item as any).rule).split(':');
-          if (ruleKey === 'exclude') {
-            excluded = true;
-            break;
-          }
-          if (ruleKey === 'exclude_if') {
-            const [otherField, expected] = params;
-            const ov = this.getFieldValue(otherField);
-            if (String(ov) === expected) {
-              excluded = true;
-              break;
-            }
-          }
-          if (ruleKey === 'exclude_unless') {
-            const [otherField, expected] = params;
-            const ov = this.getFieldValue(otherField);
-            if (String(ov) !== expected) {
-              excluded = true;
-              break;
-            }
-          }
-          if (ruleKey === 'exclude_with') {
-            const fields = params
-              .join(':')
-              .split(',')
-              .map((p) => p.trim())
-              .filter((p) => p.length > 0);
-            if (fields.some((f) => this.getFieldValue(f) !== undefined)) {
-              excluded = true;
-              break;
-            }
-          }
-          if (ruleKey === 'exclude_without') {
-            const fields = params
-              .join(':')
-              .split(',')
-              .map((p) => p.trim())
-              .filter((p) => p.length > 0);
-            if (fields.some((f) => this.getFieldValue(f) === undefined)) {
-              excluded = true;
-              break;
-            }
-          }
-          const result = await this.validateRule(field, value, ruleKey, params);
-          if (!result.passes) {
-            this.addError(field, result.message);
-          }
-          continue;
-        }
-      }
-
-      // If no errors for this field, add to validated data
-      if (!excluded && !this.errorMessages[field]) {
-        this.validatedFields[field] = value;
-      }
+    // After hooks always get their turn, mirroring Laravel's
+    // callAfterValidationHooks: they can add errors even after a bail
+    for (const hook of this.afterHooks) {
+      await hook(this);
     }
 
     return Object.keys(this.errorMessages).length === 0;
   }
 
   /**
-   * Parse validation rules from various formats
+   * Run every rule item of one (possibly wildcard-expanded) attribute
    */
-  private parseRules(rule: ValidationRule): string[] {
-    if (typeof rule === 'string') {
-      return rule.split('|').map((r) => r.trim());
+  private async validateField(entry: FieldEntry): Promise<void> {
+    const items = this.normalizeItems(entry.pattern);
+    const names = items.map((item) => item.name);
+    const value = this.getFieldValue(entry.field);
+
+    const hasSometimes = names.includes('sometimes');
+    const hasNullable = names.includes('nullable');
+    const bail = names.includes('bail');
+
+    // `sometimes` skips the attribute entirely while it is missing from
+    // the data - including for wildcard-expanded nested paths
+    if (hasSometimes && !this.hasValue(entry.field)) {
+      return;
     }
 
-    if (Array.isArray(rule)) {
-      return rule
-        .map((r) => {
-          if (typeof r === 'string') {
-            return r.trim();
+    // `nullable` short-circuits everything except `required` while the
+    // value is null/undefined, like the previous engine did
+    const onlyRequired = hasNullable && (value === undefined || value === null);
+
+    let excluded = false;
+
+    for (const item of items) {
+      if (excluded) {
+        break;
+      }
+
+      if (onlyRequired && !(item.name === 'required' && !item.invokable)) {
+        continue;
+      }
+
+      if (item.invokable) {
+        const failed = await this.runInvokable(item.invokable, entry, value);
+
+        if (failed) {
+          if (bail || this.stopsOnFirstFailure) {
+            break;
           }
-          if (typeof r === 'object' && 'rule' in r) {
-            return r.rule;
-          }
-          return '';
-        })
-        .filter((r) => r.length > 0);
+        }
+
+        continue;
+      }
+
+      const definition = defaultRegistry.resolve(item.name);
+
+      if (!definition) {
+        if (item.name) {
+          console.warn(`Unknown validation rule: ${item.name}`);
+        }
+        continue;
+      }
+
+      // Custom (extended, non-implicit) rules skip missing values, the
+      // same way Laravel's isValidatable does
+      if (definition.extension && !definition.implicit && value === undefined) {
+        continue;
+      }
+
+      const ctx = this.ruleContext(entry, item, definition);
+      const result = await definition.passes(ctx);
+
+      if (definition.exclude) {
+        if (result === true) {
+          excluded = true;
+          break;
+        }
+
+        continue;
+      }
+
+      if (result !== true) {
+        // Inline rule messages (like Laravel's ->message()) win over the
+        // message the implementation resolved
+        const message =
+          item.customMessage ??
+          (typeof result === 'string' && result !== ''
+            ? result
+            : this.getMessage(
+                entry.field,
+                item.name,
+                `The ${this.getAttribute(entry.field, entry.pattern)} is invalid.`,
+                entry.pattern
+              ));
+
+        this.addError(entry.field, message);
+
+        if (bail || this.stopsOnFirstFailure) {
+          break;
+        }
+      }
     }
 
-    if (typeof rule === 'object' && 'rule' in rule) {
-      return [rule.rule];
+    // If no errors for this field, add to validated data (excluded fields
+    // never make it into validated(), like Laravel)
+    if (!excluded && !this.errorMessages[entry.field]) {
+      this.setValidated(entry.field, value);
     }
-
-    return [];
   }
+
+  /**
+   * Run an invokable Rule object and report whether it failed
+   */
+  private async runInvokable(
+    invokable: NonNullable<ParsedRuleItem['invokable']>,
+    entry: FieldEntry,
+    value: any
+  ): Promise<boolean> {
+    const attribute = this.getAttribute(entry.field, entry.pattern);
+    const bind = (name: string) => this.bindWildcards(name, entry.bindings);
+    const ctx = {
+      field: entry.field,
+      attribute,
+      other: (name: string) => this.getFieldValue(bind(name)),
+      helpers: {
+        isPresent: (v: any) => v !== undefined,
+        isEmpty: (v: any) => v === undefined || v === null || v === '',
+        toNumber: (v: any) => (typeof v === 'number' ? v : parseFloat(String(v))),
+        toString: (v: any) => (typeof v === 'string' ? v : String(v)),
+        isDate: (v: any) => {
+          const d = new Date(v);
+          return !isNaN(d.getTime());
+        },
+      },
+    };
+    const passes = await invokable.passes(attribute, value, ctx);
+
+    if (passes) {
+      return false;
+    }
+
+    const custom =
+      typeof invokable.messageFor === 'function'
+        ? invokable.messageFor(attribute, value, ctx)
+        : typeof invokable.message === 'function'
+          ? (invokable.message as unknown as (...args: any[]) => string)(attribute, value, ctx)
+          : invokable.message;
+    const msg = custom || this.getMessage(entry.field, invokable.rule, `The ${attribute} is invalid.`, entry.pattern);
+
+    this.addError(entry.field, msg);
+
+    return true;
+  }
+
+  /**
+   * Build the context a registry rule sees for one attribute/item pair:
+   * parameters with wildcards bound, sibling lookups, message helpers
+   */
+  private ruleContext(entry: FieldEntry, item: ParsedRuleItem, definition: RuleDefinition): RuleContext {
+    const bind = (value: string) => this.bindWildcards(value, entry.bindings);
+    // Conditional rules reference other fields in their parameters; bind
+    // `*` in those parameters to this attribute's wildcard index so
+    // `users.*.license => exclude_if:users.*.type,x` works per item
+    const params = definition.fieldParams && entry.bindings.length ? item.params.map(bind) : item.params;
+    const list = params.length
+      ? params
+          .join(':')
+          .split(/[,:]/)
+          .map((p) => p.trim())
+          .filter((p) => p.length > 0)
+      : [];
+
+    return {
+      field: entry.field,
+      pattern: entry.pattern,
+      attribute: this.getAttribute(entry.field, entry.pattern),
+      rule: item.name,
+      value: this.getFieldValue(entry.field),
+      params,
+      list,
+      data: this.data,
+      other: (name: string) => this.getFieldValue(bind(name)),
+      has: (name: string) => this.hasValue(bind(name)),
+      validator: this,
+      getMessage: (rule: string, fallback: string) => this.getMessage(entry.field, rule, fallback, entry.pattern),
+      fail: (fallback: string) => this.getMessage(entry.field, item.name, fallback, entry.pattern),
+    };
+  }
+
+  /**
+   * Normalize one attribute's rule value into parsed items: pipe strings,
+   * arrays of strings/objects and single objects all collapse into the
+   * same item shape the loop runs
+   */
+  private normalizeItems(pattern: string): ParsedRuleItem[] {
+    const rule = this.rules[pattern];
+    const rawItems: Array<string | ValidationRuleObject> =
+      typeof rule === 'string'
+        ? rule.split('|').map((r) => r.trim())
+        : Array.isArray(rule)
+          ? rule
+          : rule && typeof rule === 'object'
+            ? [rule as ValidationRuleObject]
+            : [];
+
+    return rawItems
+      .filter((item) => item !== undefined && item !== null && item !== '')
+      .map((item) => this.parseItem(item));
+  }
+
+  /**
+   * Split one rule item into its name, colon parameters and (for object
+   * items) its invokable rule or custom message
+   */
+  private parseItem(item: string | ValidationRuleObject): ParsedRuleItem {
+    if (typeof item === 'string') {
+      const [name, ...params] = item.split(':');
+
+      return { name, params };
+    }
+
+    if (item.invokable === true && typeof (item as any).passes === 'function') {
+      const [name] = String(item.rule ?? '').split(':');
+
+      return { name, params: [], invokable: item as ParsedRuleItem['invokable'] };
+    }
+
+    const [name, ...params] = String(item.rule ?? '').split(':');
+
+    return { name, params, customMessage: typeof item.message === 'string' ? item.message : undefined };
+  }
+
+  // ---------------------------------------------------------------------
+  // Nested / wildcard attribute expansion
+  // ---------------------------------------------------------------------
+
+  /**
+   * Turn the rule patterns into concrete attributes to validate,
+   * expanding every `*` against the data: `users.*.email` becomes
+   * `users.0.email`, `users.1.email`, ... so errors report concrete keys
+   * while messages and custom attributes still resolve from the pattern.
+   */
+  private expandFields(): FieldEntry[] {
+    const entries: FieldEntry[] = [];
+
+    for (const pattern of Object.keys(this.rules)) {
+      if (!pattern.includes('*')) {
+        entries.push({ field: pattern, pattern, bindings: [] });
+        continue;
+      }
+
+      entries.push(...this.resolveWildcards(pattern));
+    }
+
+    return entries;
+  }
+
+  /**
+   * Walk one wildcard pattern through the data, collecting the key that
+   * replaced each `*` so dependent-field parameters can be bound to the
+   * same item
+   */
+  private resolveWildcards(pattern: string): FieldEntry[] {
+    const segments = pattern.split('.');
+    const results: FieldEntry[] = [];
+
+    const walk = (index: number, node: any, parts: string[], bindings: string[]): void => {
+      if (index === segments.length) {
+        results.push({ field: parts.join('.'), pattern, bindings });
+        return;
+      }
+
+      const segment = segments[index];
+      const isNode = node !== undefined && node !== null && typeof node === 'object';
+
+      if (segment === '*') {
+        // Iterables only: a missing or scalar parent contributes no
+        // attributes (declare `array`/`required` on the parent to flag it)
+        const keys = isNode ? (Array.isArray(node) ? node.map((_, i) => String(i)) : Object.keys(node)) : [];
+
+        for (const key of keys) {
+          walk(index + 1, node[key], [...parts, key], [...bindings, key]);
+        }
+
+        return;
+      }
+
+      // Literal segments keep walking even when the key is missing, so
+      // `required` fires for `users.0.email` on an item without one
+      walk(index + 1, isNode ? node[segment] : undefined, [...parts, segment], bindings);
+    };
+
+    walk(0, this.data, [], []);
+
+    return results;
+  }
+
+  /**
+   * Replace each `*` in a dependent-field parameter with the matching
+   * wildcard binding (positional, like Laravel's `users.*.type` inside
+   * `users.*.license => required_if:users.*.type,pro`)
+   */
+  private bindWildcards(value: string, bindings: string[]): string {
+    if (!bindings.length || !value.includes('*')) {
+      return value;
+    }
+
+    let index = 0;
+
+    return value.replace(/\*/g, () => bindings[index++] ?? '*');
+  }
+
+  // ---------------------------------------------------------------------
+  // Data access
+  // ---------------------------------------------------------------------
 
   /**
    * Get field value from data, supporting dot notation
@@ -277,1147 +524,92 @@ export class Validator {
   }
 
   /**
-   * Validate a single rule
+   * Determine whether the data carries a dot-notation path (the key may
+   * exist with an undefined value, matching Laravel's presence check)
    */
-  private async validateRule(
-    field: string,
-    value: any,
-    rule: string,
-    params: string[]
-  ): Promise<{ passes: boolean; message: string }> {
-    const attribute = this.getAttribute(field);
-    const listParams = params.length
-      ? params
-          .join(':')
-          .split(/[,:]/)
-          .map((p) => p.trim())
-          .filter((p) => p.length > 0)
-      : [];
-    const other = (name: string) => this.getFieldValue(name);
-    const isPresent = (v: any) => v !== undefined;
-    const isEmpty = (v: any) => v === undefined || v === null || v === '';
-    const toNumber = (v: any) => (typeof v === 'number' ? v : parseFloat(String(v)));
-    const toString = (v: any) => (typeof v === 'string' ? v : String(v));
-    const isDate = (v: any) => {
-      const d = new Date(v);
-      return !isNaN(d.getTime());
-    };
+  private hasValue(field: string): boolean {
+    const keys = field.split('.');
+    let node: any = this.data;
 
-    switch (rule) {
-      case 'bail':
-        return { passes: true, message: '' };
-
-      case 'exclude':
-        return { passes: true, message: '' };
-
-      case 'exclude_if': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) === expected) {
-          return { passes: true, message: '' };
-        }
-        return { passes: true, message: '' };
+    for (const key of keys) {
+      if (node === undefined || node === null || typeof node !== 'object' || !(key in node)) {
+        return false;
       }
 
-      case 'exclude_unless': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) !== expected) {
-          return { passes: true, message: '' };
-        }
-        return { passes: true, message: '' };
-      }
-      case 'required':
-        if (value === undefined || value === null || value === '') {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} field is required.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'required_if': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) === expected && isEmpty(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} field is required.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'required_unless': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) !== expected && isEmpty(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} field is required.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'required_with': {
-        const others = listParams;
-        if (others.some((o) => isPresent(other(o))) && isEmpty(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} field is required.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'required_with_all': {
-        const others = listParams;
-        if (others.every((o) => isPresent(other(o))) && isEmpty(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} field is required.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'required_without': {
-        const others = listParams;
-        if (others.some((o) => !isPresent(other(o))) && isEmpty(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} field is required.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'required_without_all': {
-        const others = listParams;
-        if (others.every((o) => !isPresent(other(o))) && isEmpty(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} field is required.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'present':
-        if (!isPresent(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
-        }
-        return { passes: true, message: '' };
-      case 'present_if': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) === expected && !isPresent(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
-        }
-        return { passes: true, message: '' };
-      }
-      case 'present_unless': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) !== expected && !isPresent(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
-        }
-        return { passes: true, message: '' };
-      }
-      case 'present_with': {
-        const fields = listParams;
-        if (fields.some((f) => isPresent(other(f))) && !isPresent(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
-        }
-        return { passes: true, message: '' };
-      }
-      case 'present_with_all': {
-        const fields = listParams;
-        if (fields.every((f) => isPresent(other(f))) && !isPresent(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field must be present.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'filled':
-        if (isPresent(value) && isEmpty(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must have a value.`) };
-        }
-        return { passes: true, message: '' };
-
-      case 'accepted': {
-        const acceptedValues = ['yes', 'on', '1', 1, true, 'true'];
-        if (!acceptedValues.includes(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be accepted.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'accepted_if': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) === expected) {
-          const acceptedValues = ['yes', 'on', '1', 1, true, 'true'];
-          if (!acceptedValues.includes(value)) {
-            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be accepted.`) };
-          }
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'declined': {
-        const declinedValues = ['no', 'off', '0', 0, false, 'false'];
-        if (!declinedValues.includes(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be declined.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'declined_if': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) === expected) {
-          const declinedValues = ['no', 'off', '0', 0, false, 'false'];
-          if (!declinedValues.includes(value)) {
-            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be declined.`) };
-          }
-        }
-        return { passes: true, message: '' };
-      }
-      case 'nullable':
-        return { passes: true, message: '' };
-
-      case 'sometimes':
-        return { passes: true, message: '' };
-
-      case 'email':
-        if (value && !this.isValidEmail(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a valid email address.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'string':
-        if (value && typeof value !== 'string') {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a string.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'numeric':
-      case 'number':
-        if (value && isNaN(Number(value))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a number.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'integer':
-        if (value && (!Number.isInteger(Number(value)) || isNaN(Number(value)))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be an integer.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'boolean':
-        if (
-          value !== undefined &&
-          typeof value !== 'boolean' &&
-          value !== 'true' &&
-          value !== 'false' &&
-          value !== 1 &&
-          value !== 0
-        ) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be true or false.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'min': {
-        const minValue = params[0];
-        if (isUploadedFile(value)) {
-          if (value.getSize() / 1024 < parseFloat(minValue)) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} must be at least ${minValue} kilobytes.`),
-            };
-          }
-          return { passes: true, message: '' };
-        }
-        if (typeof value === 'string' && value.length < parseInt(minValue)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be at least ${minValue} characters.`),
-          };
-        }
-        if (typeof value === 'number' && value < parseFloat(minValue)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be at least ${minValue}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'max': {
-        const maxValue = params[0];
-        if (isUploadedFile(value)) {
-          if (value.getSize() / 1024 > parseFloat(maxValue)) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} may not be greater than ${maxValue} kilobytes.`),
-            };
-          }
-          return { passes: true, message: '' };
-        }
-        if (typeof value === 'string' && value.length > parseInt(maxValue)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} may not be greater than ${maxValue} characters.`),
-          };
-        }
-        if (typeof value === 'number' && value > parseFloat(maxValue)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} may not be greater than ${maxValue}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'between': {
-        const [minBetween, maxBetween] = params;
-        const numValue = typeof value === 'string' ? value.length : Number(value);
-        if (numValue < parseFloat(minBetween) || numValue > parseFloat(maxBetween)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be between ${minBetween} and ${maxBetween}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'size': {
-        const sizeValue = params[0];
-        if (isUploadedFile(value)) {
-          if (value.getSize() / 1024 !== parseFloat(sizeValue)) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} must be ${sizeValue} kilobytes.`),
-            };
-          }
-          return { passes: true, message: '' };
-        }
-        if (typeof value === 'string' && value.length !== parseInt(sizeValue)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be ${sizeValue} characters.`),
-          };
-        }
-        if (typeof value === 'number' && value !== parseFloat(sizeValue)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be ${sizeValue}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'in':
-        if (value && !listParams.includes(String(value))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The selected ${attribute} is invalid.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'not_in':
-        if (value && listParams.includes(String(value))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The selected ${attribute} is invalid.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'array':
-        if (value && !Array.isArray(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be an array.`),
-          };
-        }
-        return { passes: true, message: '' };
-      case 'required_array_keys': {
-        if (value && typeof value === 'object' && !Array.isArray(value)) {
-          const keys = listParams;
-          const hasAll = keys.every((k) => Object.prototype.hasOwnProperty.call(value, k));
-          if (!hasAll) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} must contain keys: ${keys.join(', ')}.`),
-            };
-          }
-          return { passes: true, message: '' };
-        }
-        return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be an array.`) };
-      }
-
-      case 'confirmed': {
-        const confirmationField = `${field}_confirmation`;
-        const confirmationValue = this.data[confirmationField];
-        if (value !== confirmationValue) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} confirmation does not match.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'url':
-        if (value && !this.isValidUrl(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a valid URL.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'alpha':
-        if (value && !/^[a-zA-Z]+$/.test(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} may only contain letters.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'alpha_num':
-        if (value && !/^[a-zA-Z0-9]+$/.test(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} may only contain letters and numbers.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'alpha_dash':
-        if (value && !/^[a-zA-Z0-9_-]+$/.test(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(
-              field,
-              rule,
-              `The ${attribute} may only contain letters, numbers, dashes and underscores.`
-            ),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'regex': {
-        const pattern = new RegExp(params.join(':'));
-        if (value && !pattern.test(value)) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} format is invalid.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'not_regex': {
-        const pattern = new RegExp(params.join(':'));
-        if (value && pattern.test(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} format is invalid.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'json':
-        if (value) {
-          try {
-            JSON.parse(typeof value === 'string' ? value : String(value));
-          } catch {
-            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be a valid JSON.`) };
-          }
-        }
-        return { passes: true, message: '' };
-
-      case 'ascii':
-        if (value && /[^\x00-\x7F]/.test(toString(value))) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be ASCII characters.`) };
-        }
-        return { passes: true, message: '' };
-
-      case 'decimal': {
-        const places = params[0] ? parseInt(params[0]) : undefined;
-        if (value !== undefined) {
-          const s = toString(value);
-          const m = s.match(/^[-+]?\d+(\.(\d+))?$/);
-          if (!m) {
-            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be a decimal.`) };
-          }
-          if (places !== undefined) {
-            const dp = m[2]?.length || 0;
-            if (dp !== places) {
-              return {
-                passes: false,
-                message: this.getMessage(field, rule, `The ${attribute} must have ${places} decimal places.`),
-              };
-            }
-          }
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'starts_with':
-        if (value) {
-          const s = toString(value);
-          if (!listParams.some((p) => s.startsWith(p))) {
-            return {
-              passes: false,
-              message: this.getMessage(
-                field,
-                rule,
-                `The ${attribute} must start with one of: ${listParams.join(', ')}.`
-              ),
-            };
-          }
-        }
-        return { passes: true, message: '' };
-
-      case 'ends_with':
-        if (value) {
-          const s = toString(value);
-          if (!listParams.some((p) => s.endsWith(p))) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} must end with one of: ${listParams.join(', ')}.`),
-            };
-          }
-        }
-        return { passes: true, message: '' };
-      case 'doesnt_start_with':
-        if (value) {
-          const s = toString(value);
-          if (listParams.some((p) => s.startsWith(p))) {
-            return {
-              passes: false,
-              message: this.getMessage(
-                field,
-                rule,
-                `The ${attribute} must not start with one of: ${listParams.join(', ')}.`
-              ),
-            };
-          }
-        }
-        return { passes: true, message: '' };
-      case 'doesnt_end_with':
-        if (value) {
-          const s = toString(value);
-          if (listParams.some((p) => s.endsWith(p))) {
-            return {
-              passes: false,
-              message: this.getMessage(
-                field,
-                rule,
-                `The ${attribute} must not end with one of: ${listParams.join(', ')}.`
-              ),
-            };
-          }
-        }
-        return { passes: true, message: '' };
-
-      case 'distinct':
-        if (Array.isArray(value)) {
-          const set = new Set(value.map((v) => JSON.stringify(v)));
-          if (set.size !== value.length) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} must not have duplicates.`),
-            };
-          }
-        }
-        return { passes: true, message: '' };
-
-      case 'same': {
-        const [otherField] = params;
-        if (toString(value) !== toString(other(otherField))) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must match ${otherField}.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'different': {
-        const [otherField] = params;
-        if (toString(value) === toString(other(otherField))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be different from ${otherField}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'gt': {
-        const [otherFieldOrValue] = params;
-        const cmp = isNaN(Number(otherFieldOrValue)) ? other(otherFieldOrValue) : parseFloat(otherFieldOrValue);
-        if (!(toNumber(value) > toNumber(cmp))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be greater than ${otherFieldOrValue}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'gte': {
-        const [otherFieldOrValue] = params;
-        const cmp = isNaN(Number(otherFieldOrValue)) ? other(otherFieldOrValue) : parseFloat(otherFieldOrValue);
-        if (!(toNumber(value) >= toNumber(cmp))) {
-          return {
-            passes: false,
-            message: this.getMessage(
-              field,
-              rule,
-              `The ${attribute} must be greater than or equal to ${otherFieldOrValue}.`
-            ),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'lt': {
-        const [otherFieldOrValue] = params;
-        const cmp = isNaN(Number(otherFieldOrValue)) ? other(otherFieldOrValue) : parseFloat(otherFieldOrValue);
-        if (!(toNumber(value) < toNumber(cmp))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be less than ${otherFieldOrValue}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'lte': {
-        const [otherFieldOrValue] = params;
-        const cmp = isNaN(Number(otherFieldOrValue)) ? other(otherFieldOrValue) : parseFloat(otherFieldOrValue);
-        if (!(toNumber(value) <= toNumber(cmp))) {
-          return {
-            passes: false,
-            message: this.getMessage(
-              field,
-              rule,
-              `The ${attribute} must be less than or equal to ${otherFieldOrValue}.`
-            ),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'uuid':
-        if (
-          value &&
-          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{4}-[0-9a-f]{12}$/i.test(toString(value))
-        ) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be a valid UUID.`) };
-        }
-        return { passes: true, message: '' };
-
-      case 'timezone':
-        if (value) {
-          const v = toString(value);
-          const zones = (Intl as any).supportedValuesOf ? (Intl as any).supportedValuesOf('timeZone') : [];
-          if (!zones.includes(v)) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} must be a valid timezone.`),
-            };
-          }
-        }
-        return { passes: true, message: '' };
-
-      case 'date':
-        if (value && !isDate(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} is not a valid date.`) };
-        }
-        return { passes: true, message: '' };
-
-      case 'date_equals':
-        if (value) {
-          const d1 = new Date(value).getTime();
-          const d2 = new Date(params[0]).getTime();
-          if (isNaN(d1) || isNaN(d2) || d1 !== d2) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} must equal ${params[0]}.`),
-            };
-          }
-        }
-        return { passes: true, message: '' };
-
-      case 'after': {
-        const cmp = params[0];
-        const v = new Date(value).getTime();
-        const ov = other(cmp);
-        const c = isDate(ov) ? new Date(ov).getTime() : new Date(cmp).getTime();
-        if (isNaN(v) || isNaN(c) || v <= c) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be after ${cmp}.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'after_or_equal': {
-        const cmp = params[0];
-        const v = new Date(value).getTime();
-        const ov = other(cmp);
-        const c = isDate(ov) ? new Date(ov).getTime() : new Date(cmp).getTime();
-        if (isNaN(v) || isNaN(c) || v < c) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be after or equal to ${cmp}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'before': {
-        const cmp = params[0];
-        const v = new Date(value).getTime();
-        const ov = other(cmp);
-        const c = isDate(ov) ? new Date(ov).getTime() : new Date(cmp).getTime();
-        if (isNaN(v) || isNaN(c) || v >= c) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be before ${cmp}.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'before_or_equal': {
-        const cmp = params[0];
-        const v = new Date(value).getTime();
-        const ov = other(cmp);
-        const c = isDate(ov) ? new Date(ov).getTime() : new Date(cmp).getTime();
-        if (isNaN(v) || isNaN(c) || v > c) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be before or equal to ${cmp}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'digits': {
-        const len = parseInt(params[0]);
-        if (!/^\d+$/.test(String(value)) || String(value).length !== len) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be ${len} digits.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'digits_between': {
-        const minD = parseInt(params[0]);
-        const maxD = parseInt(params[1]);
-        const s = String(value);
-        if (!/^\d+$/.test(s) || s.length < minD || s.length > maxD) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be between ${minD} and ${maxD} digits.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'min_digits': {
-        const minD = parseInt(params[0]);
-        const s = String(value);
-        if (!/^\d+$/.test(s) || s.length < minD) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be at least ${minD} digits.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'max_digits': {
-        const maxD = parseInt(params[0]);
-        const s = String(value);
-        if (!/^\d+$/.test(s) || s.length > maxD) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be at most ${maxD} digits.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'multiple_of': {
-        const base = parseFloat(params[0]);
-        if (Number.isFinite(base) && toNumber(value) % base !== 0) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a multiple of ${base}.`),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'ip':
-        if (value && !/^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$/.test(toString(value))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a valid IP address.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'ipv4':
-        if (value && !/^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$/.test(toString(value))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a valid IPv4 address.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'ipv6':
-        if (value && !/^([0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}$/i.test(toString(value))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a valid IPv6 address.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'mac_address':
-        if (value && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(toString(value))) {
-          return {
-            passes: false,
-            message: this.getMessage(field, rule, `The ${attribute} must be a valid MAC address.`),
-          };
-        }
-        return { passes: true, message: '' };
-
-      case 'lowercase':
-        if (value && toString(value) !== toString(value).toLowerCase()) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be lowercase.`) };
-        }
-        return { passes: true, message: '' };
-
-      case 'uppercase':
-        if (value && toString(value) !== toString(value).toUpperCase()) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be uppercase.`) };
-        }
-        return { passes: true, message: '' };
-
-      case 'in_array': {
-        const [otherField] = params;
-        const arr = other(otherField);
-        if (!Array.isArray(arr) || !arr.map((v: any) => String(v)).includes(String(value))) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be in ${otherField}.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'prohibited':
-        if (isPresent(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field is prohibited.`) };
-        }
-        return { passes: true, message: '' };
-
-      case 'prohibited_if': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) === expected && isPresent(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field is prohibited.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'prohibited_unless': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) !== expected && isPresent(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} field is prohibited.`) };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'prohibits': {
-        const others = listParams;
-        if (isPresent(value) && others.some((o) => isPresent(other(o)))) {
-          return {
-            passes: false,
-            message: this.getMessage(
-              field,
-              rule,
-              `The ${attribute} prohibits ${others.join(', ')} from being present.`
-            ),
-          };
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'file':
-        if (isUploadedFile(value)) {
-          if (!value.isValid()) {
-            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be a file.`) };
-          }
-          return { passes: true, message: '' };
-        }
-        if (value && typeof value !== 'object') {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be a file.`) };
-        }
-        return { passes: true, message: '' };
-
-      case 'image':
-        if (isUploadedFile(value)) {
-          if (!value.isValid()) {
-            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be an image.`) };
-          }
-          const meta = await this.uploadMeta(value);
-          if (!IMAGE_EXTENSIONS.includes(meta.extension) && !meta.mimeType.startsWith('image/')) {
-            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be an image.`) };
-          }
-          return { passes: true, message: '' };
-        }
-        if (value && typeof value === 'object') {
-          const type = (value.mimetype || value.type || '').toString();
-          if (!type.startsWith('image/')) {
-            return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be an image.`) };
-          }
-        }
-        return { passes: true, message: '' };
-
-      case 'mimetypes': {
-        const allowed = listParams;
-        if (isUploadedFile(value)) {
-          const meta = value.isValid() ? await this.uploadMeta(value) : null;
-          if (meta === null || !allowed.includes(meta.mimeType)) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} has an invalid mimetype.`),
-            };
-          }
-          return { passes: true, message: '' };
-        }
-        if (value && typeof value === 'object') {
-          const type = (value.mimetype || value.type || '').toString();
-          if (!allowed.includes(type)) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} has an invalid mimetype.`),
-            };
-          }
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'mimes': {
-        const allowed = listParams;
-        if (isUploadedFile(value)) {
-          if (!value.isValid()) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} has an invalid file type.`),
-            };
-          }
-          const meta = await this.uploadMeta(value);
-          if (!(allowed.includes(meta.extension) || allowed.some((m) => meta.mimeType.endsWith(`/${m}`)))) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} has an invalid file type.`),
-            };
-          }
-          return { passes: true, message: '' };
-        }
-        if (value && typeof value === 'object') {
-          const type = (value.mimetype || value.type || '').toString();
-          const ext = (value.extension || '').toString();
-          if (!(allowed.includes(ext) || allowed.some((m) => type.endsWith(`/${m}`)))) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} has an invalid file type.`),
-            };
-          }
-        }
-        return { passes: true, message: '' };
-      }
-
-      case 'dimensions': {
-        // Laravel: dimensions:min_width=100,min_height=100,max_width=1000,...
-        const limits: Record<string, number> = {};
-
-        for (const param of listParams) {
-          const separator = param.indexOf('=');
-
-          if (separator !== -1) {
-            limits[param.slice(0, separator)] = Number(param.slice(separator + 1));
-          }
-        }
-
-        const size = await this.imageSize(value);
-
-        if (size !== null) {
-          const { width, height } = size;
-          const pixels = width * height;
-          const invalid =
-            (limits['width'] !== undefined && width !== limits['width']) ||
-            (limits['height'] !== undefined && height !== limits['height']) ||
-            (limits['min_width'] !== undefined && width < limits['min_width']) ||
-            (limits['max_width'] !== undefined && width > limits['max_width']) ||
-            (limits['min_height'] !== undefined && height < limits['min_height']) ||
-            (limits['max_height'] !== undefined && height > limits['max_height']) ||
-            (limits['pixels'] !== undefined && pixels !== limits['pixels']) ||
-            (limits['min_pixels'] !== undefined && pixels < limits['min_pixels']) ||
-            (limits['max_pixels'] !== undefined && pixels > limits['max_pixels']);
-
-          if (invalid) {
-            return {
-              passes: false,
-              message: this.getMessage(field, rule, `The ${attribute} has invalid image dimensions.`),
-            };
-          }
-        }
-
-        return { passes: true, message: '' };
-      }
-
-      case 'active_url':
-        if (value && !this.isValidUrl(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} is not a valid URL.`) };
-        }
-        return { passes: true, message: '' };
-      case 'missing':
-        if (isPresent(value) && !isEmpty(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
-        }
-        return { passes: true, message: '' };
-      case 'missing_if': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) === expected && isPresent(value) && !isEmpty(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
-        }
-        return { passes: true, message: '' };
-      }
-      case 'missing_unless': {
-        const [otherField, expected] = params;
-        const ov = other(otherField);
-        if (toString(ov) !== expected && isPresent(value) && !isEmpty(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
-        }
-        return { passes: true, message: '' };
-      }
-      case 'missing_with': {
-        const fields = listParams;
-        if (fields.some((f) => isPresent(other(f))) && isPresent(value) && !isEmpty(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
-        }
-        return { passes: true, message: '' };
-      }
-      case 'missing_with_all': {
-        const fields = listParams;
-        if (fields.every((f) => isPresent(other(f))) && isPresent(value) && !isEmpty(value)) {
-          return { passes: false, message: this.getMessage(field, rule, `The ${attribute} must be missing.`) };
-        }
-        return { passes: true, message: '' };
-      }
-      case 'current_password':
-        return { passes: true, message: '' };
-
-      default:
-        console.warn(`Unknown validation rule: ${rule}`);
-        return { passes: true, message: '' };
-    }
-  }
-
-  /**
-   * Resolve the media type and extension file rules compare against for an
-   * upload. UploadedFile keeps the detection itself (finfo-style signature
-   * sniffing with the client-declared type as fallback); rules that need
-   * both values call this once per rule.
-   */
-  private async uploadMeta(value: UploadedFile): Promise<{ mimeType: string; extension: string }> {
-    const mimeType = await value.detectedMimeType();
-
-    return { mimeType, extension: await value.guessExtension() };
-  }
-
-  /**
-   * Width and height for the dimensions rule: read from an upload's image
-   * header (getimagesize in PHP) or from explicit object properties, and
-   * null when the value carries nothing measurable
-   */
-  private async imageSize(value: any): Promise<ImageDimensions | null> {
-    if (isUploadedFile(value)) {
-      return await value.dimensions();
+      node = node[key];
     }
 
-    if (value && typeof value === 'object') {
-      const width = Number(value.width ?? value.w);
-      const height = Number(value.height ?? value.h);
+    return true;
+  }
 
-      if (Number.isFinite(width) && Number.isFinite(height)) {
-        return { width, height };
+  /**
+   * Store one validated attribute into the validated data, building the
+   * nested array/object structure a wildcard path implies
+   * (users.0.email => validated().users[0].email)
+   */
+  private setValidated(path: string, value: any): void {
+    const keys = path.split('.');
+    let cursor: any = this.validatedFields;
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+
+      if (cursor[key] === undefined || cursor[key] === null || typeof cursor[key] !== 'object') {
+        cursor[key] = /^\d+$/.test(keys[i + 1]) ? [] : {};
       }
+
+      cursor = cursor[key];
     }
 
-    return null;
+    cursor[keys[keys.length - 1]] = value;
   }
 
-  /**
-   * Validate email format
-   */
-  private isValidEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  }
+  // ---------------------------------------------------------------------
+  // Messages and attributes
+  // ---------------------------------------------------------------------
 
   /**
-   * Validate URL format
+   * Get custom message or default message. Wildcard-expanded attributes
+   * look up their concrete key first, then the pattern key, so
+   * `users.*.email.required` covers every item. `:attribute` placeholders
+   * are filled in and the registered replacer gets the final say.
    */
-  private isValidUrl(url: string): boolean {
-    try {
-      new URL(url);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Get custom message or default message
-   */
-  private getMessage(field: string, rule: string, defaultMessage: string): string {
+  private getMessage(field: string, rule: string, defaultMessage: string, pattern?: string): string {
     const customKey = `${field}.${rule}`;
-    return this.customMessages[customKey] || this.customMessages[rule] || defaultMessage;
+    const patternKey = pattern ? `${pattern}.${rule}` : '';
+    const attribute = this.getAttribute(field, pattern);
+
+    let message =
+      this.customMessages[customKey] ||
+      (patternKey && this.customMessages[patternKey]) ||
+      this.customMessages[rule] ||
+      defaultMessage;
+
+    message = message.replaceAll(':attribute', attribute);
+
+    return defaultRegistry.applyReplacer(message, attribute, field, rule, []);
   }
 
   /**
-   * Get custom attribute name or use field name
+   * Get custom attribute name or use field name; wildcard attributes fall
+   * back to the pattern's custom name
    */
-  private getAttribute(field: string): string {
-    return this.customAttributes[field] || field.replace(/_/g, ' ');
+  private getAttribute(field: string, pattern?: string): string {
+    return (
+      this.customAttributes[field] || (pattern ? this.customAttributes[pattern] : undefined) || field.replace(/_/g, ' ')
+    );
   }
 
+  // ---------------------------------------------------------------------
+  // Errors and results
+  // ---------------------------------------------------------------------
+
   /**
-   * Add an error message for a field
+   * Add an error message for a field. Public so `after()` hooks can
+   * report cross-field problems, like Laravel's
+   * `$validator->errors()->add($key, $message)`.
    */
-  private addError(field: string, message: string): void {
+  addError(field: string, message: string): void {
     if (!this.errorMessages[field]) {
       this.errorMessages[field] = [];
     }
@@ -1430,6 +622,14 @@ export class Validator {
    */
   errors(): Record<string, string[]> {
     return this.errorMessages;
+  }
+
+  /**
+   * Get the first error message for a field, or all messages joined
+   * Laravel: $errors->first($key)
+   */
+  first(field: string): string | undefined {
+    return this.errorMessages[field]?.[0];
   }
 
   /**

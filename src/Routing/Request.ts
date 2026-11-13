@@ -4,8 +4,11 @@ import { parse as parseUrl } from 'url';
 import type { Response } from '@/Auth/Access/Response';
 import type { Authenticatable } from '@/Auth/Contracts/Authenticatable';
 import type { StatefulGuard } from '@/Auth/Contracts/Guard';
+import type { ValidationRules } from '@/Foundation/Http/Validator';
 import type { Store as SessionStore } from '@/Session/Contracts/Store';
 import { resolveGate } from '@/Auth/Access/Gate';
+import { ValidationException } from '@/Foundation/Http/ValidationException';
+import { Validator } from '@/Foundation/Http/Validator';
 import { FileUploadException } from './FileUploadException';
 import { DEFAULT_MAX_BODY_SIZE, multipartBoundary, parseMultipart } from './MultipartParser';
 import { Route } from './Route';
@@ -311,6 +314,32 @@ export class Request {
     const user = await this.user();
 
     return resolveGate().forUser(user).authorize(ability, args);
+  }
+
+  /**
+   * Validate the request's input (text fields plus uploads) against the
+   * given rules, throwing a ValidationException (rendered as a 422 by the
+   * exception handler) when anything fails
+   * Laravel: Illuminate\Http\Request::validate() / the controller's
+   * ValidatesRequests trait
+   *
+   * @param {ValidationRules} rules
+   * @param {Record<string, string>} messages custom validation messages
+   * @param {Record<string, string>} attributes custom field names
+   * @returns {Promise<Record<string, any>>} the validated data
+   */
+  async validate(
+    rules: ValidationRules,
+    messages: Record<string, string> = {},
+    attributes: Record<string, string> = {}
+  ): Promise<Record<string, any>> {
+    const validator = new Validator(this.all(), rules, messages, attributes);
+
+    if (!(await validator.validate())) {
+      throw new ValidationException(validator);
+    }
+
+    return validator.validated();
   }
 
   /**

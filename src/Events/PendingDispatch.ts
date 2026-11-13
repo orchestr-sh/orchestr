@@ -14,14 +14,14 @@ import type { Event } from './Event';
  * ```typescript
  * // Defer dispatch with configuration
  * const pending = new PendingDispatch(dispatcher, new UserRegistered(user));
- * pending
+ * await pending
  *   .onConnection('redis')
  *   .onQueue('notifications')
  *   .delay(60)
  *   .dispatch();
  *
  * // Or dispatch immediately with configuration
- * PendingDispatch.for(dispatcher, new OrderPlaced(order))
+ * await PendingDispatch.for(dispatcher, new OrderPlaced(order))
  *   .delay(300)
  *   .dispatch();
  * ```
@@ -129,9 +129,9 @@ export class PendingDispatch {
   /**
    * Dispatch the event to all listeners
    *
-   * @returns Array of results from listeners
+   * @returns Promise resolving to the array of results from listeners
    */
-  dispatch(): any[] {
+  async dispatch(): Promise<any[]> {
     const event = this.applyOptions();
     return this.dispatcher.dispatch(event);
   }
@@ -139,9 +139,9 @@ export class PendingDispatch {
   /**
    * Dispatch the event until the first listener returns a non-null response
    *
-   * @returns The first non-null response
+   * @returns Promise resolving to the first non-null response
    */
-  until(): any {
+  async until(): Promise<any> {
     const event = this.applyOptions();
     return this.dispatcher.until(event);
   }
@@ -150,9 +150,9 @@ export class PendingDispatch {
    * Conditionally dispatch the event
    *
    * @param condition - Boolean or function returning boolean
-   * @returns Array of results or empty array
+   * @returns Promise resolving to the array of results, or empty array
    */
-  dispatchIf(condition: boolean | (() => boolean)): any[] {
+  async dispatchIf(condition: boolean | (() => boolean)): Promise<any[]> {
     const shouldDispatch = typeof condition === 'function' ? condition() : condition;
 
     if (shouldDispatch) {
@@ -166,9 +166,9 @@ export class PendingDispatch {
    * Dispatch unless the condition is true
    *
    * @param condition - Boolean or function returning boolean
-   * @returns Array of results or empty array
+   * @returns Promise resolving to the array of results, or empty array
    */
-  dispatchUnless(condition: boolean | (() => boolean)): any[] {
+  async dispatchUnless(condition: boolean | (() => boolean)): Promise<any[]> {
     const shouldNotDispatch = typeof condition === 'function' ? condition() : condition;
 
     if (!shouldNotDispatch) {

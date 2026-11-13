@@ -1,12 +1,22 @@
+import type { Event as EventLike } from '@/Events/Event';
+
 /**
  * Should Queue Interface
  *
  * Marks a listener as queueable, allowing it to be processed asynchronously
  * through the queue system instead of synchronously during event dispatch.
  *
+ * TypeScript interfaces are erased at compile time, so the dispatcher also
+ * honours runtime markers: set `queued = true` on the listener class (or pass
+ * `true` as the third argument to `Event.listen()`), or declare any of the
+ * queue configuration properties below, and the listener is treated as
+ * queueable. `implements ShouldQueue` on its own documents the intent and
+ * type-checks the configuration properties.
+ *
  * @example
  * ```typescript
  * class SendWelcomeEmail implements ShouldQueue {
+ *   public readonly queued = true;
  *   public connection = 'redis';
  *   public queue = 'emails';
  *   public tries = 3;
@@ -23,6 +33,21 @@
  * ```
  */
 export interface ShouldQueue {
+  /**
+   * Runtime marker flagging the listener as queueable
+   *
+   * Interfaces vanish at runtime, so declare `public readonly queued = true`
+   * (or register with `Event.listen(event, listener, true)`) to make the
+   * dispatcher push the listener through the queue.
+   */
+  readonly queued?: true;
+
+  /**
+   * Delay pushing this queued listener until the active database transaction
+   * commits (see `ShouldQueueAfterCommit`)
+   */
+  readonly afterCommit?: true;
+
   /**
    * The name of the connection the job should be sent to
    *
@@ -109,7 +134,7 @@ export interface ShouldQueue {
    * }
    * ```
    */
-  withDelay?(event: Event): number;
+  withDelay?(event: EventLike): number;
 
   /**
    * Determine if the listener should be queued
@@ -124,7 +149,7 @@ export interface ShouldQueue {
    * }
    * ```
    */
-  shouldQueue?(event: Event): boolean;
+  shouldQueue?(event: EventLike): boolean;
 
   /**
    * Handle a job failure
@@ -140,20 +165,29 @@ export interface ShouldQueue {
    * }
    * ```
    */
-  failed?(event: Event, exception: Error): void | Promise<void>;
+  failed?(event: EventLike, exception: Error): void | Promise<void>;
 }
 
 /**
  * Type guard to check if a listener implements ShouldQueue
  *
+ * Recognises class constructors carrying a static/prototype `queued` marker,
+ * and instances with a `queued` marker or any of the queue configuration
+ * properties from the contract.
+ *
  * @param listener - The listener to check
  * @returns True if listener implements ShouldQueue
  */
 export function isShouldQueue(listener: any): listener is ShouldQueue {
+  if (typeof listener === 'function') {
+    return listener.queued === true || (listener.prototype != null && listener.prototype.queued === true);
+  }
+
   return (
     listener !== null &&
     typeof listener === 'object' &&
-    ('connection' in listener ||
+    (listener.queued === true ||
+      'connection' in listener ||
       'queue' in listener ||
       'tries' in listener ||
       typeof listener.viaConnection === 'function' ||

@@ -33,11 +33,82 @@ Use `Rule.*()` methods to construct validation rules. Every call returns a rule 
 - Numbers: `numeric()`, `integer()`, `decimal(places?)`, `min(n)`, `max(n)`, `between(min,max)`, `size(n)`
 - Digits: `digits(n)`, `digitsBetween(min,max)`, `minDigits(n)`, `maxDigits(n)`, `multipleOf(n)`
 - Comparison: `gt(fieldOrValue)`, `gte(fieldOrValue)`, `lt(fieldOrValue)`, `lte(fieldOrValue)`
-- Arrays: `array()`, `distinct()`, `in([...])`, `notIn([...])`, `inArray(field)`
+- Arrays: `array()`, `list()`, `requiredArrayKeys([...])`, `distinct()`, `in([...])`, `notIn([...])`, `inArray(field)`
 - Dates: `date()`, `dateEquals(date)`, `after(dateOrField)`, `afterOrEqual(...)`, `before(...)`, `beforeOrEqual(...)`
 - Network: `url()`, `activeUrl()`, `ip()`, `ipv4()`, `ipv6()`, `macAddress()`, `uuid()`, `timezone()`
 - Files: `file()`, `image()`, `mimetypes([...])`, `mimes([...])`
 - Conditionals: `accepted()`, `acceptedIf(field,val)`, `declined()`, `declinedIf(field,val)`
+
+## Nested and Array Data
+
+Rules can target nested values with dot notation and wildcard paths. Every
+`*` is expanded against the data, and errors are reported with concrete
+keys (`users.1.email`), while custom messages/attributes may stay keyed by
+the pattern (`users.*.email`):
+
+```ts
+const rules = {
+  users: [Rule.array()],
+  'users.*.email': 'required|email',
+  'items.*.price': 'required|numeric|min:0',
+};
+
+const v = new Validator(
+  { users: [{ email: 'ada@example.com' }, { email: 'nope' }] },
+  rules
+);
+await v.validate();
+v.errors(); // { 'users.1.email': ['The users.1.email must be a valid email address.'] }
+```
+
+- Wildcards also bind inside dependent-field parameters:
+  `'users.*.license': 'exclude_if:users.*.type,x|required'` compares each
+  item against its own `type` value.
+- `sometimes` skips expanded items whose key is missing, so partial
+  updates of nested lists behave like top-level `sometimes`.
+- Key rules: `array` (also `array:a,b` to pin allowed keys), `list`
+  (sequential integer keys), `required_array_keys:name,email` (object must
+  carry the keys), `distinct` (no duplicates in an array value).
+- `validated()` rebuilds the nested structure: wildcard rules yield
+  `{ users: [{ email: ... }] }` rather than flat dotted keys.
+
+## Control Flow: bail, stopOnFirstFailure, after
+
+- `bail` (per attribute) stops validating that attribute after its first
+  failing rule: `{ name: 'bail|required|min:3' }`.
+- `Validator.stopOnFirstFailure()` aborts the whole run at the first
+  error of any attribute.
+- `after(callback)` hooks run once every attribute has been checked and
+  can add further errors via `validator.addError(key, message)` - the
+  cross-field equivalent of Laravel's `$validator->errors()->add(...)`.
+
+```ts
+const v = new Validator(data, rules);
+v.after((validator) => {
+  if (validator.validated().coupon === 'expired') {
+    validator.addError('coupon', 'This coupon has expired.');
+  }
+});
+```
+
+## Custom Rules
+
+`Validator.extend` registers a rule name the string parser understands -
+the same registry `Rule` objects resolve through, so `['required', 'even']`
+and `Rule.*()` forms both pick it up:
+
+```ts
+Validator.extend('even', (_attribute, value) => Number(value) % 2 === 0);
+Validator.extend('shouty', (_attribute, value, params) => ..., ':attribute must be shouted');
+
+Validator.extendImplicit('banned', (attribute, value) => ...); // runs even for missing values
+Validator.replacer((message) => message.replace('is required', 'MISSING'));
+Validator.forgetExtension('even');
+```
+
+Custom rules skip attributes whose value is missing unless registered with
+`extendImplicit`. `Validator.make(data, rules, messages?, attributes?)` is
+a factory alternative to `new Validator(...)`.
 
 ## Conditional Presence
 
@@ -139,7 +210,15 @@ const messages = {
 const v = new Validator(data, rules, messages);
 ```
 
-Rule classes may also provide tailored messages when they are invokable; otherwise messages fall back to defaults.
+Messages may reference `:attribute`, which is replaced with the field's
+display name (the `attributes` argument or the humanized field). For
+wildcard rules, key messages/attributes by the pattern -
+`messages['users.*.email.required']` covers every expanded item, and the
+concrete key (`'users.0.email.required'`) still wins when both are set.
+
+Rule classes may also provide tailored messages (`->message()` on
+invokable rules or `{ rule, message }` objects); an inline message wins
+over both the defaults and the messages map.
 
 ## Form Requests
 
@@ -170,41 +249,71 @@ failure throws `ValidationException` (rendered as 422 with the error bag) and
 an `authorize()` denial throws `AccessDeniedHttpException` (rendered as 403) -
 both through the shared exception handler.
 
+## Request and Controller Validation
+
+`Request.validate(rules, messages?, attributes?)` runs the Validator over the
+request's input (`all()`, uploads included), throws `ValidationException` on
+failure and returns the validated data on success. The base `Controller`
+exposes the same behaviour through Laravel's `$this->validate($request, $rules)`:
+
+```ts
+import { Controller } from '@/Routing/Controller';
+
+@Injectable()
+class SignupController extends Controller {
+  async store(request: Request) {
+    const data = await this.validate(request, {
+      name: 'required|string|min:2',
+      'users.*.email': 'required|email',
+    });
+
+    return { signed: data };
+  }
+}
+```
+
 ## Auth Validation
 
-Some rules interact with authentication and require app-specific wiring:
+These rules resolve through the container, so they need the
+`AuthServiceProvider` (and, for `current_password`, the
+`HashServiceProvider`) registered:
 
 - current_password
-  - Recognized as a token; by default it passes until you connect it to your auth system.
-  - Use as a string rule: 
+  - Compares the value against the authenticated user's stored password
+    via `Auth::guard($guard)->user()` and the `hash` service.
+  - Use as a string rule or the builder:
     ```ts
-    const rules = { current_password: 'current_password' };
+    const rules = {
+      current_password: 'required|current_password', // or 'current_password:api'
+      password: [Rule.currentPassword()],
+    };
     ```
-  - Integration options:
-    - Prefer user identity checks in `FormRequest.authorize()`.
-    - Or provide a custom invokable rule that verifies the password:
-      ```ts
-      import { BaseRule } from '@/Foundation/Http/Rules';
-      import { Auth } from '@/Auth'; // your auth API
-      class CurrentPasswordRule extends BaseRule {
-        constructor() { super('current_password'); this.invokable = true; }
-        async passes(_attr: string, value: any): Promise<boolean> {
-          const user = Auth.user();
-          if (!user) return false;
-          return Auth.verify(user, String(value));
-        }
-        messageFor(attribute: string) { return `The ${attribute} is incorrect.`; }
-      }
-      const rules = { current_password: [new CurrentPasswordRule()] };
-      ```
+  - A guest or a mismatch fails with
+    `The :attribute does not match the current password.`
 
 - password
-  - Builder: `Rule.password()`; enforcement is application-defined.
-  - Recommended: express policy via built-in tokens (`string|min|max|confirmed|regex`) or a custom invokable rule that centralizes password policy checks.
+  - The string `password` rule applies Laravel's `Password::defaults()`
+    (min 8). `Rule.password()` is fluent and opt-in:
+    ```ts
+    const rules = {
+      password: [
+        Rule.required(),
+        Rule.password().min(12).letters().mixedCase().numbers().symbols().uncompromised(),
+      ],
+    };
+    ```
+  - `uncompromised()` is a local/no-network check against a bundled list
+    of frequently leaked passwords - swap in your own corpus if you need
+    breach-API parity.
 
-- can:ability
-  - Builder: `Rule.can('update-post')` returns a token.
-  - Recommended: perform authorization in `FormRequest.authorize()`; use validation for data constraints. If you need field-level gating, implement an invokable rule that queries your Gate/Policy and returns an error message when unauthorized.
+- can
+  - `Rule.can('update', post)` and the string form
+    `'can:update-post,post_id'` (ability, field names whose values become
+    ability arguments) both validate through the shared Gate; a denial
+    surfaces the gate's message on the field:
+    ```ts
+    const rules = { post_id: ['required', Rule.can('update', post)] };
+    ```
 
 ## Error Handling
 

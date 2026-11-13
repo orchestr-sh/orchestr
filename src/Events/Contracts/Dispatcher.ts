@@ -1,5 +1,5 @@
 import type { Event } from '@/Events/Event';
-import type { EventListener, EventSubscriber } from '@/Events/types';
+import type { EventListener, EventNameOrClass, EventSubscriber } from '@/Events/types';
 
 /**
  * Event Dispatcher Contract
@@ -15,29 +15,36 @@ import type { EventListener, EventSubscriber } from '@/Events/types';
  * dispatcher.listen(UserRegistered, SendWelcomeEmail);
  *
  * // Dispatch an event
- * dispatcher.dispatch(new UserRegistered(user));
+ * await dispatcher.dispatch(new UserRegistered(user));
  * ```
  */
 export interface DispatcherContract {
   /**
    * Register an event listener
    *
-   * @param events - Event name(s) to listen for
+   * @param events - Event name(s) or class(es) to listen for
    * @param listener - Listener to invoke when event is dispatched
+   * @param queued - Force the listener through the queue instead of running it inline
    *
    * @example
    * ```typescript
    * // Single event
    * dispatcher.listen('user.registered', SendWelcomeEmail);
    *
+   * // Event class reference
+   * dispatcher.listen(UserRegistered, SendWelcomeEmail);
+   *
    * // Multiple events
    * dispatcher.listen(['user.registered', 'user.updated'], LogUserActivity);
    *
    * // Wildcard
    * dispatcher.listen('user.*', LogAllUserEvents);
+   *
+   * // Queued listener
+   * dispatcher.listen('user.registered', SendWelcomeEmail, true);
    * ```
    */
-  listen(events: string | string[], listener: EventListener): void;
+  listen(events: EventNameOrClass | EventNameOrClass[], listener: EventListener, queued?: boolean): void;
 
   /**
    * Check if an event has any listeners
@@ -74,41 +81,46 @@ export interface DispatcherContract {
   /**
    * Dispatch an event to all listeners
    *
+   * Listeners are awaited one at a time in registration order (direct
+   * listeners first, then wildcard listeners), so async listeners complete
+   * before the returned promise resolves.
+   *
    * @param event - Event name or instance
    * @param payload - Additional arguments to pass to listeners
    * @param halt - Stop dispatching if a listener returns false
-   * @returns Array of results from listeners
+   * @returns Promise resolving to the array of results from listeners
    *
    * @example
    * ```typescript
    * // Dispatch with event instance
-   * dispatcher.dispatch(new UserRegistered(user));
+   * await dispatcher.dispatch(new UserRegistered(user));
    *
    * // Dispatch with event name and payload
-   * dispatcher.dispatch('user.registered', [user]);
+   * await dispatcher.dispatch('user.registered', [user]);
    *
    * // Halt on first false return
-   * dispatcher.dispatch(new OrderProcessing(order), [], true);
+   * await dispatcher.dispatch(new OrderProcessing(order), [], true);
    * ```
    */
-  dispatch(event: string | Event, payload?: any[], halt?: boolean): any[];
+  dispatch(event: string | Event, payload?: any[], halt?: boolean): Promise<any[]>;
 
   /**
    * Dispatch an event until a listener returns a non-null response
    *
-   * This is useful for events where you want the first "truthy" response
+   * Each listener is awaited in turn and the first non-null response - which
+   * includes `false`, the model-event halt signal - stops the loop.
    *
    * @param event - Event name or instance
    * @param payload - Additional arguments to pass to listeners
-   * @returns The first non-null response from a listener
+   * @returns Promise resolving to the first non-null response from a listener
    *
    * @example
    * ```typescript
    * // Get the first validation result
-   * const isValid = dispatcher.until(new ValidateOrder(order));
+   * const isValid = await dispatcher.until(new ValidateOrder(order));
    * ```
    */
-  until(event: string | Event, payload?: any[]): any;
+  until(event: string | Event, payload?: any[]): Promise<any>;
 
   /**
    * Queue an event for later dispatch
@@ -120,7 +132,7 @@ export interface DispatcherContract {
    * ```typescript
    * dispatcher.push('send.notification', [user, message]);
    * // Later...
-   * dispatcher.flush('send.notification');
+   * await dispatcher.flush('send.notification');
    * ```
    */
   push(event: string, payload?: any[]): void;
@@ -130,7 +142,7 @@ export interface DispatcherContract {
    *
    * @param event - Event name to flush
    */
-  flush(event: string): void;
+  flush(event: string): Promise<void>;
 
   /**
    * Remove all listeners for an event

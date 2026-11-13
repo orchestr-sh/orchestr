@@ -13,7 +13,8 @@ import type { Event } from '@/Events/Event';
  */
 export type EventListener<TEvent extends Event = Event> =
   | { handle(event: TEvent): void | false | Promise<void | false> }
-  | ((event: TEvent) => void | false | Promise<void | false>)
+  // widened parameter: concrete-event closures stay assignable (contravariance)
+  | ((event: any) => void | false | Promise<void | false>)
   | string;
 
 /**
@@ -32,10 +33,15 @@ export interface DispatcherContract {
   /**
    * Register an event listener with the dispatcher
    *
-   * @param events - Event name(s) to listen for
+   * @param events - Event name(s) or class(es) to listen for
    * @param listener - Listener callback or class
+   * @param queued - Force the listener through the queue instead of running it inline
    */
-  listen(events: string | string[], listener: EventListener): void;
+  listen(
+    events: string | (new (...args: any[]) => Event) | Array<string | (new (...args: any[]) => Event)>,
+    listener: EventListener,
+    queued?: boolean
+  ): void;
 
   /**
    * Determine if a given event has listeners
@@ -55,21 +61,24 @@ export interface DispatcherContract {
   /**
    * Dispatch an event and call the listeners
    *
+   * Listeners are awaited in registration order, direct listeners before
+   * wildcard listeners.
+   *
    * @param event - Event name or instance
    * @param payload - Additional data to pass to listeners
-   * @param halt - Stop on first non-null response
-   * @returns Array of listener responses
+   * @param halt - Stop on first false response
+   * @returns Promise resolving to the array of listener responses
    */
-  dispatch(event: string | Event, payload?: any[], halt?: boolean): any[];
+  dispatch(event: string | Event, payload?: any[], halt?: boolean): Promise<any[]>;
 
   /**
    * Dispatch an event until the first non-null response
    *
    * @param event - Event name or instance
    * @param payload - Additional data to pass to listeners
-   * @returns First non-null response
+   * @returns Promise resolving to the first non-null response
    */
-  until(event: string | Event, payload?: any[]): any;
+  until(event: string | Event, payload?: any[]): Promise<any>;
 
   /**
    * Push an event onto the queue for later dispatch
@@ -84,7 +93,7 @@ export interface DispatcherContract {
    *
    * @param event - Event name to flush
    */
-  flush(event: string): void;
+  flush(event: string): Promise<void>;
 
   /**
    * Remove all listeners for an event
