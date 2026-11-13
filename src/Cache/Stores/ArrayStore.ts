@@ -97,6 +97,39 @@ export class ArrayStore implements Store {
     return this.put(key, value, 0);
   }
 
+  async add<T = any>(key: string, value: T, seconds: number): Promise<boolean> {
+    const prefixed = this.prefixedKey(key);
+    const entry = this.storage.get(prefixed);
+
+    if (entry && !this.isExpired(entry.expiration)) {
+      return false;
+    }
+
+    // Check-and-set runs synchronously (no await before the write), so
+    // two interleaved callers can never both claim the key.
+    await this.put(key, value, seconds);
+
+    return true;
+  }
+
+  async touch(key: string, seconds: number | null): Promise<boolean> {
+    const prefixed = this.prefixedKey(key);
+    const entry = this.storage.get(prefixed);
+
+    if (!entry) {
+      return false;
+    }
+
+    if (this.isExpired(entry.expiration)) {
+      this.storage.delete(prefixed);
+      return false;
+    }
+
+    entry.expiration = seconds !== null && seconds > 0 ? this.currentTime() + seconds : 0;
+
+    return true;
+  }
+
   async forget(key: string): Promise<boolean> {
     const prefixed = this.prefixedKey(key);
     return this.storage.delete(prefixed);
@@ -109,6 +142,10 @@ export class ArrayStore implements Store {
 
   getPrefix(): string {
     return this.prefix;
+  }
+
+  setPrefix(prefix: string): void {
+    this.prefix = prefix;
   }
 
   protected prefixedKey(key: string): string {

@@ -87,6 +87,31 @@ export class FileStore implements Store {
     return this.put(key, value, 0);
   }
 
+  /**
+   * Extend the lifetime of an existing key without changing its value.
+   * A null `seconds` stores the entry forever.
+   */
+  async touch(key: string, seconds: number | null): Promise<boolean> {
+    const filePath = this.path(key);
+
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const data = JSON.parse(content);
+
+      if (data.expiration !== 0 && this.currentTime() >= data.expiration) {
+        await this.forget(key);
+        return false;
+      }
+
+      data.expiration = seconds !== null && seconds > 0 ? this.currentTime() + seconds : 9999999999;
+
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async forget(key: string): Promise<boolean> {
     const filePath = this.path(key);
     try {
@@ -109,6 +134,10 @@ export class FileStore implements Store {
 
   getPrefix(): string {
     return this.prefix;
+  }
+
+  setPrefix(prefix: string): void {
+    this.prefix = prefix;
   }
 
   /**

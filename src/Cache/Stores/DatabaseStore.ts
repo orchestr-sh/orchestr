@@ -153,6 +153,10 @@ export class DatabaseStore implements Store {
     return this.prefix;
   }
 
+  setPrefix(prefix: string): void {
+    this.prefix = prefix;
+  }
+
   protected prefixedKey(key: string): string {
     return `${this.prefix}${key}`;
   }

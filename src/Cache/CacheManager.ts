@@ -27,6 +27,7 @@
  * ```
  */
 
+import type { CacheEventDispatcher } from './Contracts/EventDispatcher';
 import type { Store } from './Contracts/Store';
 import { Repository } from './Repository';
 
@@ -35,10 +36,23 @@ export interface StoreConfig {
   [key: string]: any;
 }
 
+/**
+ * Stampede-protection options for remember()/rememberForever()
+ * (mirrors the `cache.remember` config keys).
+ */
+export interface CacheRememberConfig {
+  /** Acquire a lock around remember() callbacks */
+  lock?: boolean;
+
+  /** Lock TTL (seconds) used while guarding remember() */
+  lock_seconds?: number;
+}
+
 export interface CacheConfig {
   default: string;
   prefix: string;
   stores: Record<string, StoreConfig>;
+  remember?: CacheRememberConfig;
 }
 
 export type StoreFactory = (config: StoreConfig) => Store;
@@ -46,6 +60,7 @@ export type StoreFactory = (config: StoreConfig) => Store;
 export class CacheManager {
   protected stores: Map<string, Repository> = new Map();
   protected driverFactories: Map<string, StoreFactory> = new Map();
+  protected eventDispatcher?: CacheEventDispatcher;
 
   constructor(protected config: CacheConfig) {}
 
@@ -54,6 +69,21 @@ export class CacheManager {
    */
   registerDriver(name: string, factory: StoreFactory): void {
     this.driverFactories.set(name, factory);
+  }
+
+  /**
+   * Set the event dispatcher given to every repository this manager
+   * creates so they can broadcast cache events. Repositories that are
+   * already live receive the dispatcher too.
+   */
+  setEventDispatcher(events?: CacheEventDispatcher): this {
+    this.eventDispatcher = events;
+
+    for (const repository of this.stores.values()) {
+      repository.setEventDispatcher(events);
+    }
+
+    return this;
   }
 
   /**
@@ -92,7 +122,14 @@ export class CacheManager {
     }
 
     const store = factory(storeConfig);
-    const repository = new Repository(store, storeConfig);
+    const repository = new Repository(
+      store,
+      {
+        remember: this.config.remember,
+        ...storeConfig,
+      },
+      this.eventDispatcher
+    );
     repository.setStoreName(name);
 
     return repository;
@@ -124,6 +161,20 @@ export class CacheManager {
    */
   getPrefix(): string {
     return this.config.prefix;
+  }
+
+  /**
+   * Change the cache key prefix. Live stores are updated in place and
+   * the new prefix is used for stores created afterwards.
+   */
+  setPrefix(prefix: string): this {
+    this.config.prefix = prefix;
+
+    for (const repository of this.stores.values()) {
+      repository.setPrefix(prefix);
+    }
+
+    return this;
   }
 
   /**
@@ -225,5 +276,17 @@ export class CacheManager {
 
   async add<T = any>(key: string, value: T, ttl?: number | Date): Promise<boolean> {
     return this.store().add<T>(key, value, ttl);
+  }
+
+  async touch(key: string, ttl?: number | Date | null): Promise<boolean> {
+    return this.store().touch(key, ttl);
+  }
+
+  lock(name: string, seconds: number = 0, owner?: string) {
+    return this.store().lock(name, seconds, owner);
+  }
+
+  restoreLock(name: string, owner: string) {
+    return this.store().restoreLock(name, owner);
   }
 }
