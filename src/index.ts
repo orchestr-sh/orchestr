@@ -136,6 +136,13 @@ export { Arr } from './Support/Arr';
 export type { ArrayLikeOrRecord } from './Support/Arr';
 export { Number } from './Support/Number';
 
+// Logging
+export { Logger } from './Log/Logger';
+export type { LoggerOptions } from './Log/Logger';
+export { LineFormatter } from './Log/Formatters/LineFormatter';
+export { LOG_LEVELS, levelNumber, isLogLevel } from './Log/Contracts/Logging';
+export type { LogLevel, LogRecord, Formatter, Handler as LogHandler } from './Log/Contracts/Logging';
+
 // Decorators
 export { Injectable } from './Support/Injectable';
 export { ValidateRequest } from './Support/ValidateRequest';
