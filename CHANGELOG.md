@@ -1,3 +1,10 @@
+## [1.11.26](https://github.com/orchestr-sh/orchestr/compare/v1.11.25...v1.11.26) (2026-11-13)
+
+
+### Bug Fixes
+
+* **facades:** give the Config facade its runtime Proxy ([#60](https://github.com/orchestr-sh/orchestr/issues/60)) ([c921e21](https://github.com/orchestr-sh/orchestr/commit/c921e21250c9f75f0127ceee160b2edc67237109))
+
 ## [1.11.25](https://github.com/orchestr-sh/orchestr/compare/v1.11.24...v1.11.25) (2026-11-13)
 
 
