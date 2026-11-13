@@ -17,6 +17,23 @@ export interface QueueDriverJob {
   createdAt: number;
 }
 
+/**
+ * Transaction-aware database connection shape used by `after_commit`
+ * queue dispatching. Structurally matches Database\Connection so the
+ * queue subsystem never imports Database directly.
+ */
+export interface TransactionAwareConnection {
+  /**
+   * Current nesting level of open transactions (0 when none)
+   */
+  getTransactionLevel(): number;
+
+  /**
+   * Register a callback to run once the outermost transaction commits
+   */
+  afterCommit(callback: () => any): void | Promise<void>;
+}
+
 export interface QueueDriver {
   /**
    * Get the size of the queue
@@ -77,4 +94,19 @@ export interface QueueDriver {
    * Get the default queue name
    */
   getQueue(queue?: string): string;
+
+  /**
+   * Indicate that this driver executes jobs inline when they are pushed
+   * instead of leaving them for a worker. Unique-job locks are released
+   * right after dispatch for such drivers, since no worker will pop the
+   * job and release the lock itself.
+   */
+  executesInline?(): boolean;
+
+  /**
+   * Get the transaction-aware database connection backing this queue,
+   * when one exists. Used to honor `after_commit` dispatching: jobs are
+   * only pushed once the outermost open transaction commits.
+   */
+  getTransactionConnection?(): TransactionAwareConnection | null;
 }

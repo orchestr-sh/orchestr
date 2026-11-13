@@ -9,6 +9,7 @@ import { ServiceProvider } from '@/Foundation/ServiceProvider';
 import type { QueueConfig } from './QueueManager';
 import { DatabaseDriver } from './Drivers/DatabaseDriver';
 import { NullDriver } from './Drivers/NullDriver';
+import { RedisDriver } from './Drivers/RedisDriver';
 import { SyncDriver } from './Drivers/SyncDriver';
 import { DatabaseFailedJobProvider } from './Failed/DatabaseFailedJobProvider';
 import { QueueManager } from './QueueManager';
@@ -21,12 +22,15 @@ export class QueueServiceProvider extends ServiceProvider {
   register(): void {
     this.app.singleton('queue', () => {
       const config = this.getConfig();
-      const manager = new QueueManager(config);
+      const manager = new QueueManager(config, this.app);
 
       // Register built-in drivers
       manager.registerDriver('sync', (driverConfig) => new SyncDriver(driverConfig));
       manager.registerDriver('database', (driverConfig) => new DatabaseDriver(driverConfig, this.app));
       manager.registerDriver('null', (driverConfig) => new NullDriver(driverConfig));
+      // ioredis is an optional peer dependency; the driver only connects
+      // (and therefore only requires ioredis) when a redis connection is used.
+      manager.registerDriver('redis', (driverConfig) => new RedisDriver(driverConfig));
 
       return manager;
     });

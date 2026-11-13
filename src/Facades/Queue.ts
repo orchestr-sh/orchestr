@@ -35,10 +35,48 @@
 
 import type { QueueManager } from '@/Queue/QueueManager';
 import { Facade } from '@/Support/Facade';
+import { QueueFake } from '@/Support/Testing/Fakes/QueueFake';
 
 class QueueFacadeClass extends Facade {
   protected static getFacadeAccessor(): string {
     return 'queue';
+  }
+
+  /**
+   * Fake the queue for testing
+   *
+   * Replaces the queue manager binding with a QueueFake that records all
+   * dispatched jobs instead of sending them to a driver, and provides
+   * Laravel-style assertions (assertPushed, assertPushedOn,
+   * assertNotPushed, assertPushedWithChain, assertPushedWithBatch).
+   *
+   * @returns QueueFake instance for making assertions
+   *
+   * @example
+   * ```typescript
+   * const queue = Queue.fake();
+   *
+   * await ProcessPodcast.dispatch(podcastId);
+   *
+   * queue.assertPushed(ProcessPodcast);
+   * queue.assertNotPushed(OptimizePodcast);
+   * ```
+   */
+  static fake(): QueueFake {
+    const app = this.getFacadeApplication();
+
+    if (!app) {
+      throw new Error('Application not initialized. Cannot fake the queue.');
+    }
+
+    const fake = new QueueFake();
+
+    app.instance('queue', fake as unknown as QueueManager);
+
+    // Drop any cached facade root so subsequent Queue.* calls resolve the fake.
+    this.clearResolvedInstance(this.getFacadeAccessor());
+
+    return fake;
   }
 }
 

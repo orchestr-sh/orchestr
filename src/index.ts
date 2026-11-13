@@ -322,6 +322,7 @@ export { EventClearCommand } from './Console/Commands/EventClearCommand';
 
 // Console Commands - Queue
 export { QueueWorkCommand } from './Console/Commands/QueueWorkCommand';
+export { QueueListenCommand } from './Console/Commands/QueueListenCommand';
 export { QueueRestartCommand } from './Console/Commands/QueueRestartCommand';
 export { QueueFailedCommand } from './Console/Commands/QueueFailedCommand';
 export { QueueRetryCommand } from './Console/Commands/QueueRetryCommand';
@@ -456,14 +457,25 @@ export { JobPayload } from './Queue/JobPayload';
 
 // Queue Contracts
 export type { QueueableJob } from './Queue/Contracts/QueueableJob';
-export type { QueueDriver, QueueDriverJob } from './Queue/Contracts/QueueDriver';
+export type { QueueDriver, QueueDriverJob, TransactionAwareConnection } from './Queue/Contracts/QueueDriver';
 export type { ShouldBeUnique, ShouldBeUniqueUntilProcessing } from './Queue/Contracts/ShouldBeUnique';
-export { isShouldBeUnique } from './Queue/Contracts/ShouldBeUnique';
+export { isShouldBeUnique, isShouldBeUniqueUntilProcessing } from './Queue/Contracts/ShouldBeUnique';
 
 // Queue Drivers
 export { SyncDriver } from './Queue/Drivers/SyncDriver';
 export { DatabaseDriver as DatabaseQueueDriver } from './Queue/Drivers/DatabaseDriver';
 export { NullDriver as NullQueueDriver } from './Queue/Drivers/NullDriver';
+export { RedisDriver as RedisQueueDriver } from './Queue/Drivers/RedisDriver';
+export type { RedisClient } from './Queue/Drivers/RedisDriver';
+
+// Queue Uniqueness & Exceptions
+export { UniqueLock } from './Queue/UniqueLock';
+export type { UniqueLockToken } from './Queue/UniqueLock';
+export { TimeoutExceededException } from './Queue/Exceptions/TimeoutExceededException';
+
+// Queue Testing
+export { QueueFake } from './Support/Testing/Fakes/QueueFake';
+export type { PushedJobRecord } from './Support/Testing/Fakes/QueueFake';
 
 // Queue Workers
 export { Worker } from './Queue/Workers/Worker';

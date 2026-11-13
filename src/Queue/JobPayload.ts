@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'crypto';
 import type { Job } from './Job';
+import { isShouldBeUniqueUntilProcessing } from './Contracts/ShouldBeUnique';
 
 export interface JobPayloadData {
   uuid: string;
@@ -22,6 +23,12 @@ export interface JobPayloadData {
   attempts: number;
   afterCommit: boolean;
   pushedAt: string;
+  /** Cache lock key for ShouldBeUnique jobs, set when the lock is acquired at dispatch */
+  lockKey: string | null;
+  /** Lock owner token for ShouldBeUnique jobs; the worker releases the lock only if it still matches */
+  lockOwner: string | null;
+  /** True for ShouldBeUniqueUntilProcessing jobs: the lock is released as soon as the job is popped */
+  uniqueUntilProcessing: boolean;
 }
 
 export class JobPayload {
@@ -43,6 +50,9 @@ export class JobPayload {
       attempts: 0,
       afterCommit: job.afterCommit ?? false,
       pushedAt: new Date().toISOString(),
+      lockKey: (job as any)._lockKey ?? null,
+      lockOwner: (job as any)._lockOwner ?? null,
+      uniqueUntilProcessing: isShouldBeUniqueUntilProcessing(job),
     };
   }
 

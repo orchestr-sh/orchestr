@@ -45,6 +45,7 @@ import { QueueFailedCommand } from './QueueFailedCommand';
 import { QueueFailedTableCommand } from './QueueFailedTableCommand';
 import { QueueFlushCommand } from './QueueFlushCommand';
 import { QueueForgetCommand } from './QueueForgetCommand';
+import { QueueListenCommand } from './QueueListenCommand';
 import { QueueMonitorCommand } from './QueueMonitorCommand';
 import { QueuePruneBatchesCommand } from './QueuePruneBatchesCommand';
 import { QueuePruneFailedCommand } from './QueuePruneFailedCommand';
@@ -80,6 +81,7 @@ export function coreCommands(app: Application): Command[] {
     new EventClearCommand(app),
     // Queue commands
     new QueueWorkCommand(app),
+    new QueueListenCommand(app),
     new QueueRestartCommand(app),
     new QueueFailedCommand(app),
     new QueueRetryCommand(app),

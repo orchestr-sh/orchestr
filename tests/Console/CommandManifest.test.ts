@@ -72,6 +72,7 @@ describe('Command manifest', () => {
     expect(names).toEqual(
       expect.arrayContaining([
         'queue:work',
+        'queue:listen',
         'queue:restart',
         'queue:failed',
         'queue:retry',
@@ -98,6 +99,7 @@ describe('Command manifest', () => {
     const commandsByName = kernel.getCommands();
 
     expect(commandsByName.get('queue:work')?.constructor.name).toBe('QueueWorkCommand');
+    expect(commandsByName.get('queue:listen')?.constructor.name).toBe('QueueListenCommand');
     expect(commandsByName.get('cache:clear')?.constructor.name).toBe('CacheClearCommand');
     expect(commandsByName.get('make:job')?.constructor.name).toBe('MakeJobCommand');
     expect(commandsByName.get('make:view')?.constructor.name).toBe('MakeViewCommand');

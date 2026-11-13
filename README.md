@@ -1954,6 +1954,7 @@ npx orchestr make:job <name> --sync         # Create synchronous job
 
 # Queue - Workers
 npx orchestr queue:work [connection]        # Start queue worker daemon
+npx orchestr queue:listen [connection]      # Worker loop with restart-on-change (dev)
 npx orchestr queue:work --once              # Process single job and exit
 npx orchestr queue:work --queue=high,default  # Process specific queues
 npx orchestr queue:work --tries=3           # Set max attempts
@@ -1995,7 +1996,7 @@ npx orchestr make:view <name>               # Create view template
 
 ## Queue System
 
-Orchestr provides a powerful queue system for deferring time-intensive tasks. Jobs can be pushed to various drivers (sync, database), retried on failure, organized into chains and batches, and monitored through a comprehensive CLI.
+Orchestr provides a powerful queue system for deferring time-intensive tasks. Jobs can be pushed to various drivers (sync, database, redis, null), retried on failure, organized into chains and batches, and monitored through a comprehensive CLI.
 
 ### Configuration
 
@@ -2021,6 +2022,18 @@ app.register(new QueueServiceProvider(app));
         retry_after: 90,
         after_commit: false,
       },
+      redis: {
+        driver: 'redis',
+        queue: 'default',
+        retry_after: 90,
+        after_commit: false,
+        prefix: 'orchestr', // key prefix for lists / sorted sets / payload hash
+        // ioredis connection options (requires the optional `ioredis` peer dependency):
+        host: '127.0.0.1',
+        port: 6379,
+        password: undefined,
+        db: 0,
+      },
     },
     failed: {
       driver: 'database',
@@ -2034,6 +2047,97 @@ app.register(new QueueServiceProvider(app));
   },
 }
 ```
+
+### Redis Driver
+
+The `redis` driver stores available jobs in per-queue lists, delayed jobs in a
+sorted set scored by their availability time, and in-flight jobs in a sorted
+set scored by a `retry_after` deadline - so a crashed worker's job is
+automatically recovered once its reservation expires. The pop (promoting due
+delayed jobs, recovering expired reservations, and reserving the next job)
+runs as a single atomic Lua script, guaranteeing two workers never receive the
+same job.
+
+`ioredis` is an optional peer dependency. Install it only when you use the
+redis connection:
+
+```bash
+npm install ioredis
+```
+
+```typescript
+import { RedisQueueDriver } from '@orchestr-sh/orchestr';
+
+// Or register it explicitly with your own client (handy for tests):
+const manager = app.make<QueueManager>('queue');
+manager.registerDriver('redis', (config) => new RedisQueueDriver(config, myRedisClient));
+```
+
+### Testing: Faking the Queue
+
+`Queue.fake()` swaps the queue for a recorder so dispatches are asserted
+instead of executed:
+
+```typescript
+import { Queue } from '@orchestr-sh/orchestr';
+
+const queue = Queue.fake();
+
+await ProcessPodcast.dispatch($podcastId);
+
+queue.assertPushed(ProcessPodcast);
+queue.assertPushedOn('high', ProcessPodcast);
+queue.assertNotPushed(SendAnalyticsReport);
+queue.assertPushedWithChain(StartJob, ['OptimizeJob', 'ReleaseJob']);
+queue.assertPushedWithBatch(ImportRow, batch.id);
+queue.assertNothingPushed(); // throws - jobs were recorded
+```
+
+### Unique Jobs
+
+A job implementing `ShouldBeUnique` acquires a cache lock at dispatch; while
+the lock is held, additional dispatches with the same `uniqueId()` are
+silently skipped. The worker releases the lock when the job finishes or
+permanently fails (or after `uniqueFor` seconds elapse). Implement
+`ShouldBeUniqueUntilProcessing` to release the lock as soon as the job is
+popped (before it runs):
+
+```typescript
+import { Job, ShouldBeUnique } from '@orchestr-sh/orchestr';
+
+export class UpdateSearchIndex extends Job implements ShouldBeUnique {
+  public uniqueFor = 3600; // lock safety-net TTL (seconds)
+
+  constructor(public productId: number) {
+    super();
+  }
+
+  uniqueId(): string {
+    return `search-index-${this.productId}`;
+  }
+
+  async handle(): Promise<void> {
+    // ...
+  }
+}
+```
+
+Uniqueness requires the cache subsystem (`CacheServiceProvider`) and a
+container-backed `QueueManager`.
+
+### Dispatching After Commit
+
+A job dispatched with `afterCommit()` (or on a connection with
+`after_commit: true`) is not pushed until the outermost database transaction
+commits, and is discarded if that transaction rolls back - so a queued job
+never observes uncommitted data:
+
+```typescript
+await ProcessPodcast.dispatch($podcastId).afterCommit();
+```
+
+The transaction is resolved from the driver's own connection (the `database`
+driver) or, failing that, the application's default `db` connection.
 
 ### Creating Jobs
 
@@ -2219,7 +2323,20 @@ npx orchestr queue:work --stop-when-empty
 
 # Restart all workers gracefully
 npx orchestr queue:restart
+
+# Development loop: keep the worker running, restarting it automatically
+npx orchestr queue:listen
+npx orchestr queue:listen redis --queue=high,default
+
+# Restart the worker when source files change (default: ./src)
+npx orchestr queue:listen --watch=src,app
 ```
+
+`queue:work` is the production daemon: it boots once and caches loaded code.
+`queue:listen` is the development counterpart - it supervises short-lived
+`queue:work` child processes and respawns them whenever the worker exits, a
+`queue:restart` (SIGUSR2) signal arrives, or (with `--watch`) source files
+change, so code edits always take effect without a manual restart.
 
 ### Failed Jobs
 
@@ -2301,27 +2418,84 @@ Queue.looping(() => {
 
 ### Custom Queue Drivers
 
-Extend the queue system with custom drivers:
+Extend the queue system with custom drivers. Built-in drivers include `sync`,
+`database`, `null`, and `redis`; a custom driver implements the same
+`QueueDriver` contract (and optionally `executesInline()` /
+`getTransactionConnection()` to integrate with unique jobs and `after_commit`
+dispatching):
 
 ```typescript
-import { QueueDriver } from '@orchestr-sh/orchestr';
+import { QueueDriver, QueueDriverJob, Job } from '@orchestr-sh/orchestr';
 
-class RedisDriver implements QueueDriver {
+class SqsDriver implements QueueDriver {
   async push(job: Job, queue?: string): Promise<string> {
-    // Push job to Redis
+    // Push job to SQS
+    return jobId;
   }
 
   async pop(queue?: string): Promise<QueueDriverJob | null> {
-    // Pop job from Redis
+    // Pop (and reserve) the next job from SQS
+    return null;
   }
 
-  // Implement other methods...
+  // Implement size/later/bulk/release/delete/clear/getConnectionName/... as well
+
+  getConnectionName(): string {
+    return 'sqs';
+  }
+  setConnectionName(name: string): void {}
+  getQueue(queue?: string): string {
+    return queue || 'default';
+  }
+  async size(): Promise<number> {
+    return 0;
+  }
+  async pushRaw(payload: string, queue?: string): Promise<string> {
+    return '';
+  }
+  async later(delay: number | Date, job: Job, queue?: string): Promise<string> {
+    return this.push(job, queue);
+  }
+  async bulk(jobs: Job[], queue?: string): Promise<void> {}
+  async release(id: string, delay?: number): Promise<void> {}
+  async delete(id: string): Promise<void> {}
+  async clear(queue?: string): Promise<number> {
+    return 0;
+  }
 }
 
 // Register the driver
 const manager = app.make<QueueManager>('queue');
-manager.registerDriver('redis', (config) => new RedisDriver(config));
+manager.registerDriver('sqs', (config) => new SqsDriver(config));
 ```
+
+### Job Timeouts & Cancellation
+
+Every job runs under a timeout (`job.timeout`, falling back to the worker's
+`--timeout`). On expiry the worker aborts the job's `AbortSignal` and marks
+the job failed:
+
+```typescript
+export class GenerateReport extends Job {
+  public timeout = 30;
+
+  async handle(signal?: AbortSignal): Promise<void> {
+    // Cooperative: stop early when the worker asks for cancellation
+    for (const chunk of this.chunks) {
+      if (signal?.aborted || this.cancelled) return;
+      await process(chunk);
+    }
+  }
+}
+```
+
+The signal is passed to `handle()` and is also available as `job.signal` /
+`job.cancelled`. JavaScript promises cannot be cancelled in-process, so a
+non-cooperative `handle()` keeps running after the timeout; the worker still
+marks the job failed and moves on. Deploy long-running or untrusted jobs on an
+isolated runner (worker thread / child process) if their work must be killed
+outright.
+
 
 ## Cache System
 
@@ -2776,7 +2950,7 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Event Subscribers
 - ✅ Model Lifecycle Events
 - ✅ Event Testing (Fakes & Assertions)
-- ✅ Queue System (Jobs, Chains, Batches, Workers)
+- ✅ Queue System (Jobs, Chains, Batches, Workers, Redis driver, Unique jobs, Testing fakes)
 - ✅ Cache System (Tags, Locks, Flexible Caching)
 - ✅ View System (Templates, Layouts, Directives)
 - ✅ Soft Deletes
