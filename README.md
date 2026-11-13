@@ -1,12 +1,59 @@
 # Orchestr
 
-A Laravel-inspired ORM and framework for TypeScript. Write elegant backend applications with ActiveRecord models (called Ensembles), relationships, query building, and more.
+A 1:1 Laravel replica in TypeScript. Write elegant backend applications with ActiveRecord models (called Ensembles), relationships, query building, queues, caching, scheduling, and more - the same architecture Laravel ships, on Node.js.
+
+Requires Node `^22.18.0 || >=24.0.0` and TypeScript `>=5`.
+
+<details>
+<summary><strong>Contents</strong></summary>
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Models (Ensembles)](#models-ensembles)
+- [Querying](#querying)
+- [Relationships](#relationships)
+- [@DynamicRelation Decorator](#dynamicrelation-decorator)
+- [Pagination](#pagination)
+- [Migrations](#migrations)
+- [Seeders](#seeders)
+- [Model Factories](#model-factories)
+- [Events and Listeners](#events-and-listeners)
+- [Controllers](#controllers)
+- [FormRequest Validation](#formrequest-validation)
+- [Route Model Binding](#route-model-binding)
+- [Routing](#routing)
+- [API Resources](#api-resources)
+- [Exception Handling](#exception-handling)
+- [Session & CSRF Protection](#session--csrf-protection)
+- [Hashing & Encryption](#hashing--encryption)
+- [Signed URLs](#signed-urls)
+- [Authentication](#authentication)
+- [Authorization](#authorization)
+- [Filesystem & File Uploads](#filesystem--file-uploads)
+- [Collections, Strings & Helpers](#collections-strings--helpers)
+- [Configuration & Environment](#configuration--environment)
+- [Queue System](#queue-system)
+- [Cache System](#cache-system)
+- [Task Scheduling](#task-scheduling)
+- [View System](#view-system)
+- [API Reference](#api-reference)
+- [Deploying](#deploying)
+- [Features](#features)
+
+</details>
 
 ## Installation
 
 ```bash
-npm install @orchestr-sh/orchestr reflect-metadata drizzle-orm
-npm install better-sqlite3 # or your preferred database driver
+npm install @orchestr-sh/orchestr
+```
+
+`drizzle-orm` and `reflect-metadata` are regular dependencies and install with the package. Database drivers (`better-sqlite3`, `mysql2`, `postgres`) ship as optional dependencies and are auto-installed by npm; feature add-ons stay opt-in as optional peer dependencies:
+
+```bash
+npm install bcrypt        # or argon2 - for those Hash drivers
+npm install @faker-js/faker  # for fake() in model factories
+npm install ioredis       # for the redis queue / cache drivers
 ```
 
 ### CLI Setup
@@ -45,11 +92,18 @@ orchestr migrate
 
 ```typescript
 import 'reflect-metadata';
-import { Application, Kernel, ConfigServiceProvider, Route } from '@orchestr-sh/orchestr';
+import {
+  Application,
+  Kernel,
+  ConfigServiceProvider,
+  DatabaseServiceProvider,
+  RouteServiceProvider,
+  Route,
+} from '@orchestr-sh/orchestr';
 
-const app = new Application(process.cwd());
+const app = new Application(process.cwd()); // loads .env in the constructor
 
-// Configure database
+// Configure the database (or keep these values in config/database.ts - see Configuration & Environment)
 app.register(new ConfigServiceProvider(app, {
   database: {
     default: 'sqlite',
@@ -62,6 +116,8 @@ app.register(new ConfigServiceProvider(app, {
     },
   },
 }));
+app.register(DatabaseServiceProvider); // binds the 'db' manager
+app.register(RouteServiceProvider); // binds the router and activates facades (Route, Config, DB, ...)
 
 await app.boot();
 
@@ -70,7 +126,7 @@ Route.get('/', async (req, res) => {
   return res.json({ message: 'Welcome to Orchestr!' });
 });
 
-// Start server
+// Start the server
 const kernel = new Kernel(app);
 kernel.listen(3000);
 ```
@@ -95,8 +151,9 @@ const user = await User.find(1);
 // Create
 const user = await User.create({ name: 'John', email: 'john@example.com' });
 
-// Update
-user.name = 'Jane';
+// Update - attribute changes go through setAttribute()/fill();
+// plain property writes are not tracked, so save() would have nothing to flush
+user.setAttribute('name', 'Jane');
 await user.save();
 
 // Delete
@@ -278,6 +335,8 @@ const posts = await Post.query()
 const count = await Post.query().count();
 const avg = await Post.query().avg('views');
 ```
+
+Both builders resolve `get()` to plain arrays (of rows or models) - wrap results in `collect(...)` for the fluent `Collection` API, and see [Pagination](#pagination) for `paginate()` / `cursorPaginate()` on the Ensemble builder.
 
 ## Relationships
 
@@ -500,13 +559,76 @@ const allPosts = await user.posts;
 
 Without `@DynamicRelation`, you must always call the method: `user.posts().get()`.
 
+## Pagination
+
+Paginators live on the Ensemble query builder (`DB.table(...)` has only `forPage(offset, limit)`). Note the argument order: page comes second, and everything Laravel would pull from the current request is passed explicitly through an options object.
+
+```typescript
+// paginate(perPage = 15, page = 1, columns = ['*'], options: { path, query, pageName, fragment, onEachSide })
+const page = await Post.query().orderBy('id').paginate(15, 2, ['*'], { path: '/posts' });
+
+page.items; // Collection<Post> of the current window
+page.total; // 47 - a COUNT(*) runs alongside (skipped entirely when there is nothing to count)
+page.lastPage;
+page.currentPage;
+page.hasMorePages();
+page.nextPageUrl(); // '/posts?page=3'
+page.links(); // [{ url: '/posts?page=1', label: '&laquo; Previous', active: false }, ..., spacer entries with url: null]
+page.appends({ sort: 'title' }); // keep extra query params on every generated link
+```
+
+- `paginate(perPage?, page?, columns?, options?)` returns a `LengthAwarePaginator` - total, last page, numbered links.
+- `simplePaginate(perPage?, page?, columns?, options?)` returns a `Paginator` - one `LIMIT perPage + 1` query, no count, previous/next links only.
+- `cursorPaginate(perPage?, cursor?, columns?, options?)` returns a `CursorPaginator` - stable keyset pagination; pass the `nextCursor()`/`previousCursor()` value (or the raw `?cursor=` string from a request) to walk forward or back. Ordering falls back to the model's primary key when the query has none.
+
+Every paginator serialises to the Laravel-shaped JSON keys through `toArray()`/`toJson()`, so returning one from a route handler just works:
+
+```typescript
+// Length-aware: current_page, data, first_page_url, from, last_page, last_page_url,
+// links, next_page_url, path, per_page, prev_page_url, to, total
+Route.get('/posts', async () => Post.query().paginate(15));
+```
+
+```typescript
+// Simple: no totals - current_page, data, from, to, next_page_url, prev_page_url, ...
+const page = await Post.query().simplePaginate(15);
+
+// Cursor: data, links: { first, last, prev, next }, path, per_page - walk it like:
+let cursor = null;
+const titles: string[] = [];
+do {
+  const page = await Post.query().orderBy('created_at').cursorPaginate(4, cursor);
+  titles.push(...page.data.map((post) => post.getAttribute('title')));
+  cursor = page.nextCursor();
+} while (cursor !== null);
+```
+
+Cursors are base64url-encoded JSON carrying the point's column values, the ordering index, and travel direction; malformed or stale cursors throw `InvalidCursorException`. Set the query-string name with `{ cursorName: 'after' }`.
+
+Link generation has no ambient request object - register a resolver once and all paginators pick up the current path and query string (otherwise they fall back to `/`):
+
+```typescript
+import { resolveCurrentRequestUsing } from '@orchestr-sh/orchestr';
+
+resolveCurrentRequestUsing(() => ({
+  path: '/posts',
+  query: { filter: 'active' },
+}));
+
+const page = await Post.query().paginate(10);
+page.nextPageUrl(); // '/posts?filter=active&page=2'
+page.withQueryString(); // opt into the live request query on generated links
+```
+
+The paginator classes (`LengthAwarePaginator`, `Paginator`, `CursorPaginator`, `Cursor`, `UrlWindow`) are exported and directly constructible when you need to paginate a plain array or a hand-built result set.
+
 ## Migrations
 
 Laravel-style migrations with a fluent Schema builder.
 
 ```bash
-# Create a migration
-npx orchestr make:migration create_users_table --create=users
+# Create a migration (bare stub; --create makes a Schema::create stub, --table makes a Schema::table stub)
+npx orchestr make:migration create_users_table --create --table=users
 
 # Run migrations
 npx orchestr migrate
@@ -919,10 +1041,11 @@ export class AppEventServiceProvider extends EventServiceProvider {
 }
 ```
 
-Or use the Event facade to register listeners dynamically:
+Or use the Event facade to register listeners dynamically. Note the two `Event` names: the **base class** for your event definitions comes from the main entry, while `listen`/`dispatch`/`fake`/assertions live on the **facade** (here aliased as `Event`):
 
 ```typescript
-import { Event } from '@orchestr-sh/orchestr';
+import { EventFacade as Event } from '@orchestr-sh/orchestr';
+// ...or equivalently: import { Event } from '@orchestr-sh/orchestr/Facades';
 
 // Class-based listener
 Event.listen(UserRegistered, SendWelcomeEmail);
@@ -951,13 +1074,16 @@ registration order (direct listeners first, then wildcard listeners) before
 the returned promise resolves.
 
 ```typescript
-import { Event } from '@orchestr-sh/orchestr';
+import { EventFacade as Event } from '@orchestr-sh/orchestr';
 
 // Dispatch via facade
 await Event.dispatch(new UserRegistered(user));
 
-// Static dispatch on event class
+// Static dispatch on the event class itself (from the Dispatchable mixin)
 await UserRegistered.dispatch(user);
+// Beware: Event.dispatch on the abstract base class would construct a bare
+// Event - always dispatch your concrete subclass, via the facade or
+// ConcreteEvent.dispatch(...).
 
 // Conditional dispatch
 await UserRegistered.dispatchIf(user.isActive, user);
@@ -984,7 +1110,7 @@ TypeScript erases interfaces, mark the listener at runtime (the `queued`
 property, or queue configuration properties like `queue`/`tries`):
 
 ```typescript
-import { Event, ShouldQueue } from '@orchestr-sh/orchestr';
+import { ShouldQueue } from '@orchestr-sh/orchestr';
 
 export class SendWelcomeEmail implements ShouldQueue {
   public readonly queued = true; // runtime marker for the dispatcher
@@ -1014,8 +1140,8 @@ class UserRegistered extends Event implements ShouldDispatchAfterCommit {
   public readonly shouldDispatchAfterCommit = true;
 }
 
-// Inside Ensemble.transaction(...): nothing fires until commit(),
-// and a rollback discards the deferred dispatch entirely.
+// Inside a connection transaction - DB.connection().transaction(async (trx) => { ... }):
+// nothing fires until commit(), and a rollback discards the deferred dispatch entirely.
 await UserRegistered.dispatch(user);
 ```
 
@@ -1024,7 +1150,7 @@ await UserRegistered.dispatch(user);
 Subscribers listen to multiple events in a single class:
 
 ```typescript
-import { EventSubscriber, Dispatcher } from '@orchestr-sh/orchestr';
+import { Dispatcher, type EventSubscriber } from '@orchestr-sh/orchestr';
 
 export class UserEventSubscriber implements EventSubscriber {
   subscribe(events: Dispatcher): void {
@@ -1060,7 +1186,7 @@ complete - and a `false` response halts the operation - before the lifecycle
 continues:
 
 ```typescript
-import { Event, ModelCreated, ModelUpdated, ModelDeleting } from '@orchestr-sh/orchestr';
+import { EventFacade as Event, ModelCreated, ModelDeleting } from '@orchestr-sh/orchestr';
 
 // Listen to model events
 Event.listen(ModelCreated, (event) => {
@@ -1069,14 +1195,18 @@ Event.listen(ModelCreated, (event) => {
 
 Event.listen(ModelDeleting, (event) => {
   // Prevent deletion by returning false
-  if (event.model.isProtected) {
+  if (event.model.getAttribute('isProtected')) {
     return false;
   }
 });
 
-// Listen to specific model events using wildcards
-Event.listen('User.*', (event) => {
-  // Handles all User model events
+// Wildcards work on the dispatched event NAME. Model events all dispatch
+// under their class names (ModelSaved, ModelDeleting, ...), so 'Model*'
+// catches every model's lifecycle; discriminate per model in the listener:
+Event.listen('Model*', (event) => {
+  if (event.model instanceof User) {
+    // ...only User lifecycle events
+  }
 });
 ```
 
@@ -1094,13 +1224,15 @@ Available model events:
 - `ModelRestoring` / `ModelRestored` - Before (can halt) / after a trashed model is restored
 - `ModelForceDeleting` / `ModelForceDeleted` - Before (can halt) / after a hard delete
 
+All of these fire. The core `Model*` classes are exported from `@orchestr-sh/orchestr`; every event above can additionally be matched by its name string, e.g. `Event.listen('ModelRestored', ...)` - or handled through observer hooks (`restoring`, `restored`, `forceDeleting`, `forceDeleted`), which cover them all.
+
 ### Testing Events
 
 Use `Event.fake()` to test event dispatching. The fake mirrors the async
 dispatcher, so await your code under test as usual; no listener ever runs:
 
 ```typescript
-import { Event } from '@orchestr-sh/orchestr';
+import { EventFacade as Event } from '@orchestr-sh/orchestr';
 
 // Fake all events
 Event.fake();
@@ -1258,7 +1390,7 @@ Missing models throw `ModelNotFoundException`, which the exception handler rende
 ```typescript
 // Explicit bindings
 Route.bind('token', (value) => ApiToken.findByValue(value));
-Route.model('page', Page); // GET /pages/:orchestr => resolved by Page's route key
+Route.model('page', Page); // GET /pages/:page => resolved by Page's route key
 
 // Custom route key used by implicit binding
 export class Page extends Ensemble {
@@ -1296,7 +1428,7 @@ Route.get('/users/:id?', () => {}); // matches /users and /users/1
 Route.get('/users/:id', showUser).where('id', '\\d+'); // /users/abc never matches
 Route.where('id', '\\d+'); // shorthand: constrains the most recently registered route
 
-Route.get('/pages/:slug', showPage); // Route::pattern applies too
+Route.get('/pages/:slug', showPage); // Route.pattern() applies too
 Route.pattern('slug', '[a-z\\-]+'); // global constraint by parameter name
 ```
 
@@ -1373,6 +1505,44 @@ Parameter binding is request-scoped: the matched registration is cloned per
 dispatch, so concurrent requests to `/users/:id` each keep their own parameter
 values and the shared route is never mutated.
 
+## API Resources
+
+Transformers shape how models appear in API responses, Laravel-style. A resource class wraps any value and maps it in `toArray()`; `X.collection(...)` wraps lists, `EnsembleCollection`s, and paginators alike.
+
+```typescript
+import { JsonResource } from '@orchestr-sh/orchestr';
+
+class PostResource extends JsonResource {
+  toArray(): Record<string, any> {
+    return {
+      id: this.resource.getKey(),
+      title: this.resource.getAttribute('title'),
+      author: this.whenLoaded('author'), // included only when the relation was eager-loaded
+      comments_count: this.whenCounted('comments'), // only when withCount('comments') ran
+      ...this.mergeWhen(this.resource.getAttribute('published'), { published_at: 'now' }),
+    };
+  }
+}
+
+Route.get('/posts', async () => PostResource.collection(await Post.query().with('author').get()));
+Route.get('/posts/page', async () => PostResource.collection(Post.query().paginate(15)));
+```
+
+- Responses are `data`-wrapped by default. Change the key per class with `protected static wrap = 'post'`, turn wrapping off per instance with `->withoutWrapping()`, or per class with `PostResource.withoutWrapping()`.
+- `->with({ extra: 1 })` / `additional(data)` merge top-level extras into the payload.
+- Conditional pieces: `when(cond, valueOrFn)` (omitted entirely otherwise), `whenHas('title', (t) => ...)`, `whenLoaded('comments')` and its callback form for transforming loaded relations, `whenAggregated('comments', 'votes', 'sum')` for `withSum`-style columns. Values returned as `undefined` (the `MISSING_VALUE` sentinel) drop their key.
+- Paginated collections embed the paginator's meta: `{ data: [...], meta: { total, per_page, last_page, next_page_url, prev_page_url } }` for `paginate()`, `{ data, links: { first, last, prev, next }, path, per_page }` for `cursorPaginate()`; simple paginators contribute no meta.
+- A resource returns itself as JSON from any handler: route dispatch hands `JsonResponse` objects straight to the transport and `JSON.stringify`s everything else via the resource's `toJSON()` hook. Call `.response()` when you want the explicit `JsonResponse`, or build one yourself with `new JsonResponse(payload, 201, { 'X-Api': 'v1' })` for full status/header control.
+- `X.collection(...)` wraps a list, an `EnsembleCollection` or a paginator and maps every item through `X` itself; standalone `ResourceCollection` subclasses instead point at their item mapper with `protected static collects = PostResource`. Single records: `new PostResource(post)` or `PostResource.make(post)`.
+
+```typescript
+class PostCollection extends ResourceCollection {
+  protected static collects = PostResource;
+}
+
+return new PostCollection(posts).response(); // explicit JsonResponse
+```
+
 ## Exception Handling
 
 One `Handler` (bound in the container as `'exceptions'`) reports and renders
@@ -1381,16 +1551,16 @@ every error raised by the HTTP Kernel and the Router:
 ```typescript
 import { abort, abort_if, abort_unless, AuthenticationException } from '@orchestr-sh/orchestr';
 
-Route.get('/posts/:id', (req) => {
-  abort_if(!req.user, 401); // throws AuthenticationException
-  abort_unless(req.userCan('view'), 403); // throws AccessDeniedHttpException
+Route.get('/posts/:id', async (req) => {
+  abort_if(!(await req.user()), 401); // throws AuthenticationException
+  abort_unless(await req.can('view'), 403); // throws AccessDeniedHttpException
   abort(404, 'Post not found'); // throws NotFoundHttpException
 });
 ```
 
 Rendering is negotiated: JSON `{ message, errors? }` when the request expects
 JSON or is served under the `api` prefix, and an HTML error page when the
-client accepts `text/html` (stack traces appear only when `app.isDebug()`).
+client accepts `text/html` (stack traces appear only when `app.isDebug()`, which reads `APP_DEBUG`).
 Status codes come from the exception hierarchy in `Foundation/Exceptions` -
 `HttpException` (with custom headers), `NotFoundHttpException`,
 `AccessDeniedHttpException` (403), `AuthenticationException` (401),
@@ -1399,7 +1569,7 @@ bag). Add custom formats without touching the handler:
 
 ```typescript
 kernel.getExceptionHandler().addRenderer(new MyXmlRenderer());
-kernel.getExceptionHandler().dontReport([AuthenticationException]);
+kernel.getExceptionHandler().dontReport(AuthenticationException); // variadic - pass classes, not an array
 ```
 
 ## Session & CSRF Protection
@@ -1412,6 +1582,7 @@ one HMAC-signed payload:
 
 ```typescript
 import {
+  ConfigServiceProvider,
   SessionServiceProvider,
   StartSession,
   VerifyCsrfToken,
@@ -1419,7 +1590,7 @@ import {
   session,
 } from '@orchestr-sh/orchestr';
 
-app.instance('config', new Config({
+app.register(new ConfigServiceProvider(app, {
   app: { key: 'your-app-key' }, // signs cookie-store payloads
   session: {
     driver: 'file', // array | file | cookie
@@ -1432,7 +1603,7 @@ app.instance('config', new Config({
 }));
 
 app.register(SessionServiceProvider);
-kernel.use(StartSession, VerifyCsrfToken);
+kernel.use([StartSession, VerifyCsrfToken]); // use() takes one middleware or an array
 
 Route.post('/login', (req) => {
   req.session().regenerate(); // new ID + token on login, data preserved
@@ -1465,9 +1636,9 @@ parameters, so `check()` verifies old hashes correctly and `needsRehash()`
 spots cost or algorithm changes:
 
 ```typescript
-import { HashServiceProvider, Hash, hash } from '@orchestr-sh/orchestr';
+import { ConfigServiceProvider, HashServiceProvider, Hash, hash } from '@orchestr-sh/orchestr';
 
-app.instance('config', new Config({
+app.register(new ConfigServiceProvider(app, {
   hashing: { driver: 'scrypt', scrypt: { cost: 16384 } }, // or bcrypt/argon2
 }));
 app.register(HashServiceProvider);
@@ -1485,9 +1656,11 @@ The `Encrypter` is AES-256-GCM with base64 JSON payloads carrying `iv`,
 or raw 32-byte) fails fast at boot:
 
 ```typescript
-import { EncryptionServiceProvider, Crypt, encrypt, decrypt } from '@orchestr-sh/orchestr';
+import { ConfigServiceProvider, EncryptionServiceProvider, Crypt, encrypt, decrypt } from '@orchestr-sh/orchestr';
 
-app.instance('config', new Config({ app: { key: 'base64:' + crypto.randomBytes(32).toString('base64') } }));
+app.register(new ConfigServiceProvider(app, {
+  app: { key: 'base64:' + crypto.randomBytes(32).toString('base64') },
+}));
 app.register(EncryptionServiceProvider);
 
 Crypt.decrypt(Crypt.encrypt({ a: 1 })); // { a: 1 }  (encrypt()/decrypt() too)
@@ -1532,9 +1705,11 @@ and rehash-on-login behaviour:
 
 ```typescript
 import {
+  ConfigServiceProvider,
   AuthServiceProvider,
   Authenticate, // 'auth' alias - installed on boot
   RedirectIfAuthenticated, // 'guest' alias - installed on boot
+  Ensemble,
   HasAuthenticatable,
   Auth, // facade - auth() helper resolves a guard
   RedirectResponse,
@@ -1548,7 +1723,7 @@ class User extends HasAuthenticatable(Ensemble) {
   }
 }
 
-app.instance('config', new Config({
+app.register(new ConfigServiceProvider(app, {
   auth: {
     defaults: { guard: 'session' },
     guards: {
@@ -1589,7 +1764,10 @@ middleware, `Request.can/cannot/authorize`, `FormRequest.authorize()` and
 denial's message and status when the gate provided one:
 
 ```typescript
-import { AuthServiceProvider, Gate, Policy, Rule, FormRequest } from '@orchestr-sh/orchestr';
+import { AuthServiceProvider, GateFacade as Gate, Policy, Rule, FormRequest } from '@orchestr-sh/orchestr';
+// (plain `Gate` from the main entry is the underlying service class; its methods are
+// instance methods. The facade - statics like these - is `GateFacade`, or `Gate`
+// from '@orchestr-sh/orchestr/Facades'.)
 
 class PostPolicy extends Policy {
   viewAny(user: Authenticatable): boolean {
@@ -1644,9 +1822,9 @@ adapter jails every path below its root (`..` escapes throw
 `PathTraversalException`) and writes atomically via temp-file + rename:
 
 ```typescript
-import { FilesystemServiceProvider, Storage, storage_path } from '@orchestr-sh/orchestr';
+import { ConfigServiceProvider, FilesystemServiceProvider, Storage, storage_path } from '@orchestr-sh/orchestr';
 
-app.instance('config', new Config({
+app.register(new ConfigServiceProvider(app, {
   filesystems: {
     default: 'local', // storage/app, no URLs
     disks: {
@@ -1692,32 +1870,181 @@ Upload validation is wired into the existing rules: `file`, `image`, `mimes`,
 upload's bytes (magic-byte MIME sniffing and image headers), so a text file
 renamed `.png` fails `image` and a 4 MB upload fails `max:1024`.
 
-## Configuration
+## Collections, Strings & Helpers
 
-### Database Setup
+### Collections
+
+`Collection` is a real `Array` subclass: list items live in normal array slots (indexing, `for...of`, spread), while keyed entries (`put`, `groupBy`, `keyBy` results) are string-keyed properties. Transforms return **new** collections; only `transform`, `put`, `push`, `prepend`, `pop`, `shift`, `pull` and `forget` mutate in place. Comparisons (`where`, `contains`, `search`, `diff`, ...) use Laravel's loose `==` semantics.
 
 ```typescript
-import { DatabaseServiceProvider, DatabaseManager, DrizzleAdapter } from '@orchestr-sh/orchestr';
+import { collect } from '@orchestr-sh/orchestr';
 
-export class DatabaseServiceProvider extends ServiceProvider {
-  register(): void {
-    this.app.singleton('db', () => {
-      const config = this.app.make('config').get('database');
-      const manager = new DatabaseManager(config);
-      manager.registerAdapter('drizzle', (config) => new DrizzleAdapter(config));
-      return manager;
-    });
-  }
+const users = collect([
+  { id: 1, name: 'Anna', age: 30, role: 'admin' },
+  { id: 2, name: 'Ben', age: 25, role: 'user' },
+]);
 
+users.where('role', 'admin').pluck('name').all(); // ['Anna']
+users.groupBy('role').get('user')?.pluck('name').all(); // ['Ben']
+collect([1, 2, 3]).flatMap((x) => [x, x * 10]).all(); // [1, 10, 2, 20, 3, 30]
+collect([0, 1, false, 2, '', 3]).filter().all(); // [1, 2, 3]
+collect().first(undefined, 'fallback'); // 'fallback'
+```
+
+The method surface mirrors Laravel's: `all keys values get has first last pluck map mapWithKeys flatMap filter reject reduce reduceWithKeys each sum avg median mode min max count isEmpty isNotEmpty contains doesntContain where whereIn whereNotIn firstWhere sortBy sortByDesc sort reverse slice take skip chunk collapse flatten unique merge concat combine diff intersect search groupBy keyBy put push prepend pop shift pull forget transform when unless tap pipe random shuffle implode join toArray toJson toJSON`, plus the statics `Collection.make/wrap/unwrap/range/times`. There is no async/lazy side to it - everything is synchronous.
+
+One important note for ORM users: `Model.query().get()` resolves to a **plain array** of models. Wrap it with `collect(...)` when you want the fluent API. Loaded relations, by contrast, hydrate as `EnsembleCollection<T>` - a `Collection` subclass that adds `modelKeys()`, `find(key)`, `only/except(keys)`, `chunkModels(size)`, `toArray()` via `toObject()`, and the aggregate eager loaders `loadCount/loadSum/loadAvg/loadMin/loadMax/loadExists` (one query per relation for the whole set).
+
+### Str, Arr, Number
+
+All static utility classes, importable from the main entry:
+
+```typescript
+import { Str, Arr, Number as Num } from '@orchestr-sh/orchestr';
+
+Str.studly('user name'); // 'UserName'
+Str.slug('Hello World!', '-'); // 'hello-world'
+Str.plural('child'); // 'children' - and Str.singular('feet')
+Str.is('Model*', 'ModelSaved'); // wildcard checks
+Str.random(16); Str.uuid(); Str.ulid();
+
+Arr.get(config, 'database.connections.mysql.host'); // dot notation on arrays and objects
+Arr.forget(record, 'a.b'); Arr.set(target, 'a.b', 1);
+Arr.only(users, ['id', 'name']); // also: wrap/flatten/divide/keyBy/pluck/first/last/sort/shuffle/random/where/whereIn/toCssClasses
+Arr.isList([1, 2]); Arr.isAssoc({ a: 1 });
+
+Num.ordinal(3); // '3rd'
+Num.fileSize(2_500_000, 1); // '2.4 MB' - binary units; Num.abbreviate, Num.percentage, Num.spell, Num.clamp, Num.format
+```
+
+`Number` intentionally shadows the JS global - alias it on import (`Number as Num`) if that clashes with your code.
+
+### Global helpers
+
+Everything is import-based; nothing touches `globalThis`:
+
+| Helper | Behavior |
+| --- | --- |
+| `config(key?, default?)` | Reads the container's `Config`; no key returns the config instance itself. Throws if no application has been created yet. |
+| `env(key, default?)` | Type-coerced `process.env` reads (see Configuration & Environment). |
+| `base_path() / storage_path() / resource_path() / routes_path()` | Application-path helpers. |
+| `view(name, data)` / `route(name, params)` | View instances, named-route URLs. |
+| `session()` / `csrf_token()` / `csrf_field()` | Active request session + CSRF helpers (require StartSession). |
+| `hash(value)` / `encrypt()` / `decrypt()` / `auth(guard?)` / `factory(Model, count?)` / `fake(...)` | Pass-throughs to the hashing, encryption, auth and factory subsystems; each throws a helpful error if its service provider isn't registered. |
+| `data_get() / data_set() / value() / tap() / throw_if() / throw_unless() / class_basename()` | Laravel's utility helpers, dot-notation aware. |
+| `optional(value)` | Null-safe proxy: `optional(user).get('profile.bio')`, plus chained property access, `.value`, `.call()`, `.collect()`. |
+| `now()` / `today()` | Plain `Date`s (`today()` at local midnight) - there is no Carbon-style chain. |
+| `str()` / `arr()` | Return the `Str` / `Arr` classes themselves, e.g. `str().slug('Hello')` - not fluent Stringable objects. |
+| `snake_case() camel_case() studly_case() kebab_case() title_case()` | Legacy wrappers over their `Str` equivalents. |
+
+### Facades & import names
+
+Facades are container proxies: `Route`, `DB`, `Event`, `Queue`, `Bus`, `Cache`, `Schedule`, `Session`, `Storage`, `Auth`, `Gate`, `Hash`, `Crypt` and `View`. They resolve against the application registered via `Facade.setFacadeApplication(app)` - which the framework does inside `RouteServiceProvider.register()` (it also binds the `'router'` that `Route` and URL generation need). So registering `RouteServiceProvider` lights up every facade, and apps that skip it can call `Facade.setFacadeApplication(app)` by hand.
+
+Because the main entry reserves bare names for core classes (`Event` = abstract event base, `Gate` = the gate service class, `View` = the view instance class, `Config` = the config repository facade object, `Schedule` = the scheduler class), several facades are exported **aliased** there, or bare from the `/Facades` subpath:
+
+| Facade | From `'@orchestr-sh/orchestr'` | From `'@orchestr-sh/orchestr/Facades'` |
+| --- | --- | --- |
+| Event dispatcher | `EventFacade` | `Event` |
+| Queue manager | `QueueFacade` | `Queue` |
+| Gate | `GateFacade` | `Gate` |
+| View factory | `ViewFacade` | *not exported* - use `ViewFacade` |
+| Schedule | `ScheduleFacade` | `Schedule` |
+| Bus / Cache / Session / Storage / Auth / Hash / Crypt / Route / DB | same name | same name |
+
+The `/Facades` entry also exports `EventFake` for typed test fakes. One name to watch: bare `Config` is a facade alias over the container's config repository, while the repository class itself is `ConfigClass` - prefer the `config()` helper for reads (see [Configuration & Environment](#configuration--environment)).
+
+## Configuration & Environment
+
+### Environment files
+
+`new Application(...)` loads environment files right in its constructor - before `boot()`, before any provider runs:
+
+1. `{basePath}/.env` (rename the file with `app.setEnvironmentFile('custom.env')`)
+2. `{basePath}/.env.{APP_ENV}` (e.g. `.env.production`, `.env.local`), if it differs
+
+Values already present in the real `process.env` always win over file values (the host environment is authoritative unless you call `Env.load(path, /* overwrite */ true)`), and a missing `.env` is not an error. The file parser understands `export` prefixes, single-quoted literal values, double-quoted values with escapes and multiline strings, inline comments, and `${VAR}` / `${VAR:-fallback}` interpolation.
+
+```bash
+# .env
+APP_ENV=production
+APP_DEBUG=false
+APP_KEY=base64:...
+DB_HOST=127.0.0.1
+```
+
+```typescript
+import { env, Env } from '@orchestr-sh/orchestr';
+
+env('DB_HOST'); // '127.0.0.1' - string
+env('APP_DEBUG'); // false - 'true'/'false'/'null'/'empty' coerce (case-insensitive); wrap in (true) to keep the literal string
+env('NO_SUCH_KEY', 'fallback'); // null returns the default
+```
+
+`Env.load(path, overwrite?)`, `Env.get/set/has/forget/parse` are the statics underneath; everything else just reads the resulting `process.env`. Numeric values stay strings - coerce at the call site or with `config` defaults.
+
+The application answers environment questions from these values:
+
+```typescript
+app.environment(); // APP_ENV || NODE_ENV || 'production'
+app.environment('local', 'feature-*'); // is the current env one of these (wildcards ok)
+app.isLocal(); app.isProduction(); app.isTesting();
+app.isDebug(); // APP_DEBUG === true
+app.version(); // the installed @orchestr-sh/orchestr version
+```
+
+### Config files
+
+Keep configuration in a top-level `config/` directory: `config/database.ts`, `config/cache.js` or `config/app.json` each `default`-export an object (or, for JSON, *is* the object) and land under the `database.` / `cache.` / `app.` keys. `app.boot()` loads and deep-merges them over anything registered inline:
+
+```typescript
+// config/database.ts
+export default {
+  default: 'sqlite',
+  connections: {
+    sqlite: { adapter: 'drizzle', driver: 'sqlite', database: './database.db' },
+  },
+};
+```
+
+```typescript
+import { ConfigServiceProvider, config } from '@orchestr-sh/orchestr';
+
+// Inline values work too - and merge with the files (files win):
+app.register(new ConfigServiceProvider(app, { app: { name: 'My App' } }));
+
+config('database.connections.sqlite.database'); // './database.db'
+config('app.timezone', 'UTC'); // default when unset
+```
+
+`boot()` auto-registers a `ConfigServiceProvider` if you never registered one, so file-based config is always live. The repository itself (`ConfigClass`) offers the full dot API: `get/set/has/all/getMany/forget/prepend/push/merge`.
+
+### Caching configuration
+
+```bash
+npx orchestr config:cache # compiles config/* into bootstrap/cache/config.json
+npx orchestr config:clear # removes the snapshot; files are read again
+```
+
+While the snapshot exists the app loads only that (`app.configurationIsCached()`), so edited config files take effect after `config:clear` - there is no staleness detection. The path is overridable with `APP_CONFIG_CACHE`. Because the snapshot is JSON, configs holding closures (e.g. callbacks wired into service classes) cannot be cached; `config:cache` refuses them and lists the offending dot-paths.
+
+### Database setup
+
+The built-in `DatabaseServiceProvider` binds the `'db'` manager from `config('database')`, but does not connect or hand the resolver to Ensembles - a small provider of your own does:
+
+```typescript
+import { ServiceProvider, DatabaseManager, Ensemble } from '@orchestr-sh/orchestr';
+
+export class BootDatabaseServiceProvider extends ServiceProvider {
   async boot(): Promise<void> {
-    const db = this.app.make('db');
+    const db = this.app.make<DatabaseManager>('db');
     await db.connection().connect();
-    Ensemble.setConnectionResolver(db);
+    Ensemble.setConnectionResolver(db); // enables Model.query() & friends
   }
 }
 
-// Register in your app
-app.register(DatabaseServiceProvider);
+app.register(DatabaseServiceProvider); // 'db' binding + the drizzle adapter
+app.register(BootDatabaseServiceProvider); // connect & wire Ensembles
 ```
 
 ### Service Providers
@@ -1749,6 +2076,7 @@ User.all()                // Get all records
 User.create(data)         // Create and save
 
 // Instance methods
+user.setAttribute(k, v)   // Mutate a tracked attribute (fill({...}) for many)
 user.save()               // Save changes
 user.delete()             // Delete record
 user.refresh()            // Reload from database
@@ -1911,88 +2239,53 @@ table.change(column)                // Redefine existing column(s)
 
 ### CLI Commands
 
-All commands should be run with `npx orchestr` (or just `orchestr` if installed globally):
+All commands run via `npx orchestr` (or `orchestr` when installed globally). The kernel parses `command arg1 arg2 --key=value --flag` generically, so options below are `--key=value` pairs or bare `--flags`, and `[bracketed]` items are positional arguments.
 
-```bash
-# Migrations
-npx orchestr make:migration <name>          # Create migration
-npx orchestr make:migration <name> --create=<table>  # Create table migration
-npx orchestr make:migration <name> --table=<table>   # Update table migration
-npx orchestr migrate                        # Run migrations
-npx orchestr migrate --step                 # Each migration in its own batch
-npx orchestr migrate --seed                 # Seed after migrating
-npx orchestr migrate --force                # Run without the production check
-npx orchestr migrate --pretend              # Show the SQL without running it
-npx orchestr migrate:install                # Create the migration repository
-npx orchestr migrate:rollback               # Rollback last batch
-npx orchestr migrate:reset                  # Rollback all migrations
-npx orchestr migrate:refresh                # Reset and re-run migrations
-npx orchestr migrate:fresh                  # Drop all tables and migrate
-npx orchestr migrate:status                 # Show migration status
+| Command | Does |
+| --- | --- |
+| `migrate` | Run pending migrations (`--step`, `--seed`, `--force`, `--pretend`, `--path=`) |
+| `migrate:install` | Create the migrations repository table |
+| `migrate:rollback` | Roll back the last batch |
+| `migrate:reset` | Roll back all migrations |
+| `migrate:refresh` | Reset and re-run all migrations |
+| `migrate:fresh` | Drop all tables and re-migrate |
+| `migrate:status` | Show each migration's status |
+| `make:migration <name>` | New migration stub (`--create` + `--table=users` for a create stub, `--table` alone for an update stub) |
+| `db:seed` | Run `DatabaseSeeder` (`--class=UserSeeder` for one seeder) |
+| `make:seeder <name>` | New seeder class |
+| `make:event <name>` | New event class |
+| `make:listener <name>` | New listener (`--event=EventName`, `--queued`) |
+| `make:controller <name>` | New controller in `app/Http/Controllers` (`--path=` to override) |
+| `event:list` | List registered events (`--event=` to filter) |
+| `event:cache` | Discover and cache events & listeners |
+| `event:clear` | Clear the cached events |
+| `make:job <name>` | New job class (`--sync` for a synchronous job) |
+| `queue:work [connection]` | Worker daemon (`--queue=high,default`, `--tries=3`, `--timeout=90`, `--sleep=3`, `--once`, `--stop-when-empty`, `--max-jobs=`, `--max-time=`, `--memory=`, `--rest=`) |
+| `queue:listen [connection]` | Supervisor that respawns `queue:work` (`--watch=src,app` restarts on file changes) |
+| `queue:restart` | Gracefully restart all workers |
+| `queue:failed` | List failed jobs |
+| `queue:retry <id>` | Retry one (`all` for every failed job) |
+| `queue:forget <id>` | Delete one failed job |
+| `queue:flush` | Delete all failed jobs |
+| `queue:clear [connection]` | Delete every job on a queue (`--queue=default`) |
+| `queue:monitor [queues]` | Alert when queue size exceeds `--max` (default 1000) |
+| `queue:table` | Create the jobs table migration |
+| `queue:failed-table` | Create the failed_jobs table migration |
+| `queue:batches-table` | Create the job_batches table migration |
+| `queue:prune-batches` | Prune stale batches (`--hours=24`) |
+| `queue:prune-failed` | Prune old failed jobs (`--hours=48`) |
+| `cache:clear [store]` | Flush the cache (default store, or e.g. `cache:clear redis`) |
+| `cache:forget <key> [store]` | Forget one key |
+| `cache:table` | Create the cache table migration |
+| `config:cache` | Compile `config/*` into `bootstrap/cache/config.json` |
+| `config:clear` | Remove the configuration snapshot |
+| `schedule:run` | Run all due tasks (your single crontab line) |
+| `schedule:work` | Long-running minute loop around `schedule:run` |
+| `schedule:list` | Registered tasks and next run times (`--timezone=`) |
+| `schedule:test [task]` | Run one task immediately |
+| `make:view <name>` | New view template under `resources/views` |
 
-# Seeders
-npx orchestr make:seeder <name>             # Create seeder
-npx orchestr db:seed                        # Run DatabaseSeeder
-npx orchestr db:seed --class=<name>         # Run specific seeder
-
-# Events & Listeners
-npx orchestr make:event <name>              # Create event
-npx orchestr make:listener <name>           # Create listener
-npx orchestr make:listener <name> --event=<EventName>  # Create listener for event
-npx orchestr make:listener <name> --queued  # Create queued listener
-npx orchestr event:list                     # List all registered events
-npx orchestr event:cache                    # Cache discovered events
-npx orchestr event:clear                    # Clear event cache
-
-# Controllers
-npx orchestr make:controller <name>         # Create controller (app/Http/Controllers)
-npx orchestr make:controller <name> --path=<path>  # Create controller in custom directory
-
-# Queue - Jobs
-npx orchestr make:job <name>                # Create job class
-npx orchestr make:job <name> --sync         # Create synchronous job
-
-# Queue - Workers
-npx orchestr queue:work [connection]        # Start queue worker daemon
-npx orchestr queue:listen [connection]      # Worker loop with restart-on-change (dev)
-npx orchestr queue:work --once              # Process single job and exit
-npx orchestr queue:work --queue=high,default  # Process specific queues
-npx orchestr queue:work --tries=3           # Set max attempts
-npx orchestr queue:work --timeout=90        # Set job timeout
-npx orchestr queue:work --sleep=3           # Seconds between checks
-npx orchestr queue:work --max-jobs=1000     # Stop after N jobs
-npx orchestr queue:work --max-time=3600     # Stop after N seconds
-npx orchestr queue:work --memory=128        # Memory limit in MB
-npx orchestr queue:work --rest=0            # Rest between jobs (ms)
-npx orchestr queue:work --stop-when-empty   # Stop when queue is empty
-npx orchestr queue:restart                  # Gracefully restart all workers
-
-# Queue - Failed Jobs
-npx orchestr queue:failed                   # List all failed jobs
-npx orchestr queue:retry <id>               # Retry specific failed job
-npx orchestr queue:retry all                # Retry all failed jobs
-npx orchestr queue:forget <id>              # Delete failed job by ID
-npx orchestr queue:flush                    # Delete all failed jobs
-npx orchestr queue:prune-failed --hours=48  # Prune failed jobs older than N hours
-
-# Queue - Monitoring
-npx orchestr queue:monitor <queue> --max=100  # Alert if queue exceeds size
-npx orchestr queue:clear [connection] --queue=default  # Clear queue
-
-# Queue - Database Setup
-npx orchestr queue:table                    # Create jobs table migration
-npx orchestr queue:failed-table             # Create failed_jobs table migration
-npx orchestr queue:batches-table            # Create job_batches table migration
-npx orchestr queue:prune-batches --hours=24 # Prune batches older than N hours
-
-# Cache
-npx orchestr cache:clear [--store=redis]    # Clear all cache or specific store
-npx orchestr cache:forget <key> [--store=redis]  # Forget specific cache key
-npx orchestr cache:table                    # Create cache table migration
-
-# Views
-npx orchestr make:view <name>               # Create view template
-```
+The deploy commands (`deploy:login`, `deploy:init`, `deploy:server`, `deploy`, `deploy:status`, `deploy:env`, `deploy:rollback`, `deploy:provision`) are registered alongside these - see [Deploying](#deploying).
 
 ## Queue System
 
@@ -2079,11 +2372,11 @@ manager.registerDriver('redis', (config) => new RedisQueueDriver(config, myRedis
 instead of executed:
 
 ```typescript
-import { Queue } from '@orchestr-sh/orchestr';
+import { QueueFacade as Queue } from '@orchestr-sh/orchestr';
 
 const queue = Queue.fake();
 
-await ProcessPodcast.dispatch($podcastId);
+await ProcessPodcast.dispatch(podcastId);
 
 queue.assertPushed(ProcessPodcast);
 queue.assertPushedOn('high', ProcessPodcast);
@@ -2133,7 +2426,7 @@ commits, and is discarded if that transaction rolls back - so a queued job
 never observes uncommitted data:
 
 ```typescript
-await ProcessPodcast.dispatch($podcastId).afterCommit();
+await ProcessPodcast.dispatch(podcastId).afterCommit();
 ```
 
 The transaction is resolved from the driver's own connection (the `database`
@@ -2195,7 +2488,7 @@ await ProcessPodcast.dispatchUnless(podcast.isProcessed, podcastId);
 await ProcessPodcast.dispatchSync(podcastId);
 
 // Using Queue/Bus facades
-import { Queue, Bus } from '@orchestr-sh/orchestr';
+import { QueueFacade as Queue, Bus } from '@orchestr-sh/orchestr';
 
 await Queue.push(new ProcessPodcast(podcastId));
 await Queue.pushOn('high-priority', new ProcessPodcast(podcastId));
@@ -2393,7 +2686,7 @@ npx orchestr migrate
 Register callbacks for job lifecycle events:
 
 ```typescript
-import { Queue } from '@orchestr-sh/orchestr';
+import { QueueFacade as Queue } from '@orchestr-sh/orchestr';
 
 // Before job processing
 Queue.before((connectionName, job) => {
@@ -2730,14 +3023,14 @@ npx orchestr migrate
 # Clear all cache
 npx orchestr cache:clear
 
-# Clear specific store
-npx orchestr cache:clear --store=redis
+# Clear specific store (the store name is a positional argument)
+npx orchestr cache:clear redis
 
 # Forget a specific key
 npx orchestr cache:forget key-name
 
 # Forget from specific store
-npx orchestr cache:forget key-name --store=redis
+npx orchestr cache:forget key-name redis
 ```
 
 ### Redis Store
@@ -2803,9 +3096,9 @@ Event.listen(KeyWritten, (event: KeyWritten) => {
 Create custom cache drivers for Memcached, etc.:
 
 ```typescript
-import { Store } from '@orchestr-sh/orchestr';
+import type { CacheStore } from '@orchestr-sh/orchestr';
 
-class MemcachedStore implements Store {
+class MemcachedStore implements CacheStore {
   async get(key: string): Promise<any> {
     // Get from Memcached
   }
@@ -2998,7 +3291,7 @@ Route.get('/', () => {
 ### View Facade
 
 ```typescript
-import { View } from '@orchestr-sh/orchestr';
+import { ViewFacade as View } from '@orchestr-sh/orchestr';
 
 // Create a view instance
 const v = View.make('welcome', { name: 'World' });
@@ -3102,10 +3395,44 @@ npx orchestr make:view welcome
 npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoice.html
 ```
 
+## Deploying
+
+Orchestr ships zero-dependency deploy tooling around **Symphony**, Orchestr's hosted control plane (`https://symphony.orchestr.sh`) that records projects, servers and deployment history. The actual deployment runs client-side: `orchestr deploy` builds with `npm run build`, tars `dist/` plus manifests, uploads over `scp`, and on the server installs production dependencies, links `shared/.env` and `shared/storage`, swaps the `releases/<timestamp>` → `current` symlink and reloads PM2. `ssh`/`scp` and `pm2` are the only external requirements.
+
+```bash
+# One-time: authenticate (email + password; the token is stored in ~/.orchestr/credentials, mode 0600)
+npx orchestr deploy:login --email=you@example.com
+
+# Register this project - writes symphony.json ({ "project": "my-app", "api": "..." }) to the repo root
+npx orchestr deploy:init --name=my-app --repository=https://github.com/acme/my-app
+
+# Optionally have orchestr set up a fresh Ubuntu box (Node 22, PM2, Nginx, Let's Encrypt, UFW,
+# the `orchestr` user and the releases/shared directory layout) over direct root SSH
+npx orchestr deploy:provision --host=203.0.113.10 --domain=app.example.com --email=you@example.com
+
+# Register a server (or `deploy:server list` / `deploy:server remove --name=production`)
+npx orchestr deploy:server add --host=203.0.113.10 --name=production --user=orchestr --deploy-path=/home/orchestr
+
+# Manage environment variables (stored server-side, linked into each release as shared/.env)
+npx orchestr deploy:env list
+npx orchestr deploy:env set --key=APP_KEY --value=base64:...
+npx orchestr deploy:env push --file=.env.production
+
+# Ship it
+npx orchestr deploy                       # build, upload, install, symlink swap, pm2 reload
+npx orchestr deploy --migrate             # also runs `npx orchestr migrate` before activation
+npx orchestr deploy --server=production   # limit to one server
+npx orchestr deploy --no-build            # reuse the existing dist/
+npx orchestr deploy:status --limit=5      # recent deployment records (uuid, status, commit, message)
+npx orchestr deploy:rollback              # point the project back to the previous active release
+```
+
+`deploy:rollback` updates the Symphony record and hands you the release UUID; if PM2 is still running the old release it tells you to re-point the symlink (or just redeploy). Builds are tarballs of `dist/` plus any of `package.json`, lockfiles, `tsconfig.json` and `ecosystem.config.js/.cjs` found in the project root, so adjust `npm run build` to your bundler.
+
 ## Features
 
 - ✅ Service Container & Dependency Injection
-- ✅ Configuration System
+- ✅ Configuration System (inline + `config/` files + `.env` loading + `config:cache` snapshots)
 - ✅ HTTP Router & Middleware
 - ✅ Exception Handling (abort, HttpExceptions, JSON/HTML rendering)
 - ✅ Sessions & CSRF Protection (array/file/cookie stores, flash data, token verification)
@@ -3117,14 +3444,17 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Eager/Lazy Loading
 - ✅ Relationship Existence Queries (`has`, `whereHas`, `whereRelation`, `whereBelongsTo`)
 - ✅ Relationship Aggregates (`withCount`, `withSum`, `withExists`, `loadCount`, ...)
+- ✅ Pagination (length-aware, simple, and cursor/keyset)
+- ✅ API Resources (`JsonResource`, `ResourceCollection`, response wrapping & conditional attributes)
 - ✅ Migrations with Schema Builder
 - ✅ Database Seeders
+- ✅ Model Factories (states, sequences, `has`/`for`, Faker adapter)
 - ✅ Events & Listeners
 - ✅ Event Subscribers
 - ✅ Model Lifecycle Events
 - ✅ Event Testing (Fakes & Assertions)
 - ✅ Queue System (Jobs, Chains, Batches, Workers, Redis driver, Unique jobs, Testing fakes)
-- ✅ Cache System (Tags, Locks, Flexible Caching)
+- ✅ Cache System (Tags, Locks, Flexible Caching, Redis store, Cache events)
 - ✅ Task Scheduling (cron parser, closures/commands/jobs/shell, overlap & one-server cache locks)
 - ✅ View System (Templates, Layouts, Directives)
 - ✅ Soft Deletes
@@ -3132,9 +3462,12 @@ npx orchestr make:view emails.invoice    # Creates resources/views/emails/invoic
 - ✅ Password Hashing (scrypt default, bcrypt/argon2 optional, needsRehash)
 - ✅ Encryption (AES-256-GCM payloads, encrypted casts) & Signed URLs
 - ✅ Authentication (session + token guards, remember me, Ensemble user provider, auth/guest middleware)
+- ✅ Authorization (Gate, policies, `can` middleware, gate-backed validation rules)
 - ✅ Filesystem & Uploads (local/public/null disks, path-traversal protection, atomic writes, multipart parsing, UploadedFile storage, upload validation rules)
+- ✅ Collections (`Array`-subclass with the Laravel method surface, `EnsembleCollection`) & Support utilities (`Str`, `Arr`, `Number`, global helpers)
 - ✅ Timestamps
 - ✅ @DynamicRelation Decorator
+- ✅ Console Kernel (40+ built-in commands) & Symphony Deploy Tooling (SSH/SCP atomic releases, PM2, provisioning, rollback)
 
 ## License
 
