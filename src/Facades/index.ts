@@ -11,6 +11,7 @@ export { Event, EventFake } from './Event';
 export { Queue } from './Queue';
 export { Bus } from './Bus';
 export { Cache } from './Cache';
+export { Schedule } from './Schedule';
 export { Session } from './Session';
 export { Storage } from './Storage';
 export { Auth } from './Auth';
