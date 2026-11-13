@@ -1,3 +1,10 @@
+## [1.11.25](https://github.com/orchestr-sh/orchestr/compare/v1.11.24...v1.11.25) (2026-11-13)
+
+
+### Bug Fixes
+
+* **events:** export soft-delete, restore and force-delete model events ([#59](https://github.com/orchestr-sh/orchestr/issues/59)) ([fcefa3c](https://github.com/orchestr-sh/orchestr/commit/fcefa3c743a88af4530358eb13ac32c82e13010c))
+
 ## [1.11.24](https://github.com/orchestr-sh/orchestr/compare/v1.11.23...v1.11.24) (2026-11-13)
 
 ## [1.11.23](https://github.com/orchestr-sh/orchestr/compare/v1.11.22...v1.11.23) (2026-11-13)
