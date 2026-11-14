@@ -27,12 +27,33 @@ import { DeployStatusCommand } from './DeployStatusCommand';
 import { EventCacheCommand } from './EventCacheCommand';
 import { EventClearCommand } from './EventClearCommand';
 import { EventListCommand } from './EventListCommand';
+import { MakeCastCommand } from './MakeCastCommand';
+import { MakeChannelCommand } from './MakeChannelCommand';
+import { MakeClassCommand } from './MakeClassCommand';
+import { MakeCollectionCommand } from './MakeCollectionCommand';
+import { MakeCommandCommand } from './MakeCommandCommand';
 import { MakeControllerCommand } from './MakeControllerCommand';
+import { MakeEnumCommand } from './MakeEnumCommand';
 import { MakeEventCommand } from './MakeEventCommand';
+import { MakeExceptionCommand } from './MakeExceptionCommand';
+import { MakeFactoryCommand } from './MakeFactoryCommand';
+import { MakeInterfaceCommand } from './MakeInterfaceCommand';
 import { MakeJobCommand } from './MakeJobCommand';
 import { MakeListenerCommand } from './MakeListenerCommand';
+import { MakeMailCommand } from './MakeMailCommand';
+import { MakeMiddlewareCommand } from './MakeMiddlewareCommand';
 import { MakeMigrationCommand } from './MakeMigrationCommand';
+import { MakeModelCommand } from './MakeModelCommand';
+import { MakeNotificationCommand } from './MakeNotificationCommand';
+import { MakeObserverCommand } from './MakeObserverCommand';
+import { MakePolicyCommand } from './MakePolicyCommand';
+import { MakeProviderCommand } from './MakeProviderCommand';
+import { MakeRequestCommand } from './MakeRequestCommand';
+import { MakeResourceCommand } from './MakeResourceCommand';
+import { MakeRuleCommand } from './MakeRuleCommand';
 import { MakeSeederCommand } from './MakeSeederCommand';
+import { MakeTestCommand } from './MakeTestCommand';
+import { MakeTraitCommand } from './MakeTraitCommand';
 import { MakeViewCommand } from './MakeViewCommand';
 import { MigrateCommand } from './MigrateCommand';
 import { MigrateFreshCommand } from './MigrateFreshCommand';
@@ -62,7 +83,8 @@ import { ScheduleWorkCommand } from './ScheduleWorkCommand';
 import { SeedCommand } from './SeedCommand';
 
 /**
- * All application commands (migration, seeder, event, queue, cache, view).
+ * All application commands (migration, generator, seeder, event, queue,
+ * cache, view).
  */
 export function coreCommands(app: Application): Command[] {
   return [
@@ -75,6 +97,28 @@ export function coreCommands(app: Application): Command[] {
     new MigrateFreshCommand(app),
     new MigrateStatusCommand(app),
     new MakeMigrationCommand(app),
+    // Generator commands
+    new MakeModelCommand(app),
+    new MakeRequestCommand(app),
+    new MakeMiddlewareCommand(app),
+    new MakeProviderCommand(app),
+    new MakeObserverCommand(app),
+    new MakePolicyCommand(app),
+    new MakeFactoryCommand(app),
+    new MakeResourceCommand(app),
+    new MakeCollectionCommand(app),
+    new MakeRuleCommand(app),
+    new MakeCommandCommand(app),
+    new MakeTestCommand(app),
+    new MakeMailCommand(app),
+    new MakeNotificationCommand(app),
+    new MakeCastCommand(app),
+    new MakeChannelCommand(app),
+    new MakeExceptionCommand(app),
+    new MakeEnumCommand(app),
+    new MakeInterfaceCommand(app),
+    new MakeTraitCommand(app),
+    new MakeClassCommand(app),
     // Seeder commands
     new SeedCommand(app),
     new MakeSeederCommand(app),
