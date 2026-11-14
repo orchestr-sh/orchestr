@@ -4,6 +4,7 @@
  * Create a new migration file
  */
 
+import * as path from 'path';
 import { Command, CommandOptions } from '@/Console/Command';
 import { MigrationCreator } from '@/Database/Migrations/MigrationCreator';
 import { Application } from '@/Foundation/Application';
@@ -22,6 +23,7 @@ export class MakeMigrationCommand extends Command {
     if (!name) {
       this.error('Migration name is required.');
       this.line('Usage: make:migration <name>');
+
       return;
     }
 
@@ -29,7 +31,9 @@ export class MakeMigrationCommand extends Command {
     const table = options.table as string | undefined;
     const create = options.create === true;
 
-    const creator = new MigrationCreator();
+    // Published application stubs (stubs/<name>.stub at the app root)
+    // override the shared migration templates, like every other generator.
+    const creator = new MigrationCreator(path.join(this.app.getBasePath(), 'stubs'));
 
     try {
       const filePath = await creator.create(name, migrationPath, table, create);

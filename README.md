@@ -1286,6 +1286,14 @@ orchestr make:listener ProcessOrder --queued
 # Create controller
 orchestr make:controller UserController
 orchestr make:controller Api/UserController --path=app/Http/Controllers
+
+# Create a model with its matching migration, factory, and seeder
+orchestr make:model Post --migration --factory --seed
+
+# Create the everyday artefacts; existing files are kept unless --force
+orchestr make:request StorePostRequest
+orchestr make:policy PostPolicy --model=Post
+orchestr make:resource PostResource
 ```
 
 ## Console Kernel
@@ -2299,6 +2307,27 @@ All commands run via `npx orchestr` (or `orchestr` when installed globally). The
 | `make:migration <name>` | New migration stub (`--create` + `--table=users` for a create stub, `--table` alone for an update stub) |
 | `db:seed` | Run `DatabaseSeeder` (`--class=UserSeeder` for one seeder) |
 | `make:seeder <name>` | New seeder class |
+| `make:model <name>` | New Ensemble model in `app/Models` (`--migration`/`-m`, `--factory`/`-f`, `--seed`/`-s`, `--pivot`/`-p` + `--table=`, `--all`; matching companions generated too) |
+| `make:request <name>` | New form request in `app/Http/Requests` |
+| `make:middleware <name>` | New middleware in `app/Http/Middleware` |
+| `make:provider <name>` | New service provider in `app/Providers` |
+| `make:observer <name>` | New observer in `app/Observers` (`--model=Post` to type the hooks) |
+| `make:policy <name>` | New policy in `app/Policies` (`--model=Post` for the model-bound verbs) |
+| `make:factory <name>` | New factory in `database/factories` (`--model=` or the `PostFactory`-pairs-with-`Post` convention) |
+| `make:resource <name>` | New JSON resource in `app/Http/Resources` (`--collection` for a ResourceCollection) |
+| `make:collection <name>` | New ResourceCollection wired to its `<Name>Resource` |
+| `make:rule <name>` | New invokable validation rule in `app/Rules` |
+| `make:command <name>` | New console command in `app/Console/Commands` (`--command=` to name the signature) |
+| `make:test <name>` | New test in `tests/Feature` (`--unit` for `tests/Unit`) |
+| `make:mail <name>` | New mail class in `app/Mail` |
+| `make:notification <name>` | New notification class in `app/Notifications` |
+| `make:cast <name>` | New custom cast in `app/Casts` |
+| `make:channel <name>` | New broadcast channel class in `app/Broadcasting` |
+| `make:exception <name>` | New exception class in `app/Exceptions` |
+| `make:enum <name>` | New enum in `app/Enums` |
+| `make:interface <name>` | New interface in `app/Contracts` |
+| `make:trait <name>` | New trait-as-mixin in `app/Traits` |
+| `make:class <name>` | New plain class (at the `app/` root, or in subdirectories named in the input) |
 | `make:event <name>` | New event class |
 | `make:listener <name>` | New listener (`--event=EventName`, `--queued`) |
 | `make:controller <name>` | New controller in `app/Http/Controllers` (`--path=` to override) |
