@@ -379,6 +379,34 @@ export { ScheduleTestCommand } from './Console/Commands/ScheduleTestCommand';
 // Console Commands - View
 export { MakeViewCommand } from './Console/Commands/MakeViewCommand';
 
+// Console Commands - Generators
+export { GeneratorCommand } from './Console/Generators/GeneratorCommand';
+export type { GeneratorContext } from './Console/Generators/GeneratorCommand';
+export { Stub } from './Console/Generators/Stub';
+export type { StubReplacements } from './Console/Generators/Stub';
+export { BUILT_IN_STUBS } from './Console/stubs';
+export { MakeModelCommand } from './Console/Commands/MakeModelCommand';
+export { MakeRequestCommand } from './Console/Commands/MakeRequestCommand';
+export { MakeMiddlewareCommand } from './Console/Commands/MakeMiddlewareCommand';
+export { MakeProviderCommand } from './Console/Commands/MakeProviderCommand';
+export { MakeObserverCommand } from './Console/Commands/MakeObserverCommand';
+export { MakePolicyCommand } from './Console/Commands/MakePolicyCommand';
+export { MakeFactoryCommand } from './Console/Commands/MakeFactoryCommand';
+export { MakeResourceCommand } from './Console/Commands/MakeResourceCommand';
+export { MakeCollectionCommand } from './Console/Commands/MakeCollectionCommand';
+export { MakeRuleCommand } from './Console/Commands/MakeRuleCommand';
+export { MakeCommandCommand } from './Console/Commands/MakeCommandCommand';
+export { MakeTestCommand } from './Console/Commands/MakeTestCommand';
+export { MakeMailCommand } from './Console/Commands/MakeMailCommand';
+export { MakeNotificationCommand } from './Console/Commands/MakeNotificationCommand';
+export { MakeCastCommand } from './Console/Commands/MakeCastCommand';
+export { MakeChannelCommand } from './Console/Commands/MakeChannelCommand';
+export { MakeExceptionCommand } from './Console/Commands/MakeExceptionCommand';
+export { MakeEnumCommand } from './Console/Commands/MakeEnumCommand';
+export { MakeInterfaceCommand } from './Console/Commands/MakeInterfaceCommand';
+export { MakeTraitCommand } from './Console/Commands/MakeTraitCommand';
+export { MakeClassCommand } from './Console/Commands/MakeClassCommand';
+
 // Database Types
 export type { DatabaseAdapter, DatabaseConfig, QueryResult } from './Database/Contracts/DatabaseAdapter';
 export type {

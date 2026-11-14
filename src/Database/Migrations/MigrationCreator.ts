@@ -1,11 +1,15 @@
 /**
- * MigrationCreator
+ * Create a new migration file
  *
- * Creates new migration files from stubs
+ * The migration stubs themselves live in src/Console/stubs so every
+ * generator - `make:migration`, and the one `make:model --migration`
+ * spawns - renders from the same shared templates (DRY). A directory of
+ * published stubs overrides them, matching Stub's contract.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { Stub } from '@/Console/Generators/Stub';
 
 export class MigrationCreator {
   constructor(protected customStubPath?: string) {}
@@ -19,120 +23,28 @@ export class MigrationCreator {
     const fileName = this.getDatePrefix() + '_' + name + '.ts';
     const filePath = path.join(migrationPath, fileName);
 
-    const stub = this.getStub(table, create);
-    const populated = this.populateStub(stub, table);
+    const template = await Stub.load(this.stubName(table, create), this.customStubPath);
+    const content = Stub.render(template, table === undefined ? {} : { table });
 
-    fs.writeFileSync(filePath, populated);
+    fs.writeFileSync(filePath, content);
 
     return filePath;
   }
 
   /**
-   * Get the migration stub
+   * The stub the request maps to: create-table for a fresh table,
+   * update-table for an existing one, blank otherwise.
    */
-  protected getStub(table?: string, create: boolean = false): string {
+  protected stubName(table?: string, create: boolean = false): string {
     if (table && create) {
-      return this.getCreateStub();
+      return 'create-table';
     }
 
     if (table) {
-      return this.getUpdateStub();
+      return 'update-table';
     }
 
-    return this.getBlankStub();
-  }
-
-  /**
-   * Get the blank migration stub
-   */
-  protected getBlankStub(): string {
-    return `import { Migration } from '@orchestr-sh/orchestr';
-import { Schema } from '@orchestr-sh/orchestr';
-
-export default class extends Migration {
-  /**
-   * Run the migrations
-   */
-  async up(schema: Schema): Promise<void> {
-    //
-  }
-
-  /**
-   * Reverse the migrations
-   */
-  async down(schema: Schema): Promise<void> {
-    //
-  }
-}
-`;
-  }
-
-  /**
-   * Get the create table stub
-   */
-  protected getCreateStub(): string {
-    return `import { Migration } from '@orchestr-sh/orchestr';
-import { Schema } from '@orchestr-sh/orchestr';
-
-export default class extends Migration {
-  /**
-   * Run the migrations
-   */
-  async up(schema: Schema): Promise<void> {
-    await schema.create('{{table}}', (table) => {
-      table.id();
-      table.timestamps();
-    });
-  }
-
-  /**
-   * Reverse the migrations
-   */
-  async down(schema: Schema): Promise<void> {
-    await schema.dropIfExists('{{table}}');
-  }
-}
-`;
-  }
-
-  /**
-   * Get the update table stub
-   */
-  protected getUpdateStub(): string {
-    return `import { Migration } from '@orchestr-sh/orchestr';
-import { Schema } from '@orchestr-sh/orchestr';
-
-export default class extends Migration {
-  /**
-   * Run the migrations
-   */
-  async up(schema: Schema): Promise<void> {
-    await schema.table('{{table}}', (table) => {
-      //
-    });
-  }
-
-  /**
-   * Reverse the migrations
-   */
-  async down(schema: Schema): Promise<void> {
-    await schema.table('{{table}}', (table) => {
-      //
-    });
-  }
-}
-`;
-  }
-
-  /**
-   * Populate the stub with table name
-   */
-  protected populateStub(stub: string, table?: string): string {
-    if (table) {
-      return stub.replace(/\{\{table\}\}/g, table);
-    }
-
-    return stub;
+    return 'migration';
   }
 
   /**
