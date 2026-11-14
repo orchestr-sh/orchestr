@@ -310,6 +310,17 @@ export type { FakeProvider } from './Database/Factories/Fake';
 // Console
 export { Command } from './Console/Command';
 export { ConsoleKernel } from './Console/ConsoleKernel';
+export { CommandSignature, InvalidSignatureError } from './Console/Input/CommandSignature';
+export type { ParsedSignature, SignatureArgument, SignatureOption } from './Console/Input/CommandSignature';
+export { CommandInput, ConsoleInputError } from './Console/Input/CommandInput';
+export { CommandDiscovery } from './Console/Discovery/CommandDiscovery';
+export type { CommandClass, ModuleImporter } from './Console/Discovery/CommandDiscovery';
+export { OutputStyle } from './Console/Output/OutputStyle';
+export type { OutputStyleOptions, OutputWriter } from './Console/Output/OutputStyle';
+export { AnsiColor } from './Console/Output/AnsiColor';
+export type { AnsiStyle } from './Console/Output/AnsiColor';
+export { Prompter } from './Console/Output/Prompter';
+export type { PromptValidator } from './Console/Output/Prompter';
 
 // Console Commands - Migrations
 export { MigrateCommand } from './Console/Commands/MigrateCommand';

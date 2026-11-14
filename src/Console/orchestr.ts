@@ -21,7 +21,13 @@ class OrchestrKernel extends ConsoleKernel {
 
 // Run the CLI
 const kernel = new OrchestrKernel(app);
-kernel.run().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+
+// Application commands live in app/Console/Commands; discover and register
+// them after the framework manifest so apps can override built-ins by name.
+kernel
+  .discoverCommands()
+  .then(() => kernel.run())
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
