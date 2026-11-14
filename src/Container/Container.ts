@@ -168,13 +168,23 @@ export class Container {
    */
   // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
   private resolveDependencies(concrete: Function, parameters: any[] = []): any[] {
-    const paramTypes = Reflect.getMetadata('design:paramtypes', concrete) || [];
+    const paramTypes: any[] = Reflect.getMetadata('design:paramtypes', concrete) || [];
 
-    return paramTypes.map((paramType: any, index: number) => {
+    // Explicitly provided parameters extend the metadata arity (and can
+    // substitute it entirely when metadata is absent), so callers such as
+    // console command discovery can hand a class its `Application` even
+    // when decorators were not compiled.
+    const count = Math.max(paramTypes.length, parameters.length);
+    const dependencies: any[] = [];
+
+    for (let index = 0; index < count; index++) {
       // If parameter was provided explicitly, use it
       if (parameters[index] !== undefined) {
-        return parameters[index];
+        dependencies.push(parameters[index]);
+        continue;
       }
+
+      const paramType = paramTypes[index];
 
       // If no type information, throw error
       if (!paramType || paramType === Object) {
@@ -185,8 +195,10 @@ export class Container {
       }
 
       // Resolve the dependency from the container
-      return this.make(paramType);
-    });
+      dependencies.push(this.make(paramType));
+    }
+
+    return dependencies;
   }
 
   /**

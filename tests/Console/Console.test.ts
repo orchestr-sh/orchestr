@@ -133,21 +133,21 @@ describe('ConsoleKernel', () => {
     it('parses --option=value flags', async () => {
       const cmd = new TestCommand();
       kernel.register(cmd);
-      await kernel.run(['node', 'script.js', 'test:run', '--env=testing']);
+      await kernel.run(['node', 'script.js', 'test:run', 'myarg', '--env=testing']);
       expect(cmd.receivedOptions).toEqual({ env: 'testing' });
     });
 
     it('parses --flag as boolean true', async () => {
       const cmd = new TestCommand();
       kernel.register(cmd);
-      await kernel.run(['node', 'script.js', 'test:run', '--verbose']);
+      await kernel.run(['node', 'script.js', 'test:run', 'myarg', '--verbose']);
       expect(cmd.receivedOptions).toEqual({ verbose: true });
     });
 
     it('parses -shortflag as boolean true', async () => {
       const cmd = new TestCommand();
       kernel.register(cmd);
-      await kernel.run(['node', 'script.js', 'test:run', '-v']);
+      await kernel.run(['node', 'script.js', 'test:run', 'myarg', '-v']);
       expect(cmd.receivedOptions).toEqual({ v: true });
     });
 

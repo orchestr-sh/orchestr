@@ -1288,6 +1288,52 @@ orchestr make:controller UserController
 orchestr make:controller Api/UserController --path=app/Http/Controllers
 ```
 
+## Console Kernel
+
+Commands use Laravel-style signatures parsed into arguments and options by the kernel:
+
+```typescript
+import { Command, CommandOptions } from '@orchestr-sh/orchestr';
+
+export class MakeModelCommand extends Command {
+  signature = 'make:model {name} {--m|migration} {--f|factory} {--all}';
+  description = 'Create a new model';
+
+  async handle(args: string[], options: CommandOptions): Promise<void> {
+    const name = this.argument('name'); // or args[0]
+    if (this.option('migration')) {
+      // ...
+    }
+
+    this.success(`Model created: ${name}`);
+    const overwrite = await this.confirm('Overwrite existing file?'); // defaults when non-interactive
+  }
+}
+```
+
+**Signature grammar**
+
+| Token | Meaning |
+| ----- | ------- |
+| `{name}` | Required argument |
+| `{name?}` | Optional argument |
+| `{name=default}` | Argument with a default value |
+| `{names*}` / `{names*=a,b}` | Array argument (collects remaining tokens), optional defaults |
+| `{--all}` | Boolean flag (default `false`) |
+| `{--m\|migration}` | Option with shortcut `-m` / `--migration` |
+| `{--env=production}` | Value option with default; `{--env=}` defaults to null |
+| `{name : Description}` | Description shown by `help` |
+
+**Kernel behaviour**
+
+- Validation: missing required arguments or stray positional arguments print an error with the usage line and exit non-zero. Undeclared `--options` keep passing through untouched.
+- Global flags: `orchestr list`, `orchestr help <command>`, `--help`/`-h`, `--quiet`/`-q`, `--no-interaction`/`-n`, and `-v`/`-vv`/`-vvv` verbosity (stack traces at `-vv`).
+- Discovery: commands in `app/Console/Commands` are imported at boot, instantiated through the container (so constructor injection works), and may override framework commands by name. Framework built-ins come from the manifest in `orchestr/Console/Commands`.
+
+**Output & prompts**
+
+Every command writes through a shared `OutputStyle` (`info`, `success`, `warning`, `error`, `comment`, `question`, `line`, `newLine`, `table`, `progress`, `spin`). Colour follows the `NO_COLOR` / `FORCE_COLOR` environment variables and falls back to plain text on non-TTY output. Prompts (`ask`, `secret`, `confirm`, `choice`, `anticipate`) are built on `node:readline` and resolve to their defaults whenever the session is non-interactive, so automation never hangs.
+
 ## Controllers
 
 Create a new controller with the CLI:
