@@ -25,6 +25,7 @@ describe('MakeMigrationCommand', () => {
   it('uses --path when provided', async () => {
     const app = {
       databasePath: vi.fn().mockReturnValue('/app/database/migrations'),
+      getBasePath: vi.fn().mockReturnValue('/app'),
     } as any;
 
     const command = new MakeMigrationCommand(app);
@@ -42,6 +43,7 @@ describe('MakeMigrationCommand', () => {
   it('falls back to app.databasePath when --path is missing', async () => {
     const app = {
       databasePath: vi.fn().mockReturnValue('/app/database/migrations'),
+      getBasePath: vi.fn().mockReturnValue('/app'),
     } as any;
 
     const command = new MakeMigrationCommand(app);

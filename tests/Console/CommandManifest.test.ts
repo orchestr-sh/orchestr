@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Command } from '@/Console/Command';
 import { coreCommands, deployCommands } from '@/Console/Commands';
 import { ConsoleKernel } from '@/Console/ConsoleKernel';
+import { GeneratorCommand } from '@/Console/Generators/GeneratorCommand';
 import { Application } from '@/Foundation/Application';
 import * as indexExports from '@/index';
 
@@ -12,7 +13,9 @@ type CommandClass = new (...args: any[]) => Command;
  * the abstract Command base class). The manifest must register each of them.
  *
  * Some exports (facades) are getters that throw until an app root is set,
- * so values are read defensively and unreadable exports skipped.
+ * so values are read defensively and unreadable exports skipped. Abstract
+ * bases like GeneratorCommand are scaffolding for commands, not commands,
+ * and are excluded.
  */
 function exportedCommandClasses(): CommandClass[] {
   const classes: CommandClass[] = [];
@@ -20,7 +23,11 @@ function exportedCommandClasses(): CommandClass[] {
   for (const key of Object.keys(indexExports)) {
     try {
       const value = (indexExports as Record<string, unknown>)[key];
-      if (typeof value === 'function' && (value as CommandClass).prototype instanceof Command) {
+      if (
+        typeof value === 'function' &&
+        (value as CommandClass).prototype instanceof Command &&
+        value !== GeneratorCommand
+      ) {
         classes.push(value as CommandClass);
       }
     } catch {
