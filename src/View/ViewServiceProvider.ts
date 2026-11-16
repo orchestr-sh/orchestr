@@ -7,7 +7,9 @@
 
 import { join } from 'path';
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
-import { TemplateEngine } from './Engines/TemplateEngine';
+import { csrf_token } from '@/Support/helpers';
+import { ViewCache } from './Compilers/ViewCache';
+import { CompilerEngine } from './Engines/CompilerEngine';
 import { ViewFactory } from './ViewFactory';
 
 export interface ViewConfig {
@@ -22,6 +24,18 @@ export interface ViewConfig {
    * Defaults to ['.html', '.orchestr.html']
    */
   extensions?: string[];
+
+  /**
+   * Where compiled templates are cached.
+   * Defaults to [{basePath}/storage/framework/views]
+   */
+  cachePath?: string;
+
+  /**
+   * Disable the compiled-view cache entirely (useful in development/tests).
+   * Defaults to true.
+   */
+  cache?: boolean;
 }
 
 export class ViewServiceProvider extends ServiceProvider {
@@ -32,11 +46,21 @@ export class ViewServiceProvider extends ServiceProvider {
     this.app.singleton('view', () => {
       const config = this.getConfig();
 
-      const engine = new TemplateEngine();
+      const engine = new CompilerEngine({
+        cache: config.cache ? new ViewCache(config.cachePath) : null,
+      });
       const factory = new ViewFactory(engine, config.paths, config.extensions);
 
-      // Wire the engine back to the factory so @include / @extends work
+      // Wire the engine back to the factory so @include / @extends / @each /
+      // @component resolve names, and @csrf can reach the session token.
       engine.setResolver(factory);
+      engine.setCsrfTokenResolver(() => {
+        try {
+          return csrf_token();
+        } catch {
+          return '';
+        }
+      });
 
       return factory;
     });
@@ -56,6 +80,8 @@ export class ViewServiceProvider extends ServiceProvider {
         return {
           paths: viewConfig.paths ?? [join(basePath, 'resources/views')],
           extensions: viewConfig.extensions ?? ['.html', '.orchestr.html'],
+          cachePath: viewConfig.cachePath ?? viewConfig.cache_path ?? join(basePath, 'storage/framework/views'),
+          cache: viewConfig.cache ?? true,
         };
       }
     } catch {
@@ -65,6 +91,8 @@ export class ViewServiceProvider extends ServiceProvider {
     return {
       paths: [join(basePath, 'resources/views')],
       extensions: ['.html', '.orchestr.html'],
+      cachePath: join(basePath, 'storage/framework/views'),
+      cache: true,
     };
   }
 }

@@ -81,6 +81,8 @@ import { ScheduleRunCommand } from './ScheduleRunCommand';
 import { ScheduleTestCommand } from './ScheduleTestCommand';
 import { ScheduleWorkCommand } from './ScheduleWorkCommand';
 import { SeedCommand } from './SeedCommand';
+import { ViewCacheCommand } from './ViewCacheCommand';
+import { ViewClearCommand } from './ViewClearCommand';
 
 /**
  * All application commands (migration, generator, seeder, event, queue,
@@ -160,6 +162,8 @@ export function coreCommands(app: Application): Command[] {
     new ScheduleTestCommand(app),
     // View commands
     new MakeViewCommand(app),
+    new ViewCacheCommand(app),
+    new ViewClearCommand(app),
   ];
 }
 

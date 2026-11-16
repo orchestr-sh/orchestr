@@ -5,18 +5,27 @@
  */
 
 import type { ViewEngine } from './Engines/ViewEngine';
+import type { ViewFactory } from './ViewFactory';
 
 export class View {
   protected viewPath: string;
   protected viewName: string;
   protected viewData: Record<string, any>;
   protected engine: ViewEngine;
+  protected factory: ViewFactory | null;
 
-  constructor(engine: ViewEngine, name: string, path: string, data: Record<string, any> = {}) {
+  constructor(
+    engine: ViewEngine,
+    name: string,
+    path: string,
+    data: Record<string, any> = {},
+    factory: ViewFactory | null = null
+  ) {
     this.engine = engine;
     this.viewName = name;
     this.viewPath = path;
     this.viewData = data;
+    this.factory = factory;
   }
 
   /**
@@ -34,9 +43,13 @@ export class View {
   }
 
   /**
-   * Render the view to an HTML string.
+   * Render the view to an HTML string. Runs any matching view composers
+   * first, like Laravel's View::renderContents.
    */
   async render(): Promise<string> {
+    if (this.factory) {
+      await this.factory.callComposers(this);
+    }
     return this.engine.get(this.viewPath, this.viewData);
   }
 
