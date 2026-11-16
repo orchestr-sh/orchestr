@@ -1,4 +1,5 @@
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
+import { RouteCache } from '@/Routing/RouteCache';
 import { Router } from '@/Routing/Router';
 import { Facade } from '@/Support/Facade';
 
@@ -28,6 +29,16 @@ export class RouteServiceProvider extends ServiceProvider {
   }
 
   async boot(): Promise<void> {
+    // A cached route collection replaces the route files, exactly like
+    // Laravel's RouteServiceProvider deferring to routesAreCached(): the
+    // snapshot is hydrated straight into the router and the loaders never
+    // import. `route:clear` restores file loading.
+    if (this.app.routesAreCached()) {
+      const router = this.app.make<Router>('router');
+      new RouteCache(this.app).restore(router);
+      return;
+    }
+
     // Load routes from route loaders
     for (const loader of this.routeLoaders) {
       await loader();
