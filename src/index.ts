@@ -16,6 +16,11 @@ export { Config as ConfigClass } from './Foundation/Config/Config';
 export { ConfigLoader } from './Foundation/Config/ConfigLoader';
 export { ConfigServiceProvider } from './Foundation/Config/ConfigServiceProvider';
 export { Env } from './Foundation/Env/Env';
+export { DotenvWriter } from './Foundation/Env/DotenvWriter';
+export { ApplicationDiagnostics } from './Foundation/Diagnostics/ApplicationDiagnostics';
+export type { AboutRow, AboutSection } from './Foundation/Diagnostics/ApplicationDiagnostics';
+export { HealthMonitor } from './Foundation/Diagnostics/HealthMonitor';
+export type { HealthCheckResult, HealthStatus } from './Foundation/Diagnostics/HealthMonitor';
 
 // Foundation Exceptions
 export {
@@ -68,6 +73,8 @@ export { RouteResolver } from './Routing/RouteResolver';
 export type { RouteBinder, ActionReflection } from './Routing/RouteResolver';
 export { UrlGenerator } from './Routing/UrlGenerator';
 export type { RouteUrlParameters, UrlSigningKeyResolver } from './Routing/UrlGenerator';
+export { RouteCache, ROUTE_CACHE_VERSION } from './Routing/RouteCache';
+export type { CachedRoute, CachedRouteCollection } from './Routing/RouteCache';
 export { buildResourceRoutes } from './Routing/ResourceRegistrar';
 export type { ResourceOptions, ResourceRouteDefinition, ResourceActionName } from './Routing/ResourceRegistrar';
 
@@ -186,6 +193,8 @@ export { DB } from './Facades/DB';
 
 // Ensemble ORM
 export { Ensemble } from './Database/Ensemble/Ensemble';
+export { ModelInspector } from './Database/Ensemble/ModelInspector';
+export type { ModelMetadata, ModelAttributeInfo, ModelRelationInfo } from './Database/Ensemble/ModelInspector';
 export { EnsembleBuilder } from './Database/Ensemble/EnsembleBuilder';
 export { EnsembleCollection } from './Database/Ensemble/EnsembleCollection';
 export { SoftDeletingScope } from './Database/Ensemble/SoftDeletingScope';
@@ -380,6 +389,20 @@ export { ScheduleTestCommand } from './Console/Commands/ScheduleTestCommand';
 export { MakeViewCommand } from './Console/Commands/MakeViewCommand';
 export { ViewCacheCommand } from './Console/Commands/ViewCacheCommand';
 export { ViewClearCommand } from './Console/Commands/ViewClearCommand';
+
+// Console Commands - Operational
+export { AboutCommand } from './Console/Commands/AboutCommand';
+export { DbMonitorCommand } from './Console/Commands/DbMonitorCommand';
+export { DbWipeCommand } from './Console/Commands/DbWipeCommand';
+export { KeyGenerateCommand } from './Console/Commands/KeyGenerateCommand';
+export { ModelShowCommand } from './Console/Commands/ModelShowCommand';
+export { OptimizeCommand } from './Console/Commands/OptimizeCommand';
+export { OptimizeClearCommand } from './Console/Commands/OptimizeClearCommand';
+export { RouteCacheCommand } from './Console/Commands/RouteCacheCommand';
+export { RouteClearCommand } from './Console/Commands/RouteClearCommand';
+export { RouteListCommand } from './Console/Commands/RouteListCommand';
+export { ServeCommand } from './Console/Commands/ServeCommand';
+export { StorageLinkCommand } from './Console/Commands/StorageLinkCommand';
 
 // Console Commands - Generators
 export { GeneratorCommand } from './Console/Generators/GeneratorCommand';

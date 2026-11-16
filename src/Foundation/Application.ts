@@ -131,6 +131,24 @@ export class Application extends Container {
   }
 
   /**
+   * Get the path where the cached route collection lives. The
+   * `APP_ROUTES_CACHE` environment variable points at an explicit snapshot;
+   * otherwise the conventional `bootstrap/cache/routes.json` is used.
+   */
+  getCachedRoutesPath(): string {
+    const fromEnv = Env.get('APP_ROUTES_CACHE');
+
+    return typeof fromEnv === 'string' && fromEnv !== '' ? fromEnv : this.bootstrapPath('cache/routes.json');
+  }
+
+  /**
+   * Determine if a route cache file exists
+   */
+  routesAreCached(): boolean {
+    return existsSync(this.getCachedRoutesPath());
+  }
+
+  /**
    * Register a service provider with the application
    * Laravel: $app->register(provider)
    */

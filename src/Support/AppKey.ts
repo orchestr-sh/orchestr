@@ -7,12 +7,21 @@
  * framework imports so any layer can use it (SRP).
  */
 
+import { randomBytes } from 'crypto';
 import { MissingAppKeyException } from '@/Encryption/MissingAppKeyException';
 
 /**
  * The key length AES-256-GCM requires
  */
 export const APP_KEY_LENGTH = 32;
+
+/**
+ * Generate a fresh application key in Laravel's `base64:` form.
+ * Laravel: Encrypter::generateKey() feeding artisan key:generate
+ */
+export function generateAppKey(): string {
+  return 'base64:' + randomBytes(APP_KEY_LENGTH).toString('base64');
+}
 
 /**
  * Normalise an app key into raw bytes.

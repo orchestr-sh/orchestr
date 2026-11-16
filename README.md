@@ -1337,6 +1337,7 @@ export class MakeModelCommand extends Command {
 - Validation: missing required arguments or stray positional arguments print an error with the usage line and exit non-zero. Undeclared `--options` keep passing through untouched.
 - Global flags: `orchestr list`, `orchestr help <command>`, `--help`/`-h`, `--quiet`/`-q`, `--no-interaction`/`-n`, and `-v`/`-vv`/`-vvv` verbosity (stack traces at `-vv`).
 - Discovery: commands in `app/Console/Commands` are imported at boot, instantiated through the container (so constructor injection works), and may override framework commands by name. Framework built-ins come from the manifest in `orchestr/Console/Commands`.
+- Destructive gating: `Command::confirmToProceed(options)` backs the shared `--force` rule - interactive sessions get a confirmation prompt, non-interactive sessions refuse until `--force` is passed (`db:wipe`, `key:generate` overwriting a key, `storage:link` replacing a foreign path).
 
 **Output & prompts**
 
@@ -2082,6 +2083,16 @@ npx orchestr config:clear # removes the snapshot; files are read again
 
 While the snapshot exists the app loads only that (`app.configurationIsCached()`), so edited config files take effect after `config:clear` - there is no staleness detection. The path is overridable with `APP_CONFIG_CACHE`. Because the snapshot is JSON, configs holding closures (e.g. callbacks wired into service classes) cannot be cached; `config:cache` refuses them and lists the offending dot-paths.
 
+### Caching routes
+
+```bash
+npx orchestr route:list # table of method, URI, name, action, middleware (--json, --path=)
+npx orchestr route:cache # saves the route collection to bootstrap/cache/routes.json
+npx orchestr route:clear # removes the snapshot; route files load again
+```
+
+While `bootstrap/cache/routes.json` exists (`app.routesAreCached()`, path overridable with `APP_ROUTES_CACHE`), the `RouteServiceProvider` hydrates the router from the snapshot during boot and never imports the route files. Like `config:cache` the snapshot is JSON, so Closure actions, controller class tuples, and inline function middleware cannot be cached - `route:cache` refuses them by name. `optimize` runs the config, route, and view caches together (and skips subsystems the app has not registered); `optimize:clear` removes all three.
+
 ### Database setup
 
 The built-in `DatabaseServiceProvider` binds the `'db'` manager from `config('database')`, but does not connect or hand the resolver to Ensembles - a small provider of your own does:
@@ -2354,13 +2365,29 @@ All commands run via `npx orchestr` (or `orchestr` when installed globally). The
 | `cache:table` | Create the cache table migration |
 | `config:cache` | Compile `config/*` into `bootstrap/cache/config.json` |
 | `config:clear` | Remove the configuration snapshot |
+| `route:list` | Method, URI, name, action, and middleware per route (`--json`, `--path=`) |
+| `route:cache` | Save the route collection into `bootstrap/cache/routes.json` |
+| `route:clear` | Remove the route snapshot |
+| `optimize` | Run the config, route, and view caches in one shot |
+| `optimize:clear` | Remove all three caches |
+| `key:generate` | Write a fresh `APP_KEY` into `.env` (`--show` to print only, `--force` to replace) |
+| `storage:link` | Symlink `public/storage` to the public disk (idempotent; `--force` replaces) |
+| `serve` | Start the HTTP kernel (`--host=127.0.0.1`, `--port=8000`) |
+| `about` | Version, environment, and cache/database/queue/filesystem/session drivers |
+| `db:wipe` | Drop every table (confirms; `--force` non-interactively) |
+| `db:monitor` | Health of the database, cache, and queue connections (`--database=`) |
+| `model:show <model>` | Table, attributes, casts, relations, and row count for an Ensemble |
 | `schedule:run` | Run all due tasks (your single crontab line) |
 | `schedule:work` | Long-running minute loop around `schedule:run` |
 | `schedule:list` | Registered tasks and next run times (`--timezone=`) |
 | `schedule:test [task]` | Run one task immediately |
 | `make:view <name>` | New view template under `resources/views` |
+| `view:cache` | Compile all Blade-compatible views up front |
+| `view:clear` | Delete the compiled views |
 
 The deploy commands (`deploy:login`, `deploy:init`, `deploy:server`, `deploy`, `deploy:status`, `deploy:env`, `deploy:rollback`, `deploy:provision`) are registered alongside these - see [Deploying](#deploying).
+
+Destructive commands (`db:wipe`, replacing an existing key with `key:generate`, `storage:link --force` over a foreign path) prompt for confirmation interactively and refuse to run without `--force` in non-interactive sessions (CI, piped output).
 
 ## Queue System
 

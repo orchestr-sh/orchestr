@@ -117,6 +117,14 @@ export class DatabaseManager {
   }
 
   /**
+   * Get the full configuration
+   * Laravel: Manager::getConfig()
+   */
+  getConfig(): DatabaseManagerConfig {
+    return this.config;
+  }
+
+  /**
    * Extend the database manager with a macro
    */
   extend(name: string, resolver: () => any): void {

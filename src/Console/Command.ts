@@ -250,4 +250,37 @@ export abstract class Command {
   protected anticipate(question: string, choices: string[], fallback: string = ''): Promise<string> {
     return this.getStyle().anticipate(question, choices, fallback);
   }
+
+  // -------------------------------------------------- destructive gating
+
+  /**
+   * The gate every destructive command runs through, mirroring Laravel's
+   * `Command::confirmToProceed()`:
+   *
+   * - `--force` always proceeds (CI, scripted runs);
+   * - interactive sessions answer a real confirmation prompt;
+   * - non-interactive sessions refuse instead of silently destroying data,
+   *   pointing at the flag that unlocks the run.
+   *
+   * @returns true when the caller may proceed (the prompt answered yes)
+   * @throws when the command would need a prompt it cannot show
+   */
+  protected async confirmToProceed(
+    options: CommandOptions,
+    question: string = 'Do you really expect to proceed?'
+  ): Promise<boolean> {
+    if (options.force === true || options.force === 'true') {
+      return true;
+    }
+
+    const style = this.getStyle();
+
+    if (!style.isInteractive()) {
+      throw new Error(
+        'Refusing to run this command destructively in non-interactive mode. Pass --force to continue anyway.'
+      );
+    }
+
+    return style.confirm(question, false);
+  }
 }

@@ -11,11 +11,14 @@
 
 import type { Application } from '@/Foundation/Application';
 import type { Command } from '../Command';
+import { AboutCommand } from './AboutCommand';
 import { CacheClearCommand } from './CacheClearCommand';
 import { CacheForgetCommand } from './CacheForgetCommand';
 import { CacheTableCommand } from './CacheTableCommand';
 import { ConfigCacheCommand } from './ConfigCacheCommand';
 import { ConfigClearCommand } from './ConfigClearCommand';
+import { DbMonitorCommand } from './DbMonitorCommand';
+import { DbWipeCommand } from './DbWipeCommand';
 import { DeployCommand } from './DeployCommand';
 import { DeployEnvCommand } from './DeployEnvCommand';
 import { DeployInitCommand } from './DeployInitCommand';
@@ -27,6 +30,7 @@ import { DeployStatusCommand } from './DeployStatusCommand';
 import { EventCacheCommand } from './EventCacheCommand';
 import { EventClearCommand } from './EventClearCommand';
 import { EventListCommand } from './EventListCommand';
+import { KeyGenerateCommand } from './KeyGenerateCommand';
 import { MakeCastCommand } from './MakeCastCommand';
 import { MakeChannelCommand } from './MakeChannelCommand';
 import { MakeClassCommand } from './MakeClassCommand';
@@ -62,6 +66,9 @@ import { MigrateRefreshCommand } from './MigrateRefreshCommand';
 import { MigrateResetCommand } from './MigrateResetCommand';
 import { MigrateRollbackCommand } from './MigrateRollbackCommand';
 import { MigrateStatusCommand } from './MigrateStatusCommand';
+import { ModelShowCommand } from './ModelShowCommand';
+import { OptimizeClearCommand } from './OptimizeClearCommand';
+import { OptimizeCommand } from './OptimizeCommand';
 import { QueueBatchesTableCommand } from './QueueBatchesTableCommand';
 import { QueueClearCommand } from './QueueClearCommand';
 import { QueueFailedCommand } from './QueueFailedCommand';
@@ -76,17 +83,22 @@ import { QueueRestartCommand } from './QueueRestartCommand';
 import { QueueRetryCommand } from './QueueRetryCommand';
 import { QueueTableCommand } from './QueueTableCommand';
 import { QueueWorkCommand } from './QueueWorkCommand';
+import { RouteCacheCommand } from './RouteCacheCommand';
+import { RouteClearCommand } from './RouteClearCommand';
+import { RouteListCommand } from './RouteListCommand';
 import { ScheduleListCommand } from './ScheduleListCommand';
 import { ScheduleRunCommand } from './ScheduleRunCommand';
 import { ScheduleTestCommand } from './ScheduleTestCommand';
 import { ScheduleWorkCommand } from './ScheduleWorkCommand';
 import { SeedCommand } from './SeedCommand';
+import { ServeCommand } from './ServeCommand';
+import { StorageLinkCommand } from './StorageLinkCommand';
 import { ViewCacheCommand } from './ViewCacheCommand';
 import { ViewClearCommand } from './ViewClearCommand';
 
 /**
  * All application commands (migration, generator, seeder, event, queue,
- * cache, view).
+ * cache, view, operational).
  */
 export function coreCommands(app: Application): Command[] {
   return [
@@ -155,6 +167,19 @@ export function coreCommands(app: Application): Command[] {
     // Config commands
     new ConfigCacheCommand(app),
     new ConfigClearCommand(app),
+    // Operational commands
+    new AboutCommand(app),
+    new DbMonitorCommand(app),
+    new DbWipeCommand(app),
+    new KeyGenerateCommand(app),
+    new ModelShowCommand(app),
+    new OptimizeCommand(app),
+    new OptimizeClearCommand(app),
+    new RouteCacheCommand(app),
+    new RouteClearCommand(app),
+    new RouteListCommand(app),
+    new ServeCommand(app),
+    new StorageLinkCommand(app),
     // Schedule commands
     new ScheduleRunCommand(app),
     new ScheduleWorkCommand(app),
