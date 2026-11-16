@@ -17,12 +17,56 @@
  */
 
 import type { Disk } from '@/Filesystem/Contracts/Disk';
-import type { FilesystemManager } from '@/Filesystem/FilesystemManager';
+import type { FilesystemConfig, FilesystemManager } from '@/Filesystem/FilesystemManager';
+import type { StorageFake } from '@/Support/Testing/Fakes/StorageFake';
 import { Facade } from '@/Support/Facade';
+import { createStorageFake } from '@/Support/Testing/Fakes/StorageFake';
 
 class StorageFacadeClass extends Facade {
   protected static getFacadeAccessor(): string {
     return 'filesystem';
+  }
+
+  /**
+   * Swap the given disks (all of them by default) for in-memory fakes:
+   * writes land in process memory and the returned fake exposes
+   * Laravel-style storage assertions.
+   *
+   * @returns StorageFake instance for making assertions
+   *
+   * @example
+   * ```typescript
+   * const storage = Storage.fake();
+   *
+   * await Storage.put('welcome.txt', 'Hello');
+   *
+   * await storage.assertExists('welcome.txt');
+   * await storage.assertMissing('goodbye.txt');
+   * ```
+   */
+  static fake(disks?: string | string[]): StorageFake {
+    const app = this.getFacadeApplication();
+
+    if (!app) {
+      throw new Error('Application not initialized. Cannot fake the filesystem.');
+    }
+
+    let config: Partial<FilesystemConfig> = {};
+
+    try {
+      config = ((app.make('config') as any).get?.('filesystems') ?? {}) as Partial<FilesystemConfig>;
+    } catch {
+      // No config repository: the fake runs on Laravel's default disks
+    }
+
+    const { manager, fake } = createStorageFake(config, disks);
+
+    app.instance('filesystem', manager);
+
+    // Drop any cached facade root so subsequent Storage.* calls resolve the fake.
+    this.clearResolvedInstance('filesystem');
+
+    return fake;
   }
 }
 

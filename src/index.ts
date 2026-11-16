@@ -809,3 +809,35 @@ export type { HttpMethod, RouteAction } from './Routing/Route';
 export type { Middleware, MiddlewareArgument, NextFunction, TerminableMiddleware } from './Routing/Pipeline';
 export type { Abstract, Concrete, Binding } from './Container/Container';
 export type { CookieOptions } from './Routing/Response';
+
+// Testing
+export {
+  ArrayFilesystemAdapter,
+  BaseTestCase,
+  clock,
+  clockNow,
+  createFakeCacheManager,
+  createStorageFake,
+  DatabaseTransactions,
+  FakeCacheManager,
+  FakeFilesystemDisk,
+  FakeFilesystemManager,
+  fakeHttp,
+  freezeTime,
+  Http,
+  HttpFake,
+  Mail,
+  MailFake,
+  Notification,
+  NotificationFake,
+  RefreshDatabase,
+  StorageFake,
+  TestCase,
+  TestClient,
+  TestResponse,
+  ThrowingHandler,
+  travel,
+  travelBack,
+  travelTo,
+} from './Testing';
+export type { CallOptions, ExceptionExpectation, ServiceProviderClass, TestApplication, TimeLike } from './Testing';

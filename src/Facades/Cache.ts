@@ -31,13 +31,54 @@
  * ```
  */
 
-import type { CacheManager } from '@/Cache/CacheManager';
+import type { CacheConfig, CacheManager } from '@/Cache/CacheManager';
 import type { Repository } from '@/Cache/Repository';
 import { Facade } from '@/Support/Facade';
+import { createFakeCacheManager } from '@/Support/Testing/Fakes/CacheFake';
 
 class CacheFacadeClass extends Facade {
   protected static getFacadeAccessor(): string {
     return 'cache';
+  }
+
+  /**
+   * Swap the cache for an array-backed fake: every store resolves to an
+   * in-memory repository that vanishes with the application.
+   *
+   * @returns the fake manager, usable through the usual Cache surface
+   *
+   * @example
+   * ```typescript
+   * Cache.fake();
+   *
+   * await Cache.put('key', 'value', 60);
+   * await Cache.get('key'); // 'value' - never leaves the process
+   * ```
+   */
+  static fake(): CacheManager {
+    const app = this.getFacadeApplication();
+
+    if (!app) {
+      throw new Error('Application not initialized. Cannot fake the cache.');
+    }
+
+    let config: Partial<CacheConfig> = {};
+
+    try {
+      config = ((app.make('config') as any).get?.('cache') ?? {}) as Partial<CacheConfig>;
+    } catch {
+      // No config repository: the fake builds its own array stores
+    }
+
+    const manager = createFakeCacheManager(config);
+
+    app.instance('cache', manager);
+
+    // Drop any cached facade roots so subsequent Cache.* calls resolve the fake.
+    this.clearResolvedInstance('cache');
+    this.clearResolvedInstance('cache.store');
+
+    return manager;
   }
 }
 

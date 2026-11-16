@@ -134,6 +134,17 @@ export class SessionGuard implements StatefulGuard {
   }
 
   /**
+   * Park a user on the guard so user() resolves it without touching the
+   * session or the recaller cookie - the seam acting-as style tests use
+   * Laravel: SessionGuard::setUser()
+   */
+  setUser(user: Authenticatable): void {
+    this.resolvedUser = user;
+    this.userResolved = true;
+    this.usingRecaller = false;
+  }
+
+  /**
    * The currently authenticated user: session first, then the remember
    * cookie, then guest
    * Laravel: SessionGuard::user()

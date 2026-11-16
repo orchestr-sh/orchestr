@@ -21,6 +21,11 @@
       "types": "./dist/Events/index.d.ts",
       "import": "./dist/Events/index.mjs",
       "require": "./dist/Events/index.cjs"
+    },
+    "./Testing": {
+      "types": "./dist/Testing/index.d.ts",
+      "import": "./dist/Testing/index.mjs",
+      "require": "./dist/Testing/index.cjs"
     }
   },
   "bin": {

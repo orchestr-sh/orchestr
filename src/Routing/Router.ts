@@ -145,6 +145,15 @@ export class Router {
   }
 
   /**
+   * Drop the memoised exception handler so the next dispatch resolves the
+   * container's current binding again - the seam tests use after swapping
+   * the handler (withoutExceptionHandling)
+   */
+  forgetExceptionHandler(): void {
+    this.exceptionHandler = undefined;
+  }
+
+  /**
    * Register an explicit binding for a route parameter
    * Laravel: Route::bind('user', fn ($value) => ...)
    */
