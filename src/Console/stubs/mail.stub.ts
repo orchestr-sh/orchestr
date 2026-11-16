@@ -1,5 +1,5 @@
 /**
- * Mail stub - a renderable message built on the framework's view layer.
+ * Mail stub - a renderable message built on the framework's mail layer.
  *
  * Laravel: Illuminate\Foundation\Console\MailMakeCommand.
  */
@@ -9,27 +9,30 @@ export default `/**
  * Namespace: {{ namespace }}
  */
 
-import { view } from '@orchestr-sh/orchestr';
-import type { View } from '@orchestr-sh/orchestr';
+import { Mailable } from '@orchestr-sh/orchestr';
 
-export class {{ class }} {
-  /**
-   * The email's subject line.
-   */
-  public subject = '{{ subject }}';
-
+export class {{ class }} extends Mailable {
   /**
    * Create a new mail message instance.
    */
   constructor(
     // Add your mail data here, e.g.: public readonly order: Order
-  ) {}
+  ) {
+    super();
+  }
 
   /**
-   * Build the mail message.
+   * Build the message envelope: sender, recipients and subject.
    */
-  content(): View {
-    return view('{{ view_name }}', {
+  envelope(): void {
+    this.subject('{{ subject }}');
+  }
+
+  /**
+   * Build the message content.
+   */
+  content(): void {
+    this.view('{{ view_name }}', {
       mail: this,
     });
   }

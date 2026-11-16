@@ -3,9 +3,8 @@
  *
  * Test double for the mailer: records every message the application sends
  * (or queues) instead of delivering it, and offers Laravel-style
- * assertions. Bound under the `mailer` container key so a later mail
- * subsystem can be swapped out wholesale, and usable on its own until
- * then.
+ * assertions. Bound under the `mailer` container key - the Mail facade's
+ * fake() swaps the MailManager out wholesale for this recorder.
  *
  * Mirrors Illuminate\Support\Testing\Fakes\MailerFake.
  *
@@ -19,6 +18,9 @@
  * mail.assertNotSent(new PasswordReset());
  * ```
  */
+
+import type { AddressLike } from '@/Mail/MailMessage';
+import { MailMessage, normalizeAddress } from '@/Mail/MailMessage';
 
 /**
  * A message matched by name, class, instance or predicate
@@ -36,6 +38,18 @@ export interface SentMail {
   recipients: string[];
 }
 
+/**
+ * The fluent chain MailFake::to() hands back - shaped after
+ * PendingMail's send/queue/later plus the cc/bcc addressing.
+ */
+export interface PendingFakeMail {
+  send(mailable: any): Promise<void>;
+  queue(mailable: any): Promise<void>;
+  later(delay: number | Date, mailable: any): Promise<void>;
+  cc(...addresses: string[]): PendingFakeMail;
+  bcc(...addresses: string[]): PendingFakeMail;
+}
+
 export class MailFake {
   /**
    * Every message sent through this fake, in order
@@ -51,24 +65,100 @@ export class MailFake {
    * Address the next send() to these recipients
    * Laravel: Mail::to()
    */
-  to(...recipients: Array<string | string[]>): {
-    send: (mailable: any) => Promise<void>;
-    cc: (...to: string[]) => any;
-  } {
+  to(...recipients: Array<string | string[]>): PendingFakeMail {
     const flattened = recipients.flat().map(String);
     const cc: string[] = [];
+    const bcc: string[] = [];
 
-    const pending: { send: (mailable: any) => Promise<void>; cc: (...to: string[]) => any } = {
+    const pending: PendingFakeMail = {
       send: async (mailable: any): Promise<void> => {
-        this.sent.push({ mailable, recipients: [...flattened, ...cc] });
+        this.sent.push({ mailable, recipients: [...flattened, ...cc, ...bcc] });
       },
-      cc: (...addresses: string[]): typeof pending => {
+      queue: async (mailable: any): Promise<void> => {
+        this.queued.push({ mailable, recipients: [...flattened, ...cc, ...bcc] });
+      },
+      later: async (_delay: number | Date, mailable: any): Promise<void> => {
+        await pending.queue(mailable);
+      },
+      cc: (...addresses: string[]): PendingFakeMail => {
         cc.push(...addresses);
+        return pending;
+      },
+      bcc: (...addresses: string[]): PendingFakeMail => {
+        bcc.push(...addresses);
         return pending;
       },
     };
 
     return pending;
+  }
+
+  /**
+   * Record a raw message like Mailer::raw(); the recorded "mailable" is
+   * a `{ subject, html }` stand-in so assertions still have something
+   * matching to read.
+   * Laravel: Mail::raw()
+   */
+  async raw(
+    subject: string,
+    html?: string | ((message: MailMessage) => any),
+    callback?: (message: MailMessage) => any
+  ): Promise<void> {
+    const message = new MailMessage();
+
+    message.subject = subject;
+
+    if (typeof html === 'function') {
+      await html(message);
+    } else if (html !== undefined) {
+      message.html = html;
+    }
+
+    if (callback) {
+      await callback(message);
+    }
+
+    this.sent.push({
+      mailable: { subject, html: message.html, message },
+      recipients: message.recipients().map((address) => address.address),
+    });
+  }
+
+  /**
+   * Record raw HTML like Mailer::html().
+   * Laravel: Mail::html()
+   */
+  async html(html: string, callback?: (message: MailMessage) => any): Promise<void> {
+    await this.raw('', html, callback);
+  }
+
+  /**
+   * Record raw text like Mailer::text().
+   * Laravel: Mail::text()
+   */
+  async text(text: string, callback?: (message: MailMessage) => any): Promise<void> {
+    const message = new MailMessage();
+
+    message.text = text;
+
+    if (callback) {
+      await callback(message);
+    }
+
+    this.sent.push({
+      mailable: { text, message },
+      recipients: message.recipients().map((address) => address.address),
+    });
+  }
+
+  /**
+   * Always resolve to the fake itself, mirroring
+   * MailManager::mailer() so code paths that name a mailer still record
+   * against this fake.
+   * Laravel: Mail::mailer()
+   */
+  mailer(_name?: string): this {
+    return this;
   }
 
   /**
@@ -129,6 +219,46 @@ export class MailFake {
   }
 
   /**
+   * Assert a message was sent to the given recipient (optionally of a
+   * matching mailable).
+   * Laravel: Mail::assertSentTo()
+   */
+  assertSentTo(recipient: AddressLike, matcher?: MailableMatcher, callback?: (mailable: any) => boolean): void {
+    const matching = this.sentTo(recipient);
+
+    if (matching.length === 0) {
+      throw new Error(
+        `No mail was sent to [${normalizeAddress(recipient).address}]. Mail sent: ${this.describe(this.sent)}.`
+      );
+    }
+
+    if (matcher !== undefined) {
+      this.assertMatching(matching, matcher, callback, 'sent');
+    }
+  }
+
+  /**
+   * Assert no matching message went to the given recipient.
+   * Laravel: Mail::assertNotSentTo()
+   */
+  assertNotSentTo(recipient: AddressLike, matcher?: MailableMatcher, callback?: (mailable: any) => boolean): void {
+    const matching = this.sentTo(recipient);
+
+    if (matcher === undefined) {
+      if (matching.length > 0) {
+        throw new Error(
+          `Mail was unexpectedly sent to [${normalizeAddress(recipient).address}]: ` +
+            `${matching.map((record) => describe(record.mailable)).join(', ')}.`
+        );
+      }
+
+      return;
+    }
+
+    this.assertNotMatching(matching, matcher, callback, 'sent');
+  }
+
+  /**
    * Assert a mailable was sent exactly this many times
    * Laravel: Mail::assertSentTimes()
    */
@@ -161,6 +291,16 @@ export class MailFake {
   }
 
   // ==================== Internals ====================
+
+  /**
+   * Sent records addressed to the given recipient (matched
+   * case-insensitively against to/cc/bcc as recorded).
+   */
+  protected sentTo(recipient: AddressLike): SentMail[] {
+    const address = normalizeAddress(recipient).address.toLowerCase();
+
+    return this.sent.filter((record) => record.recipients.some((each) => each.toLowerCase() === address));
+  }
 
   protected matching(records: SentMail[], matcher: MailableMatcher): SentMail[] {
     return records.filter((record) => mailableMatches(record.mailable, matcher));

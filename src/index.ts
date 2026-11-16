@@ -94,6 +94,7 @@ export { Gate as GateFacade } from './Facades/Gate';
 export { Hash } from './Facades/Hash';
 export { Crypt } from './Facades/Crypt';
 export { Schedule as ScheduleFacade } from './Facades/Schedule';
+export { Mail as MailFacade } from './Facades/Mail';
 
 // Helpers
 export {
@@ -129,6 +130,7 @@ export {
   encrypt,
   decrypt,
   auth,
+  mail,
   factory,
   fake,
 } from './Support/helpers';
@@ -173,6 +175,7 @@ export { EncryptionServiceProvider } from './Encryption/EncryptionServiceProvide
 export { AuthServiceProvider } from './Auth/AuthServiceProvider';
 export { ViewServiceProvider } from './View/ViewServiceProvider';
 export type { ViewConfig } from './View/ViewServiceProvider';
+export { MailServiceProvider } from './Mail/MailServiceProvider';
 
 // Database
 export { DatabaseManager } from './Database/DatabaseManager';
@@ -803,6 +806,30 @@ export {
   UndefinedVariableError,
   evaluate as evaluateViewExpression,
 } from './View/Compilers/ExpressionEvaluator';
+
+// Mail
+export { Mailable } from './Mail/Mailable';
+export type { AttachmentOptions, ContentConfig, EnvelopeConfig, MailViewConfig } from './Mail/Mailable';
+export { Mailer } from './Mail/Mailer';
+export type { MailerOptions, RecipientBag, RecipientsInput } from './Mail/Mailer';
+export { MailManager, MAIL_DEFAULTS } from './Mail/MailManager';
+export type { MailConfig, MailFromConfig, TransportFactory } from './Mail/MailManager';
+export { MailMessage, formatAddress, normalizeAddress, normalizeAddresses } from './Mail/MailMessage';
+export type { AddressLike, AttachmentDefinition, MailAddress, ResolvedAttachment } from './Mail/MailMessage';
+export { MessageRenderer } from './Mail/MessageRenderer';
+export type { MailableLike, RendererOptions } from './Mail/MessageRenderer';
+export { PendingMail } from './Mail/PendingMail';
+export { SendQueuedMailable } from './Mail/SendQueuedMailable';
+export { markdownToHtml } from './Mail/Markdown';
+export type { Transport, MailerConfig } from './Mail/Contracts/Transport';
+export type { QueueDispatcherLike } from './Mail/Contracts/QueueDispatcher';
+export { ArrayTransport } from './Mail/Transports/ArrayTransport';
+export { FailoverTransport } from './Mail/Transports/FailoverTransport';
+export type { FailoverTransportOptions } from './Mail/Transports/FailoverTransport';
+export { LogTransport } from './Mail/Transports/LogTransport';
+export type { LogTransportOptions } from './Mail/Transports/LogTransport';
+export { SmtpTransport } from './Mail/Transports/SmtpTransport';
+export type { SmtpClient, SmtpMail, SmtpTransportConfig } from './Mail/Transports/SmtpTransport';
 
 // Types
 export type { HttpMethod, RouteAction } from './Routing/Route';

@@ -160,11 +160,10 @@ const cases: GeneratorCase[] = [
     file: ['app/Mail/OrderShipped.ts'],
     contains: [
       'Namespace: App\\Mail',
-      "import { view } from '@orchestr-sh/orchestr'",
-      "import type { View } from '@orchestr-sh/orchestr'",
-      'export class OrderShipped {',
-      "public subject = 'Order Shipped'",
-      "return view('mail.order-shipped', {",
+      "import { Mailable } from '@orchestr-sh/orchestr'",
+      'export class OrderShipped extends Mailable {',
+      "this.subject('Order Shipped')",
+      "this.view('mail.order-shipped', {",
     ],
   },
   {
