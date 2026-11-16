@@ -10,3 +10,11 @@ export interface ViewEngine {
    */
   get(path: string, data: Record<string, any>): Promise<string>;
 }
+
+/**
+ * Dependency injection shim so engines can resolve included/extended view
+ * names to file paths without a circular import with ViewFactory.
+ */
+export interface ViewResolver {
+  findView(name: string): string;
+}

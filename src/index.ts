@@ -378,6 +378,8 @@ export { ScheduleTestCommand } from './Console/Commands/ScheduleTestCommand';
 
 // Console Commands - View
 export { MakeViewCommand } from './Console/Commands/MakeViewCommand';
+export { ViewCacheCommand } from './Console/Commands/ViewCacheCommand';
+export { ViewClearCommand } from './Console/Commands/ViewClearCommand';
 
 // Console Commands - Generators
 export { GeneratorCommand } from './Console/Generators/GeneratorCommand';
@@ -760,10 +762,24 @@ export { ValidateSignature, makeValidateSignature, resolveSignedRouter } from '.
 // View
 export { View } from './View/View';
 export { ViewFactory } from './View/ViewFactory';
-export type { ViewEngine } from './View/Engines/ViewEngine';
+export type { ViewComposerCallback } from './View/ViewFactory';
+export type { ViewEngine, ViewResolver } from './View/Engines/ViewEngine';
 export { FileEngine } from './View/Engines/FileEngine';
-export { TemplateEngine } from './View/Engines/TemplateEngine';
-export type { TemplateEngineResolver } from './View/Engines/TemplateEngine';
+export { CompilerEngine, HtmlString } from './View/Engines/CompilerEngine';
+export type {
+  CompilerEngineOptions,
+  CustomDirectiveHandler,
+  DirectiveContext,
+  ViewTranslator,
+} from './View/Engines/CompilerEngine';
+export { TemplateCompiler, ViewParseException } from './View/Compilers/TemplateCompiler';
+export { ViewCache } from './View/Compilers/ViewCache';
+export type { TemplateAst } from './View/Compilers/Ast';
+export {
+  ExpressionError,
+  UndefinedVariableError,
+  evaluate as evaluateViewExpression,
+} from './View/Compilers/ExpressionEvaluator';
 
 // Types
 export type { HttpMethod, RouteAction } from './Routing/Route';
