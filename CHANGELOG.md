@@ -1,3 +1,5 @@
+## [1.12.4](https://github.com/orchestr-sh/orchestr/compare/v1.12.3...v1.12.4) (2026-11-16)
+
 ## [1.12.3](https://github.com/orchestr-sh/orchestr/compare/v1.12.2...v1.12.3) (2026-11-16)
 
 ## [1.12.2](https://github.com/orchestr-sh/orchestr/compare/v1.12.1...v1.12.2) (2026-11-15)
