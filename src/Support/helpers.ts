@@ -9,6 +9,7 @@ import type { Encrypter as EncrypterContract } from '@/Encryption/Contracts/Encr
 import type { Config as ConfigClass } from '@/Foundation/Config/Config';
 import type { HashManager as HashManagerContract } from '@/Hashing/HashManager';
 import type { MailManager } from '@/Mail/MailManager';
+import type { NotificationRouterLike } from '@/Notifications/Contracts/NotificationRouter';
 import type { RouteUrlParameters } from '@/Routing/UrlGenerator';
 import type { Store as SessionStore } from '@/Session/Contracts/Store';
 import type { SessionManager } from '@/Session/SessionManager';
@@ -332,6 +333,24 @@ export function mail(): MailManager {
   }
 
   return globalApp.make<MailManager>('mailer');
+}
+
+/**
+ * Access the notification sender.
+ * Laravel: the notification facade's instance - spelled as a helper for
+ * app code that prefers function calls. The router is resolved from the
+ * container, so the NotificationSender registered by the provider - or
+ * the NotificationFake installed by `Notification.fake()` - is what app
+ * code talks to, without importing the Notifications module here.
+ *
+ *   await notification().send(user, new InvoicePaid(invoice));
+ */
+export function notification(): NotificationRouterLike {
+  if (!globalApp || !globalApp.bound('notifications')) {
+    throw new Error('Notifications are not available. Register the NotificationServiceProvider first.');
+  }
+
+  return globalApp.make<NotificationRouterLike>('notifications');
 }
 
 /**

@@ -3,10 +3,9 @@
  *
  * The Mail::fake() / Notification::fake() / Http::fake()-style entry
  * points. Queue, Event, Storage and Cache expose fake() on their own
- * facades; the Mail facade delegates here now that the real mail
- * subsystem exists, while Notification and outbound HTTP still arrive in
- * their own tickets, so their recorders are installed through Testing
- * until then.
+ * facades; the Mail and Notification facades delegate here now that the
+ * real subsystems exist, while outbound HTTP still arrives in its own
+ * ticket, so its recorder is installed through Testing until then.
  */
 
 import type { Application } from '@/Foundation/Application';
@@ -145,12 +144,24 @@ export const Notification = {
     mustFake(currentNotifications, 'Notification').assertSent(...args);
   },
 
+  assertNotSent(...args: Parameters<NotificationFake['assertNotSent']>): void {
+    mustFake(currentNotifications, 'Notification').assertNotSent(...args);
+  },
+
   assertSentTo(...args: Parameters<NotificationFake['assertSentTo']>): void {
     mustFake(currentNotifications, 'Notification').assertSentTo(...args);
   },
 
   assertNotSentTo(...args: Parameters<NotificationFake['assertNotSentTo']>): void {
     mustFake(currentNotifications, 'Notification').assertNotSentTo(...args);
+  },
+
+  assertSentOnDemand(...args: Parameters<NotificationFake['assertSentOnDemand']>): void {
+    mustFake(currentNotifications, 'Notification').assertSentOnDemand(...args);
+  },
+
+  assertCount(...args: Parameters<NotificationFake['assertCount']>): void {
+    mustFake(currentNotifications, 'Notification').assertCount(...args);
   },
 
   assertNothingSent(): void {

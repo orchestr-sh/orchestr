@@ -19,3 +19,4 @@ export { Gate } from './Gate';
 export { Hash } from './Hash';
 export { Crypt } from './Crypt';
 export { Mail } from './Mail';
+export { Notification } from './Notification';

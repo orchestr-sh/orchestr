@@ -95,6 +95,7 @@ export { Hash } from './Facades/Hash';
 export { Crypt } from './Facades/Crypt';
 export { Schedule as ScheduleFacade } from './Facades/Schedule';
 export { Mail as MailFacade } from './Facades/Mail';
+export { Notification as NotificationFacade } from './Facades/Notification';
 
 // Helpers
 export {
@@ -131,6 +132,7 @@ export {
   decrypt,
   auth,
   mail,
+  notification,
   factory,
   fake,
 } from './Support/helpers';
@@ -176,6 +178,7 @@ export { AuthServiceProvider } from './Auth/AuthServiceProvider';
 export { ViewServiceProvider } from './View/ViewServiceProvider';
 export type { ViewConfig } from './View/ViewServiceProvider';
 export { MailServiceProvider } from './Mail/MailServiceProvider';
+export { NotificationServiceProvider } from './Notifications/NotificationServiceProvider';
 
 // Database
 export { DatabaseManager } from './Database/DatabaseManager';
@@ -367,6 +370,7 @@ export { QueueFlushCommand } from './Console/Commands/QueueFlushCommand';
 export { QueueClearCommand } from './Console/Commands/QueueClearCommand';
 export { QueueMonitorCommand } from './Console/Commands/QueueMonitorCommand';
 export { QueueTableCommand } from './Console/Commands/QueueTableCommand';
+export { NotificationsTableCommand } from './Console/Commands/NotificationsTableCommand';
 export { QueueFailedTableCommand } from './Console/Commands/QueueFailedTableCommand';
 export { QueueBatchesTableCommand } from './Console/Commands/QueueBatchesTableCommand';
 export { QueuePruneBatchesCommand } from './Console/Commands/QueuePruneBatchesCommand';
@@ -831,6 +835,30 @@ export type { LogTransportOptions } from './Mail/Transports/LogTransport';
 export { SmtpTransport } from './Mail/Transports/SmtpTransport';
 export type { SmtpClient, SmtpMail, SmtpTransportConfig } from './Mail/Transports/SmtpTransport';
 
+// Notifications
+export { Notification } from './Notifications/Notification';
+export { Notifiable, resolveNotificationRouter } from './Notifications/Notifiable';
+export type { NotifiableContract, NotifiableConstructor, NotifiableInstance } from './Notifications/Notifiable';
+export { NotificationSender, NOTIFICATIONS_DEFAULTS } from './Notifications/NotificationSender';
+export type {
+  NotificationsConfig,
+  EventDispatcherLike,
+  NotificationQueueDispatcherLike,
+} from './Notifications/NotificationSender';
+export { PendingNotification } from './Notifications/PendingNotification';
+export { AnonymousNotifiable } from './Notifications/AnonymousNotifiable';
+export { SendQueuedNotification } from './Notifications/SendQueuedNotification';
+export { DatabaseNotification } from './Notifications/DatabaseNotification';
+export { MailChannel } from './Notifications/Channels/MailChannel';
+export type { MailChannelOptions, NotificationMailerLike } from './Notifications/Channels/MailChannel';
+export { DatabaseChannel } from './Notifications/Channels/DatabaseChannel';
+export { BroadcastChannel } from './Notifications/Channels/BroadcastChannel';
+export type { BroadcastDriverLike, BroadcastNotificationLike } from './Notifications/Channels/BroadcastChannel';
+export { NotificationSent } from './Notifications/Events/NotificationSent';
+export { NotificationFailed } from './Notifications/Events/NotificationFailed';
+export type { Channel, ChannelFactory } from './Notifications/Contracts/Channel';
+export type { NotificationRouterLike } from './Notifications/Contracts/NotificationRouter';
+
 // Types
 export type { HttpMethod, RouteAction } from './Routing/Route';
 export type { Middleware, MiddlewareArgument, NextFunction, TerminableMiddleware } from './Routing/Pipeline';
@@ -855,7 +883,6 @@ export {
   HttpFake,
   Mail,
   MailFake,
-  Notification,
   NotificationFake,
   RefreshDatabase,
   StorageFake,

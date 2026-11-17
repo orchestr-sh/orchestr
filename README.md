@@ -31,6 +31,7 @@ Requires Node `^22.18.0 || >=24.0.0` and TypeScript `>=5`.
 - [Authorization](#authorization)
 - [Filesystem & File Uploads](#filesystem--file-uploads)
 - [Mail](#mail)
+- [Notifications](#notifications)
 - [Collections, Strings & Helpers](#collections-strings--helpers)
 - [Configuration & Environment](#configuration--environment)
 - [Queue System](#queue-system)
@@ -2018,6 +2019,169 @@ mail().registerTransport('webhook', (config) => new WebhookTransport(config.url)
 and `Mail.fake()` swaps the mailer for the recorder with the usual
 assertions (see [Testing](#testing)).
 
+## Notifications
+
+`NotificationSender` routes a notification to its recipients and hands each
+one to a channel - `mail` (delivered by the mail subsystem), `database` (rows
+in the `notifications` table) and `broadcast` (through the `broadcast`
+container binding once a broadcasting layer registers one). A `Notification`
+only *describes* the message (`via`, `toMail`, `toDatabase`, `toBroadcast`,
+`toArray`); routing is the sender's business and delivery belongs to the
+channel classes behind the `Channel` contract, so
+`Notification::extend('pager', channel)` adds a delivery mechanism without
+touching any of them.
+
+```typescript
+import { ConfigServiceProvider, NotificationServiceProvider, Notifiable } from '@orchestr-sh/orchestr';
+import { Notification } from '@orchestr-sh/orchestr/Facades';
+
+app.register(new ConfigServiceProvider(app, {
+  notifications: {
+    mail: { mailer: null }, // a mail.mailers key, or null for the default mailer
+    from: { address: null, name: null }, // sender for mail that declares none
+    queue: { connection: null }, // connection queueable notifications dispatch on
+    channels: {}, // custom channels, by name
+  },
+}));
+app.register(NotificationServiceProvider);
+
+class InvoicePaid extends Notification {
+  constructor(private invoice: Invoice) {
+    super();
+  }
+
+  via(): string[] {
+    return ['mail', 'database'];
+  }
+
+  // A Mailable: rendered by the mail layer, not rebuilt here (DRY).
+  toMail() {
+    return new InvoicePaidMail(this.invoice);
+  }
+
+  toDatabase(): Record<string, any> {
+    return { subject: `Invoice #${this.invoice.id} paid`, total: this.invoice.total };
+  }
+}
+
+class User extends Notifiable(Ensemble) {
+  static fillable = ['name', 'email'];
+
+  getTable(): string {
+    return 'users';
+  }
+}
+
+const user = await User.create({ name: 'Ada', email: 'ada@example.com' });
+
+await user.notify(new InvoicePaid(invoice)); // both channels, straight from via()
+```
+
+`Notifiable` gives a model `notify()` / `notifyNow()`, `routeNotificationFor()`
+and the `notifications()` morph relation over its stored rows. Channels ask
+the recipient where to deliver, in Laravel's order: a
+`routeNotificationForMail()` method, then a property of that name, then the
+built-in default - the `email` attribute for mail, `notifications()` for
+database. Which channels a send uses follows the same precedence: the
+channels argument wins, then `via()`, then `['mail']`. `Notification::send`,
+`Notification::sendNow`, `notification()` and the models all route through
+the one `notifications` binding.
+
+### Storing Notifications
+
+`notifications:table` writes the migration the database channel reads:
+
+```bash
+npx orchestr notifications:table
+```
+
+```typescript
+await user.notifyNow(new InvoicePaid(invoice));
+
+const rows = await user.notifications().getResults(); // DatabaseNotification[]
+
+await rows[0].markAsRead(); // and markAsUnread(), isRead(), isUnread()
+await DatabaseNotification.unread().get(); // and DatabaseNotification.read()
+```
+
+`DatabaseNotification` keys each row with a UUID, keeps the payload in the
+JSON `data` column (`toDatabase()`, falling back to `toArray()`) and links
+back to its recipient through the polymorphic `notifiable` relation.
+
+### On-Demand Notifications
+
+No model required. The routes ride along on an `AnonymousNotifiable`, which
+answers the same `routeNotificationFor` question a model does, so no channel
+ever branches on the kind of recipient it has:
+
+```typescript
+await Notification.route('mail', 'guest@example.com').notify(new InvoicePaid(invoice));
+
+await Notification.route('mail', 'guest@example.com')
+  .route('database', relation)
+  .via(['mail']) // narrows the collected routes down
+  .notify(new InvoicePaid(invoice));
+```
+
+### Queued Notifications
+
+Marking a notification `queued = true` - the same runtime marker queued
+listeners use, standing in for Laravel's `implements ShouldQueue` - makes
+`send()` dispatch a `SendQueuedNotification` job instead of delivering
+inline. `sendNow()` always delivers, and `queue()` / `later()` queue on
+demand:
+
+```typescript
+class InvoicePaid extends Notification {
+  public readonly queued = true;
+
+  viaQueue(): string {
+    return 'high';
+  }
+
+  viaConnection(): string {
+    return 'redis';
+  }
+}
+
+await Notification.send([ada, grace], new InvoicePaid(invoice)); // one job, both recipients
+await Notification.later(60, ada, new InvoicePaid(invoice));
+```
+
+The worker delivers with `sendNow`, so a notification already queued is never
+queued a second time, and `viaQueue()` / `viaConnection()` /
+`notifications.queue.connection` decide where the job lands. On the `sync`
+driver that means delivery during the send, like queued mail.
+
+### Notification Events
+
+Every delivery fires `NotificationSent` - one per channel, carrying that
+channel's response - and a channel that raises fires `NotificationFailed`
+with the error before it is rethrown. Subscribe through the event subsystem
+exactly as with any other event, or `Event.fake()` to assert on them.
+
+### Testing Notifications
+
+`Notification.fake()` swaps the whole subsystem for a recorder: channels
+never run, and sends are remembered instead. Assertions match by class, name,
+instance or predicate:
+
+```typescript
+const notifications = Notification.fake();
+
+await user.notify(new InvoicePaid(invoice));
+
+notifications.assertSentTo(user, InvoicePaid, (n) => n.invoice.id === 42);
+notifications.assertSentOnDemand(InvoicePaid);
+notifications.assertSentTimes(InvoicePaid, 1);
+notifications.assertCount(1);
+```
+
+`this.fakeNotifications()` in a TestCase does the same thing and is restored
+with the application, and because the fake lives at the `notifications`
+binding, model calls, facades and helpers all record against it without
+knowing.
+
 ## Testing
 
 Orchestr ships a Laravel-shaped testing layer on top of Vitest: a `TestCase`
@@ -2106,10 +2270,10 @@ const storage = this.fakeStorage();  // Storage.fake(): in-memory disks, assertE
 const cache = this.fakeCache();      // Cache.fake(): every store is an array store
 ```
 
-`Queue.fake()`, `Event.fake()`, `Storage.fake()`, `Cache.fake()` and
-`Mail.fake()` are also available straight off the facades, and `Http` /
-`Notification` exported from the testing module until their subsystems
-land.
+`Queue.fake()`, `Event.fake()`, `Storage.fake()`, `Cache.fake()`,
+`Mail.fake()` and `Notification.fake()` are also available straight off the
+facades, and `Http` - whose outbound subsystem is still on its way - is
+exported from the testing module until it lands.
 
 ### Time Travel
 
@@ -2569,6 +2733,7 @@ All commands run via `npx orchestr` (or `orchestr` when installed globally). The
 | `cache:clear [store]` | Flush the cache (default store, or e.g. `cache:clear redis`) |
 | `cache:forget <key> [store]` | Forget one key |
 | `cache:table` | Create the cache table migration |
+| `notifications:table` | Create the notifications table migration |
 | `config:cache` | Compile `config/*` into `bootstrap/cache/config.json` |
 | `config:clear` | Remove the configuration snapshot |
 | `route:list` | Method, URI, name, action, and middleware per route (`--json`, `--path=`) |
@@ -3773,6 +3938,7 @@ npx orchestr deploy:rollback              # point the project back to the previo
 - ✅ Authorization (Gate, policies, `can` middleware, gate-backed validation rules)
 - ✅ Filesystem & Uploads (local/public/null disks, path-traversal protection, atomic writes, multipart parsing, UploadedFile storage, upload validation rules)
 - ✅ Mail (Mailables rendered through the view system, smtp/log/array/failover transports, storage-disk attachments, queued delivery, fakes & assertions)
+- ✅ Notifications (mail/database/broadcast channels, `Notifiable` models, on-demand routing, stored `DatabaseNotification` rows, queued sends, `NotificationSent`/`NotificationFailed` events, fakes & assertions)
 - ✅ Testing Framework (TestCase over the real Kernel, RefreshDatabase/DatabaseTransactions, response & database assertions, acting-as, service fakes, time travel)
 - ✅ Collections (`Array`-subclass with the Laravel method surface, `EnsembleCollection`) & Support utilities (`Str`, `Arr`, `Number`, global helpers)
 - ✅ Timestamps
