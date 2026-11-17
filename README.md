@@ -30,6 +30,7 @@ Requires Node `^22.18.0 || >=24.0.0` and TypeScript `>=5`.
 - [Authentication](#authentication)
 - [Authorization](#authorization)
 - [Filesystem & File Uploads](#filesystem--file-uploads)
+- [Mail](#mail)
 - [Collections, Strings & Helpers](#collections-strings--helpers)
 - [Configuration & Environment](#configuration--environment)
 - [Queue System](#queue-system)
@@ -1925,6 +1926,98 @@ Upload validation is wired into the existing rules: `file`, `image`, `mimes`,
 upload's bytes (magic-byte MIME sniffing and image headers), so a text file
 renamed `.png` fails `image` and a 4 MB upload fails `max:1024`.
 
+## Mail
+
+`MailManager` builds mailers from the `mail` config section, a `Mailer`
+renders a `Mailable` through the Blade view layer and hands the finished
+`MailMessage` to a `Transport` - the single seam between the mail layer
+and the outside world (OCP). Built-in transports: `log` (writes the
+rendered message to the log), `array` (keeps messages for assertions),
+`smtp` (the optional `nodemailer` peer dependency, imported lazily like
+`ioredis` for the redis queue) and `failover` (tries its named siblings
+in order).
+
+```typescript
+import { ConfigServiceProvider, MailServiceProvider, Mailable } from '@orchestr-sh/orchestr';
+import { Mail } from '@orchestr-sh/orchestr/Facades';
+
+app.register(new ConfigServiceProvider(app, {
+  mail: {
+    default: 'log', // mail.mailers key
+    from: { address: 'hello@app.test', name: 'My App' },
+    mailers: {
+      smtp: { transport: 'smtp', host: 'smtp.example.com', port: 587, auth: { user: 'key', pass: 'secret' } },
+      log: { transport: 'log' },
+      array: { transport: 'array' },
+      failover: { transport: 'failover', mailers: ['smtp', 'log'] },
+    },
+    attachments: { disk: 'public' }, // default disk for attachFromStorage
+  },
+}));
+app.register(MailServiceProvider);
+
+// A Mailable describes the message; the Mailer sends it (SRP).
+class WelcomeMail extends Mailable {
+  constructor(private user: { email: string; name: string }) {
+    super();
+  }
+
+  envelope() {
+    return { subject: `Welcome, ${this.user.name}!`, to: this.user.email };
+  }
+
+  content() {
+    return { view: 'emails.welcome', data: { user: this.user } };
+  }
+}
+
+await Mail.to(user.email).send(new WelcomeMail(user)); // default mailer
+await Mail.mailer('failover').send(new WelcomeMail(user)); // named mailer
+await Mail.queue(new WelcomeMail(user), ['ada@example.com']); // via the queue subsystem
+await Mail.later(60, new WelcomeMail(user)); // delayed
+await Mail.raw('Ping', '<p>Pong</p>', (m) => m.addTo('ops@app.test')); // no mailable
+```
+
+`content()` may also call the fluent builders instead of returning
+config - `this.subject(...)`, `this.from(...)`, `this.view(...)` /
+`this.html(...)` / `this.text(...)` / `this.markdown(...)` /
+`this.with({...})` - and every setter doubles as a getter when called
+with no arguments. Text parts resolve Laravel-style: an explicit
+`text()` body wins, otherwise a `<view>.text` sibling template
+(`emails/welcome/text.html` beside `emails/welcome.html`) is rendered
+when it exists. Markdown bodies run through one render path too: the
+template is rendered, converted with the bundled Markdown subset, and
+the source stays as the plain-text part.
+
+Attachments read from buffers, paths and storage disks through the same
+resolver:
+
+```typescript
+class InvoiceMail extends Mailable {
+  content(): void {
+    this.view('emails.invoice')
+      .attachData(Buffer.from('1,2,3'), 'line-items.csv') // buffer
+      .attach('/srv/files/contract.pdf', { as: 'Contract.pdf' }) // local path
+      .attachFromStorage('invoices/latest.pdf') // mail.attachments.disk
+      .attachFromStorageDisk('public', 'logo.png', undefined, { inline: true, cid: 'logo' });
+  }
+}
+```
+
+Mail is queueable through the queue subsystem: `Mail.queue()` /
+`Mail.later()` (and `Mail.to(...)->queue(...)` / `->later(...)`) dispatch
+a `SendQueuedMailable` job that a worker delivers with the same mailer -
+on the `sync` driver that means inline delivery.
+
+Custom transports register beside the built-ins:
+
+```typescript
+mail().registerTransport('webhook', (config) => new WebhookTransport(config.url));
+```
+
+and `Mail.fake()` swaps the mailer for the recorder with the usual
+assertions (see [Testing](#testing)).
+
 ## Testing
 
 Orchestr ships a Laravel-shaped testing layer on top of Vitest: a `TestCase`
@@ -2007,15 +2100,16 @@ assertions, and the TestCase restores them automatically:
 const queue = this.fakeQueue();      // Queue.fake(): assertPushed, assertNotPushed...
 const events = this.fakeEvents();    // Event.fake(): assertDispatched...
 const http = this.fakeHttp({ 'https://api.example.com/*': { ok: true } }); // stubs fetch
-const mail = this.fakeMail();        // assertSent / assertQueued
+const mail = this.fakeMail();        // Mail.fake(): assertSent / assertSentTo / assertQueued...
 const notifications = this.fakeNotifications(); // assertSentTo...
 const storage = this.fakeStorage();  // Storage.fake(): in-memory disks, assertExists...
 const cache = this.fakeCache();      // Cache.fake(): every store is an array store
 ```
 
-`Queue.fake()`, `Event.fake()`, `Storage.fake()` and `Cache.fake()` are also
-available straight off the facades, and `Http` / `Mail` / `Notification`
-exported from the testing module until their subsystems land.
+`Queue.fake()`, `Event.fake()`, `Storage.fake()`, `Cache.fake()` and
+`Mail.fake()` are also available straight off the facades, and `Http` /
+`Notification` exported from the testing module until their subsystems
+land.
 
 ### Time Travel
 
@@ -2096,7 +2190,7 @@ Everything is import-based; nothing touches `globalThis`:
 | `base_path() / storage_path() / resource_path() / routes_path()` | Application-path helpers. |
 | `view(name, data)` / `route(name, params)` | View instances, named-route URLs. |
 | `session()` / `csrf_token()` / `csrf_field()` | Active request session + CSRF helpers (require StartSession). |
-| `hash(value)` / `encrypt()` / `decrypt()` / `auth(guard?)` / `factory(Model, count?)` / `fake(...)` | Pass-throughs to the hashing, encryption, auth and factory subsystems; each throws a helpful error if its service provider isn't registered. |
+| `hash(value)` / `encrypt()` / `decrypt()` / `auth(guard?)` / `mail()` / `factory(Model, count?)` / `fake(...)` | Pass-throughs to the hashing, encryption, auth, mail and factory subsystems; each throws a helpful error if its service provider isn't registered. |
 | `data_get() / data_set() / value() / tap() / throw_if() / throw_unless() / class_basename()` | Laravel's utility helpers, dot-notation aware. |
 | `optional(value)` | Null-safe proxy: `optional(user).get('profile.bio')`, plus chained property access, `.value`, `.call()`, `.collect()`. |
 | `now()` / `today()` | Plain `Date`s (`today()` at local midnight) - there is no Carbon-style chain. |
@@ -2105,9 +2199,9 @@ Everything is import-based; nothing touches `globalThis`:
 
 ### Facades & import names
 
-Facades are container proxies: `Route`, `DB`, `Event`, `Queue`, `Bus`, `Cache`, `Schedule`, `Session`, `Storage`, `Auth`, `Gate`, `Hash`, `Crypt` and `View`. They resolve against the application registered via `Facade.setFacadeApplication(app)` - which the framework does inside `RouteServiceProvider.register()` (it also binds the `'router'` that `Route` and URL generation need). So registering `RouteServiceProvider` lights up every facade, and apps that skip it can call `Facade.setFacadeApplication(app)` by hand.
+Facades are container proxies: `Route`, `DB`, `Event`, `Queue`, `Bus`, `Cache`, `Schedule`, `Session`, `Storage`, `Auth`, `Gate`, `Hash`, `Crypt`, `View` and `Mail`. They resolve against the application registered via `Facade.setFacadeApplication(app)` - which the framework does inside `RouteServiceProvider.register()` (it also binds the `'router'` that `Route` and URL generation need). So registering `RouteServiceProvider` lights up every facade, and apps that skip it can call `Facade.setFacadeApplication(app)` by hand.
 
-Because the main entry reserves bare names for core classes (`Event` = abstract event base, `Gate` = the gate service class, `View` = the view instance class, `Config` = the config repository facade object, `Schedule` = the scheduler class), several facades are exported **aliased** there, or bare from the `/Facades` subpath:
+Because the main entry reserves bare names for core classes (`Event` = abstract event base, `Gate` = the gate service class, `View` = the view instance class, `Config` = the config repository facade object, `Schedule` = the scheduler class, `Mail` = the Testing fake installer), several facades are exported **aliased** there, or bare from the `/Facades` subpath:
 
 | Facade | From `'@orchestr-sh/orchestr'` | From `'@orchestr-sh/orchestr/Facades'` |
 | --- | --- | --- |
@@ -2116,6 +2210,7 @@ Because the main entry reserves bare names for core classes (`Event` = abstract 
 | Gate | `GateFacade` | `Gate` |
 | View factory | `ViewFacade` | *not exported* - use `ViewFacade` |
 | Schedule | `ScheduleFacade` | `Schedule` |
+| Mail manager | `MailFacade` (bare `Mail` is the fake installer) | `Mail` |
 | Bus / Cache / Session / Storage / Auth / Hash / Crypt / Route / DB | same name | same name |
 
 The `/Facades` entry also exports `EventFake` for typed test fakes. One name to watch: bare `Config` is a facade alias over the container's config repository, while the repository class itself is `ConfigClass` - prefer the `config()` helper for reads (see [Configuration & Environment](#configuration--environment)).
@@ -3677,6 +3772,7 @@ npx orchestr deploy:rollback              # point the project back to the previo
 - ✅ Authentication (session + token guards, remember me, Ensemble user provider, auth/guest middleware)
 - ✅ Authorization (Gate, policies, `can` middleware, gate-backed validation rules)
 - ✅ Filesystem & Uploads (local/public/null disks, path-traversal protection, atomic writes, multipart parsing, UploadedFile storage, upload validation rules)
+- ✅ Mail (Mailables rendered through the view system, smtp/log/array/failover transports, storage-disk attachments, queued delivery, fakes & assertions)
 - ✅ Testing Framework (TestCase over the real Kernel, RefreshDatabase/DatabaseTransactions, response & database assertions, acting-as, service fakes, time travel)
 - ✅ Collections (`Array`-subclass with the Laravel method surface, `EnsembleCollection`) & Support utilities (`Str`, `Arr`, `Number`, global helpers)
 - ✅ Timestamps

@@ -3,9 +3,10 @@
  *
  * The Mail::fake() / Notification::fake() / Http::fake()-style entry
  * points. Queue, Event, Storage and Cache expose fake() on their own
- * facades; these three subsystems arrive in their own tickets, so the
- * recorders are installed through Testing until the real services exist
- * (and the future facades can delegate here unchanged).
+ * facades; the Mail facade delegates here now that the real mail
+ * subsystem exists, while Notification and outbound HTTP still arrive in
+ * their own tickets, so their recorders are installed through Testing
+ * until then.
  */
 
 import type { Application } from '@/Foundation/Application';

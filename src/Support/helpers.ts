@@ -8,6 +8,7 @@ import type { EnsembleClass, Factory, FactoryState } from '@/Database/Factories/
 import type { Encrypter as EncrypterContract } from '@/Encryption/Contracts/Encrypter';
 import type { Config as ConfigClass } from '@/Foundation/Config/Config';
 import type { HashManager as HashManagerContract } from '@/Hashing/HashManager';
+import type { MailManager } from '@/Mail/MailManager';
 import type { RouteUrlParameters } from '@/Routing/UrlGenerator';
 import type { Store as SessionStore } from '@/Session/Contracts/Store';
 import type { SessionManager } from '@/Session/SessionManager';
@@ -315,6 +316,22 @@ export function auth(guard?: string): StatefulGuard {
   }
 
   return globalApp.make<{ guard(name?: string): StatefulGuard }>('auth').guard(guard);
+}
+
+/**
+ * Access the mail manager.
+ * Laravel: the mail facade's instance - spelled as a helper for app code
+ * that prefers function calls. The manager is resolved from the
+ * container, so no import of the Mail module is needed here.
+ *
+ *   await mail().to('ada@example.com').send(new WelcomeMail(user));
+ */
+export function mail(): MailManager {
+  if (!globalApp || !globalApp.bound('mailer')) {
+    throw new Error('Mail is not available. Register the MailServiceProvider first.');
+  }
+
+  return globalApp.make<MailManager>('mailer');
 }
 
 /**

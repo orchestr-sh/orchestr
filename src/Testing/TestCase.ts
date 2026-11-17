@@ -55,6 +55,7 @@ import { FilesystemServiceProvider } from '@/Filesystem/FilesystemServiceProvide
 import { Application } from '@/Foundation/Application';
 import { Config } from '@/Foundation/Config/Config';
 import { Kernel } from '@/Foundation/Http/Kernel';
+import { MailServiceProvider } from '@/Mail/MailServiceProvider';
 import { QueueServiceProvider } from '@/Queue/QueueServiceProvider';
 import { Route } from '@/Routing/Route';
 import { Router } from '@/Routing/Router';
@@ -152,14 +153,15 @@ export abstract class BaseTestCase {
       CacheServiceProvider,
       EventServiceProvider as unknown as ServiceProviderClass,
       FilesystemServiceProvider,
+      MailServiceProvider,
       QueueServiceProvider,
       SessionServiceProvider,
     ];
   }
 
   /**
-   * Default configuration: sqlite in-memory, array caches/sessions, the
-   * sync queue. Override and layer on top of `super.defaultConfig()`.
+   * Default configuration: sqlite in-memory, array caches/sessions/mail,
+   * the sync queue. Override and layer on top of `super.defaultConfig()`.
    */
   protected defaultConfig(): Record<string, any> {
     return {
@@ -177,6 +179,14 @@ export abstract class BaseTestCase {
           local: { driver: 'local', root: 'storage/app' },
           public: { driver: 'local', root: 'storage/app/public', url: '/storage' },
           null: { driver: 'null' },
+        },
+      },
+      mail: {
+        default: 'array',
+        from: { address: 'test@orchestr.test', name: 'Orchestr Test' },
+        mailers: {
+          array: { transport: 'array' },
+          log: { transport: 'log' },
         },
       },
       queue: { default: 'sync', connections: { sync: { driver: 'sync' } } },

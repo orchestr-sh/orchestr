@@ -19,6 +19,7 @@ import type { StorageFake } from '@/Support/Testing/Fakes/StorageFake';
 import type { TestApplicationConstructor } from '@/Testing/contracts';
 import { Cache } from '@/Facades/Cache';
 import { Event } from '@/Facades/Event';
+import { Mail as MailFacade } from '@/Facades/Mail';
 import { Queue } from '@/Facades/Queue';
 import { Storage } from '@/Facades/Storage';
 import { Http, Mail, Notification } from '@/Testing/Fakes';
@@ -56,7 +57,7 @@ export function InteractsWithFakes<T extends TestApplicationConstructor>(Base: T
      * Laravel: Mail::fake()
      */
     fakeMail(): MailFake {
-      return Mail.fake(this.app);
+      return MailFacade.fake();
     }
 
     /**

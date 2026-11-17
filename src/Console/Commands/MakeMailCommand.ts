@@ -2,7 +2,7 @@
  * MakeMailCommand
  *
  * Create a new mail class - a renderable message built on the
- * framework's view layer.
+ * framework's Mailable base class.
  * Mirrors Laravel's `php artisan make:mail`.
  */
 
