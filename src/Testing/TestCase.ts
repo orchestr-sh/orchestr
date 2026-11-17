@@ -56,6 +56,7 @@ import { Application } from '@/Foundation/Application';
 import { Config } from '@/Foundation/Config/Config';
 import { Kernel } from '@/Foundation/Http/Kernel';
 import { MailServiceProvider } from '@/Mail/MailServiceProvider';
+import { NotificationServiceProvider } from '@/Notifications/NotificationServiceProvider';
 import { QueueServiceProvider } from '@/Queue/QueueServiceProvider';
 import { Route } from '@/Routing/Route';
 import { Router } from '@/Routing/Router';
@@ -154,6 +155,7 @@ export abstract class BaseTestCase {
       EventServiceProvider as unknown as ServiceProviderClass,
       FilesystemServiceProvider,
       MailServiceProvider,
+      NotificationServiceProvider,
       QueueServiceProvider,
       SessionServiceProvider,
     ];

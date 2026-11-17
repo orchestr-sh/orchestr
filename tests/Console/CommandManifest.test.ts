@@ -95,6 +95,7 @@ describe('Command manifest', () => {
         'cache:clear',
         'cache:forget',
         'cache:table',
+        'notifications:table',
         'make:job',
         'make:view',
       ])

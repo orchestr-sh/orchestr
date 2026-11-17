@@ -67,6 +67,7 @@ import { MigrateResetCommand } from './MigrateResetCommand';
 import { MigrateRollbackCommand } from './MigrateRollbackCommand';
 import { MigrateStatusCommand } from './MigrateStatusCommand';
 import { ModelShowCommand } from './ModelShowCommand';
+import { NotificationsTableCommand } from './NotificationsTableCommand';
 import { OptimizeClearCommand } from './OptimizeClearCommand';
 import { OptimizeCommand } from './OptimizeCommand';
 import { QueueBatchesTableCommand } from './QueueBatchesTableCommand';
@@ -158,6 +159,8 @@ export function coreCommands(app: Application): Command[] {
     new QueueBatchesTableCommand(app),
     new QueuePruneBatchesCommand(app),
     new QueuePruneFailedCommand(app),
+    // Notification commands
+    new NotificationsTableCommand(app),
     // Job commands
     new MakeJobCommand(app),
     // Cache commands
