@@ -1925,7 +1925,118 @@ Upload validation is wired into the existing rules: `file`, `image`, `mimes`,
 upload's bytes (magic-byte MIME sniffing and image headers), so a text file
 renamed `.png` fails `image` and a 4 MB upload fails `max:1024`.
 
+## Testing
+
+Orchestr ships a Laravel-shaped testing layer on top of Vitest: a `TestCase`
+base class that boots a fresh application per test, a test client that drives
+requests through the real HTTP Kernel (no second server), response and
+database assertions, service fakes and time travel.
+
+```typescript
+import { RefreshDatabase, TestCase } from '@orchestr-sh/orchestr';
+import type { Router } from '@orchestr-sh/orchestr';
+
+class PodcastTest extends RefreshDatabase(TestCase) {
+  protected providers() {
+    return [...super.providers(), RouteServiceProvider];
+  }
+
+  protected defineEnvironment(config) {
+    config.set('queue.default', 'sync');
+  }
+
+  protected defineRoutes(router: Router) {
+    router.post('/podcasts', async (req) => Podcast.create(req.all()));
+  }
+
+  // PHPUnit-style: `new PodcastTest()` collects these into a describe block.
+  async testCreatesAPodcast() {
+    const response = await this.postJson('/podcasts', { title: 'Deep Work' });
+
+    response.assertCreated().assertJsonPath('title', 'Deep Work');
+
+    await this.assertDatabaseHas('podcasts', { title: 'Deep Work' });
+  }
+}
+
+new PodcastTest();
+```
+
+Ordinary Vitest files work too: construct the case once, and helpers boot the
+application lazily (`beforeEach`/`afterEach` are registered automatically
+when a class declares no `test*` methods).
+
+### Making Requests
+
+`TestCase` exposes the Laravel verb surface - `get`, `post`, `put`, `patch`,
+`delete`, `postJson`, `putJson`, `patchJson`, `deleteJson`, `json`, `call` -
+plus request customisation: `withHeaders`, `withToken`, `withCookies`,
+`withSession`, `actingAs($user, $guard?)` and `followingRedirects()`. Cookies
+set by a response are carried into the next request like a browser jar.
+
+Responses come back as `TestResponse` with the familiar assertions:
+`assertStatus`, `assertOk`, `assertCreated`, `assertNoContent`,
+`assertRedirect`, `assertSee`, `assertSeeText`, `assertDontSee`,
+`assertJson`, `assertJsonPath`, `assertJsonStructure`, `assertJsonCount`,
+`assertHeader`, `assertCookie`, `assertSessionHas`, `assertSessionHasErrors`
+and friends.
+
+### Database Assertions
+
+`assertDatabaseHas`, `assertDatabaseMissing`, `assertDatabaseCount`,
+`assertDatabaseEmpty`, `assertModelExists`, `assertModelMissing`,
+`assertSoftDeleted` and `assertNotSoftDeleted` query the application's own
+connections, so they see everything the code under test wrote:
+
+```typescript
+await this.assertDatabaseHas(await Podcast.find(id));
+await this.assertSoftDeleted('podcasts', { id: 1 });
+```
+
+`RefreshDatabase` migrates once per process and wraps every test in a
+transaction that is rolled back afterwards; `DatabaseTransactions` wraps and
+rolls back without ever migrating. Both keep in-memory SQLite schemas alive
+across the application rebuild that happens per test.
+
+### Fakes
+
+Side-effecting services swap for recorders - each returns the fake for
+assertions, and the TestCase restores them automatically:
+
+```typescript
+const queue = this.fakeQueue();      // Queue.fake(): assertPushed, assertNotPushed...
+const events = this.fakeEvents();    // Event.fake(): assertDispatched...
+const http = this.fakeHttp({ 'https://api.example.com/*': { ok: true } }); // stubs fetch
+const mail = this.fakeMail();        // assertSent / assertQueued
+const notifications = this.fakeNotifications(); // assertSentTo...
+const storage = this.fakeStorage();  // Storage.fake(): in-memory disks, assertExists...
+const cache = this.fakeCache();      // Cache.fake(): every store is an array store
+```
+
+`Queue.fake()`, `Event.fake()`, `Storage.fake()` and `Cache.fake()` are also
+available straight off the facades, and `Http` / `Mail` / `Notification`
+exported from the testing module until their subsystems land.
+
+### Time Travel
+
+`travelTo`, `travel`, `freezeTime` and `travelBack` rewrite what `Date.now()`
+and `new Date()` report - cache expiries, session lifetimes and cron
+expressions all follow the travelled clock, and teardown restores real time:
+
+```typescript
+this.travelTo('2030-01-01T00:00:00Z');
+await this.assertDatabaseHas('tokens', { expires_at: '2030-01-08 00:00:00' });
+```
+
+### Exception Handling
+
+`withoutExceptionHandling()` makes requests rethrow whatever the route
+raises (404s keep rendering); `expectException(Class)` arms the next request
+so a matching throw passes the test and a silent one fails it.
+`withExceptionHandling()` restores rendering.
+
 ## Collections, Strings & Helpers
+
 
 ### Collections
 
@@ -3566,6 +3677,7 @@ npx orchestr deploy:rollback              # point the project back to the previo
 - ✅ Authentication (session + token guards, remember me, Ensemble user provider, auth/guest middleware)
 - ✅ Authorization (Gate, policies, `can` middleware, gate-backed validation rules)
 - ✅ Filesystem & Uploads (local/public/null disks, path-traversal protection, atomic writes, multipart parsing, UploadedFile storage, upload validation rules)
+- ✅ Testing Framework (TestCase over the real Kernel, RefreshDatabase/DatabaseTransactions, response & database assertions, acting-as, service fakes, time travel)
 - ✅ Collections (`Array`-subclass with the Laravel method surface, `EnsembleCollection`) & Support utilities (`Str`, `Arr`, `Number`, global helpers)
 - ✅ Timestamps
 - ✅ @DynamicRelation Decorator

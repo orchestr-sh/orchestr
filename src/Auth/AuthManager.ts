@@ -152,6 +152,12 @@ export class AuthManager {
    */
   protected scope: { request: Request; response?: Response; guards: Map<string, StatefulGuard> } | null = null;
 
+  /**
+   * Users parked through actingAs(): guards created for the named guard
+   * resolve them without a session or token
+   */
+  protected pinnedUsers: Map<string, Authenticatable> = new Map();
+
   constructor(
     config: Partial<AuthConfig> = {},
     protected readonly dependencies: AuthManagerDependencies = {}
@@ -170,6 +176,41 @@ export class AuthManager {
    */
   extend(name: string, factory: GuardFactory): this {
     this.customExtensions.set(name, factory);
+    return this;
+  }
+
+  /**
+   * Make guards created from now on (in any request scope) resolve the
+   * given user as authenticated. Laravel parks the user on the persistent
+   * guard instance; guards here are request-scoped, so the pin lives on
+   * the manager and is re-applied to each fresh guard.
+   * Laravel: the acting-as half of Illuminate\Foundation\Testing\Concerns\InteractsWithAuthentication
+   */
+  actingAs(user: Authenticatable, guard?: string): this {
+    this.pinnedUsers.set(guard ?? this.getDefaultDriver(), user);
+
+    if (guard) {
+      this.shouldUse(guard);
+    }
+
+    return this;
+  }
+
+  /**
+   * Stop resolving the pinned user for a guard (default guard when no
+   * name is given)
+   */
+  forgetActingAs(guard?: string): this {
+    this.pinnedUsers.delete(guard ?? this.getDefaultDriver());
+    return this;
+  }
+
+  /**
+   * Change the default guard subsequent guard() calls resolve
+   * Laravel: Manager::shouldUse()
+   */
+  shouldUse(name: string): this {
+    this.config.defaults.guard = name;
     return this;
   }
 
@@ -203,6 +244,12 @@ export class AuthManager {
     }
 
     const guard = this.createGuard(guardName);
+
+    const pinned = this.pinnedUsers.get(guardName);
+
+    if (pinned) {
+      guard.setUser?.(pinned);
+    }
 
     cache.set(guardName, guard);
 
@@ -287,6 +334,7 @@ export class AuthManager {
     this.guards.clear();
     this.resolvedProviders.clear();
     this.scope = null;
+    this.pinnedUsers.clear();
 
     return this;
   }

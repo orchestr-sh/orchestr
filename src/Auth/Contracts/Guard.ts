@@ -91,6 +91,13 @@ export interface StatefulGuard {
    * Bind the response the guard should queue cookies onto (port seam)
    */
   setResponse?(response: Response): void;
+
+  /**
+   * Make the guard resolve the given user as authenticated, bypassing the
+   * session/token lookup - the seam Laravel's acting-as uses
+   * Laravel: SessionGuard::setUser() / TokenGuard::setUser()
+   */
+  setUser?(user: Authenticatable): void;
 }
 
 /**

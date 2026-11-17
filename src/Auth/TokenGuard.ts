@@ -69,6 +69,15 @@ export class TokenGuard implements StatefulGuard {
   }
 
   /**
+   * Park a user on the guard so user() resolves it without a token - the
+   * seam acting-as style tests use
+   * Laravel: TokenGuard::setUser()
+   */
+  setUser(user: Authenticatable): void {
+    this.resolvedUser = user;
+  }
+
+  /**
    * The user owning the presented token, or null for guests
    * Laravel: TokenGuard::user()
    */

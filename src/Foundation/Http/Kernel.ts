@@ -72,6 +72,15 @@ export class Kernel {
   }
 
   /**
+   * Drop the memoised exception handler so the next handle resolves the
+   * container's current binding again - the seam tests use after swapping
+   * the handler (withoutExceptionHandling)
+   */
+  public forgetExceptionHandler(): void {
+    this.exceptionHandler = undefined;
+  }
+
+  /**
    * Add global middleware to the Kernel's stack; the stack runs once around
    * every request instead of middleware being declared per route. Entries are
    * middleware functions or registered alias/group names.
