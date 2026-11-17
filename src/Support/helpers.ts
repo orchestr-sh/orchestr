@@ -8,6 +8,7 @@ import type { EnsembleClass, Factory, FactoryState } from '@/Database/Factories/
 import type { Encrypter as EncrypterContract } from '@/Encryption/Contracts/Encrypter';
 import type { Config as ConfigClass } from '@/Foundation/Config/Config';
 import type { HashManager as HashManagerContract } from '@/Hashing/HashManager';
+import type { Factory as HttpFactoryClass } from '@/Http/Client/Factory';
 import type { MailManager } from '@/Mail/MailManager';
 import type { NotificationRouterLike } from '@/Notifications/Contracts/NotificationRouter';
 import type { RouteUrlParameters } from '@/Routing/UrlGenerator';
@@ -19,6 +20,7 @@ import type { ViewFactory } from '@/View/ViewFactory';
 import { resolveModelFactory } from '@/Database/Factories/HasFactory';
 import { Application } from '@/Foundation/Application';
 import { Env } from '@/Foundation/Env/Env';
+import { defaultFactory } from '@/Http/Client/Factory';
 import { Arr } from '@/Support/Arr';
 import { Collection, collect as createCollection } from '@/Support/Collection';
 import { Str } from '@/Support/Str';
@@ -351,6 +353,24 @@ export function notification(): NotificationRouterLike {
   }
 
   return globalApp.make<NotificationRouterLike>('notifications');
+}
+
+/**
+ * Access the HTTP client factory.
+ * Laravel: the Http facade's instance - spelled as a helper for app
+ * code that prefers function calls. The factory is resolved from the
+ * container when HttpServiceProvider bound one; otherwise the
+ * process-wide default factory answers, so scripts without an
+ * application still get the full fluent/fake surface:
+ *
+ *   await http().withToken('secret').get('https://api.example.com/me');
+ */
+export function http(): HttpFactoryClass {
+  if (globalApp && globalApp.bound('http')) {
+    return globalApp.make<HttpFactoryClass>('http');
+  }
+
+  return defaultFactory();
 }
 
 /**
