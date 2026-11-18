@@ -1116,7 +1116,18 @@ export { defaultAttributeLines } from './Translation/lang/en/attributes';
 // Types
 export type { HttpMethod, RouteAction } from './Routing/Route';
 export type { Middleware, MiddlewareArgument, NextFunction, TerminableMiddleware } from './Routing/Pipeline';
-export type { Abstract, Concrete, Binding } from './Container/Container';
+export type {
+  Abstract,
+  Binding,
+  CallableArgument,
+  Concrete,
+  Extender,
+  ParameterOverrides,
+  RebindingCallback,
+  ResolvingCallback,
+  TagResolver,
+} from './Container/Container';
+export { ContextualBindingBuilder } from './Container/ContextualBindingBuilder';
 export type { CookieOptions } from './Routing/Response';
 
 // Testing
