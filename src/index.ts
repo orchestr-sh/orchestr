@@ -96,6 +96,7 @@ export { Crypt } from './Facades/Crypt';
 export { Schedule as ScheduleFacade } from './Facades/Schedule';
 export { Mail as MailFacade } from './Facades/Mail';
 export { Notification as NotificationFacade } from './Facades/Notification';
+export { Http as HttpFacade } from './Facades/Http';
 
 // Helpers
 export {
@@ -133,6 +134,7 @@ export {
   auth,
   mail,
   notification,
+  http,
   factory,
   fake,
 } from './Support/helpers';
@@ -179,6 +181,7 @@ export { ViewServiceProvider } from './View/ViewServiceProvider';
 export type { ViewConfig } from './View/ViewServiceProvider';
 export { MailServiceProvider } from './Mail/MailServiceProvider';
 export { NotificationServiceProvider } from './Notifications/NotificationServiceProvider';
+export { HttpServiceProvider } from './Http/Client/HttpServiceProvider';
 
 // Database
 export { DatabaseManager } from './Database/DatabaseManager';
@@ -231,6 +234,34 @@ export { resolveCurrentRequestUsing, currentRequestPath, currentRequestQuery } f
 
 // Http Resources
 export { JsonResource, ResourceCollection, AnonymousResourceCollection, MISSING_VALUE } from './Http/Resources';
+
+// Http Client (Illuminate\Http\Client)
+export { Factory as HttpFactory, defaultFactory } from './Http/Client/Factory';
+export type { FakeStubMap, RecordedMatcher, RequestResponsePair } from './Http/Client/Factory';
+export { PendingRequest } from './Http/Client/PendingRequest';
+export type {
+  BeforeSendingCallback,
+  RetryDelay,
+  RetryWhenCallback,
+  StubCallback,
+  StubValue,
+  ThrowCallback,
+  ThrowIfCallback,
+} from './Http/Client/PendingRequest';
+export { Request as HttpRequest } from './Http/Client/Request';
+export type { RequestFile } from './Http/Client/Request';
+export { Response as HttpResponse } from './Http/Client/Response';
+export type { ResponseHeaderBag, ResponseOptions } from './Http/Client/Response';
+export { Sequence as HttpResponseSequence } from './Http/Client/Sequence';
+export { ConnectionException } from './Http/Client/ConnectionException';
+export { RequestException, REQUEST_EXCEPTION_SUMMARY_LENGTH } from './Http/Client/RequestException';
+export { TimeoutException } from './Http/Client/TimeoutException';
+export { FetchTransport } from './Http/Client/Transports/FetchTransport';
+export type {
+  Transport as HttpTransport,
+  TransportRequest as HttpTransportRequest,
+  TransportResponse as HttpTransportResponse,
+} from './Http/Client/Contracts/Transport';
 
 // Ensemble Observers & Scopes
 export { ObserverRegistry, OBSERVER_EVENTS } from './Database/Ensemble/Observers';

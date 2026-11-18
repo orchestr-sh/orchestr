@@ -32,6 +32,7 @@ Requires Node `^22.18.0 || >=24.0.0` and TypeScript `>=5`.
 - [Filesystem & File Uploads](#filesystem--file-uploads)
 - [Mail](#mail)
 - [Notifications](#notifications)
+- [HTTP Client](#http-client)
 - [Collections, Strings & Helpers](#collections-strings--helpers)
 - [Configuration & Environment](#configuration--environment)
 - [Queue System](#queue-system)
@@ -2182,6 +2183,120 @@ with the application, and because the fake lives at the `notifications`
 binding, model calls, facades and helpers all record against it without
 knowing.
 
+## HTTP Client
+
+`Http` (the facade, or the `http()` helper) is Orchestr's port of Laravel's
+HTTP client: a fluent `Factory`/`PendingRequest` builds the request, a
+`Transport` sends it, and `Response` wraps the answer (SRP). The default
+transport rides Node's built-in `fetch` (Node 22+), and any adapter behind
+the `Transport` contract can replace it - the fluent API never touches fetch
+internals (OCP).
+
+```typescript
+import { Http } from '@orchestr-sh/orchestr/Facades';
+
+// Verbs: get, post, put, patch, delete, head, options.
+const response = await Http.get('https://api.example.com/users');
+
+// Response interrogation.
+response.status(); // 200
+response.ok(); // status === 200 - successful() covers the 2xx range
+response.failed(); response.clientError(); response.serverError();
+response.json(); // whole body; json('data.0.name', 'fallback') uses dot notation
+response.text(); response.body();
+response.headers(); response.header('x-rate-limit');
+response.object(); response.collect(); // Support Collections for the body
+
+// Building requests.
+await Http.withHeaders({ 'X-Client': 'orchestr' }).get(url);
+await Http.withToken('secret').get(url); // Authorization: Bearer secret
+await Http.withBasicAuth('sam', 'hunter2').get(url);
+await Http.withDigestAuth('sam', 'secret').get(url); // answers the 401 challenge
+await Http.withCookies({ theme: 'dark' }, 'example.com').get(url);
+await Http.acceptJson().timeout(2.5).connectTimeout(1).get(url);
+await Http.withOptions({ redirect: 'manual' }).get(url); // transport passthrough
+await Http.withBody('<xml/>', 'application/xml').post(url);
+await Http.beforeSending((request) => console.log(request.method)).get(url);
+
+// Bodies: JSON by default, form or multipart on request.
+await Http.post('https://api.example.com/users', { name: 'Ada' }); // JSON
+await Http.asForm().post(url, { name: 'Ada' }); // application/x-www-form-urlencoded
+await Http.attach('photo', bytes, 'photo.jpg').post(url, { caption: 'hi' }); // multipart
+
+// Downloads stream to disk through sink().
+await Http.sink('/tmp/report.pdf').get(reportUrl);
+```
+
+Failed responses are returned, not thrown - escalate explicitly with
+`response.throw()` (raises a `RequestException` on 4xx/5xx, `throwIf` /
+`throwUnless` for conditions) or at the request level with
+`Http.throw()`, `Http.throwIf(condition)`. Connection failures arrive as
+`ConnectionException`, and expired budgets as `TimeoutException`:
+
+```typescript
+const response = await Http.get('https://api.example.com/users/1');
+
+if (response.status() === 404) {
+  // Failed responses come back for inspection - no exception, the Laravel default.
+}
+
+await Http.get(url).then((r) => r.throw()); // throws RequestException on 4xx/5xx
+
+// Retries: attempts, delay (ms), exponential backoff via closures or
+// an array schedule, and the throwIf/retryWhen hooks.
+await Http.retry(3, 100).post(url, payload); // 3 attempts, 100ms apart
+await Http.retry(3, (attempt) => attempt ** 2 * 100).get(url); // exponential
+await Http.retry([100, 200, 400]).get(url); // per-attempt schedule
+await Http.retry(3, 100, (exception) => exception.response?.status() === 429).get(url);
+await Http.throwIf((response) => response.serverError()).retry(3, 100).get(url);
+```
+
+### Faking Outbound HTTP
+
+`Http.fake()` intercepts requests at the client - nothing hits the network
+for matched patterns - records every exchange, and answers from Laravel-style
+stubs: strings (text), objects (JSON), numbers (status), `Http.response(...)`
+envelopes, callbacks, `ConnectionException`s and sequences:
+
+```typescript
+import { Http } from '@orchestr-sh/orchestr/Facades';
+
+Http.fake({
+  'https://api.example.com/users': { data: [{ id: 1 }] }, // JSON 200
+  'https://api.example.com/*': (request) => request.method === 'DELETE' ? 204 : null, // pattern + fallthrough
+  'https://hooks.example.com/*': Http.response('queued', 201, { 'X-Hook': 'yes' }),
+});
+
+await Http.withToken('secret').get('https://api.example.com/users');
+
+// Assertions over the recorded requests.
+Http.assertSent('https://api.example.com/users');
+Http.assertSent((request, response) => request.header('authorization') === 'Bearer secret' && response!.ok());
+Http.assertNotSent('https://api.example.com/admin');
+Http.assertSentCount(1);
+Http.assertNothingSent(); // after Http.fake() resets records
+
+// Sequences pop one response per request.
+const sequence = Http.fakeSequence('https://flaky.test/*');
+sequence.pushStatus(500).pushStatus(500).push({ recovered: true });
+
+// Simulated failures.
+Http.fake({ 'https://dead.test/*': Http.failedConnection() });
+Http.fake({ 'https://errors.test/*': Http.failedRequest({ message: 'nope' }, 422) });
+
+// Refuse anything that no stub answers.
+Http.preventStrayRequests();
+await Http.get('https://surprise.test/'); // throws: unexpected and unmocked request
+
+Http.stopFaking(); // drop all stubs and recordings
+```
+
+`Request` records inside callbacks expose `url`, `method`, `headers()`,
+`header()`, `body()`, `data()` / `input('key')`, `files()` / `hasFile()`, and
+`attemptNumber()`. With `HttpServiceProvider` registered the facade resolves
+the container's `http` binding; standalone scripts and tests fall back to a
+process-wide default factory, so `Http.fake()` works without an application.
+
 ## Testing
 
 Orchestr ships a Laravel-shaped testing layer on top of Vitest: a `TestCase`
@@ -2354,7 +2469,7 @@ Everything is import-based; nothing touches `globalThis`:
 | `base_path() / storage_path() / resource_path() / routes_path()` | Application-path helpers. |
 | `view(name, data)` / `route(name, params)` | View instances, named-route URLs. |
 | `session()` / `csrf_token()` / `csrf_field()` | Active request session + CSRF helpers (require StartSession). |
-| `hash(value)` / `encrypt()` / `decrypt()` / `auth(guard?)` / `mail()` / `factory(Model, count?)` / `fake(...)` | Pass-throughs to the hashing, encryption, auth, mail and factory subsystems; each throws a helpful error if its service provider isn't registered. |
+| `hash(value)` / `encrypt()` / `decrypt()` / `auth(guard?)` / `mail()` / `http()` / `factory(Model, count?)` / `fake(...)` | Pass-throughs to the hashing, encryption, auth, mail, HTTP-client and factory subsystems; `http()` falls back to the process-wide client factory when no application bound one, the others throw a helpful error if their service provider isn't registered. |
 | `data_get() / data_set() / value() / tap() / throw_if() / throw_unless() / class_basename()` | Laravel's utility helpers, dot-notation aware. |
 | `optional(value)` | Null-safe proxy: `optional(user).get('profile.bio')`, plus chained property access, `.value`, `.call()`, `.collect()`. |
 | `now()` / `today()` | Plain `Date`s (`today()` at local midnight) - there is no Carbon-style chain. |
@@ -2363,9 +2478,9 @@ Everything is import-based; nothing touches `globalThis`:
 
 ### Facades & import names
 
-Facades are container proxies: `Route`, `DB`, `Event`, `Queue`, `Bus`, `Cache`, `Schedule`, `Session`, `Storage`, `Auth`, `Gate`, `Hash`, `Crypt`, `View` and `Mail`. They resolve against the application registered via `Facade.setFacadeApplication(app)` - which the framework does inside `RouteServiceProvider.register()` (it also binds the `'router'` that `Route` and URL generation need). So registering `RouteServiceProvider` lights up every facade, and apps that skip it can call `Facade.setFacadeApplication(app)` by hand.
+Facades are container proxies: `Route`, `DB`, `Event`, `Queue`, `Bus`, `Cache`, `Schedule`, `Session`, `Storage`, `Auth`, `Gate`, `Hash`, `Crypt`, `View`, `Mail` and `Http`. They resolve against the application registered via `Facade.setFacadeApplication(app)` - which the framework does inside `RouteServiceProvider.register()` (it also binds the `'router'` that `Route` and URL generation need). So registering `RouteServiceProvider` lights up every facade, and apps that skip it can call `Facade.setFacadeApplication(app)` by hand.
 
-Because the main entry reserves bare names for core classes (`Event` = abstract event base, `Gate` = the gate service class, `View` = the view instance class, `Config` = the config repository facade object, `Schedule` = the scheduler class, `Mail` = the Testing fake installer), several facades are exported **aliased** there, or bare from the `/Facades` subpath:
+Because the main entry reserves bare names for core classes (`Event` = abstract event base, `Gate` = the gate service class, `View` = the view instance class, `Config` = the config repository facade object, `Schedule` = the scheduler class, `Mail` = the Testing fake installer, `Http` = the Testing fake installer), several facades are exported **aliased** there, or bare from the `/Facades` subpath:
 
 | Facade | From `'@orchestr-sh/orchestr'` | From `'@orchestr-sh/orchestr/Facades'` |
 | --- | --- | --- |
@@ -2375,6 +2490,7 @@ Because the main entry reserves bare names for core classes (`Event` = abstract 
 | View factory | `ViewFacade` | *not exported* - use `ViewFacade` |
 | Schedule | `ScheduleFacade` | `Schedule` |
 | Mail manager | `MailFacade` (bare `Mail` is the fake installer) | `Mail` |
+| HTTP client | `HttpFacade` (bare `Http` is the fake installer) | `Http` |
 | Bus / Cache / Session / Storage / Auth / Hash / Crypt / Route / DB | same name | same name |
 
 The `/Facades` entry also exports `EventFake` for typed test fakes. One name to watch: bare `Config` is a facade alias over the container's config repository, while the repository class itself is `ConfigClass` - prefer the `config()` helper for reads (see [Configuration & Environment](#configuration--environment)).
@@ -3939,6 +4055,7 @@ npx orchestr deploy:rollback              # point the project back to the previo
 - ✅ Filesystem & Uploads (local/public/null disks, path-traversal protection, atomic writes, multipart parsing, UploadedFile storage, upload validation rules)
 - ✅ Mail (Mailables rendered through the view system, smtp/log/array/failover transports, storage-disk attachments, queued delivery, fakes & assertions)
 - ✅ Notifications (mail/database/broadcast channels, `Notifiable` models, on-demand routing, stored `DatabaseNotification` rows, queued sends, `NotificationSent`/`NotificationFailed` events, fakes & assertions)
+- ✅ HTTP Client (`Http` facade / `http()` helper - fluent PendingRequest, verbs, JSON/form/multipart bodies, auth headers, digest challenge, sinks, retries with backoff, `throw`/`throwIf`/`retryWhen` hooks, fakes with pattern stubs, sequences & assertions, pluggable `Transport` over Node's `fetch`)
 - ✅ Testing Framework (TestCase over the real Kernel, RefreshDatabase/DatabaseTransactions, response & database assertions, acting-as, service fakes, time travel)
 - ✅ Collections (`Array`-subclass with the Laravel method surface, `EnsembleCollection`) & Support utilities (`Str`, `Arr`, `Number`, global helpers)
 - ✅ Timestamps

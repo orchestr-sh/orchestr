@@ -4,8 +4,11 @@
  * The Mail::fake() / Notification::fake() / Http::fake()-style entry
  * points. Queue, Event, Storage and Cache expose fake() on their own
  * facades; the Mail and Notification facades delegate here now that the
- * real subsystems exist, while outbound HTTP still arrives in its own
- * ticket, so its recorder is installed through Testing until then.
+ * real subsystems exist. The Http installer stays a fetch-level
+ * double: it intercepts *any* outbound fetch, including code that
+ * never touches the HTTP client. Requests made through the client are
+ * faked - with sequences, patterns and the full assertion suite - on
+ * the Http facade's own fake() (Illuminate\Http\Client).
  */
 
 import type { Application } from '@/Foundation/Application';
