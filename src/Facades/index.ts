@@ -21,3 +21,4 @@ export { Crypt } from './Crypt';
 export { Mail } from './Mail';
 export { Notification } from './Notification';
 export { Http } from './Http';
+export { Lang } from './Lang';

@@ -106,6 +106,14 @@ export class Application extends Container {
   }
 
   /**
+   * Get the path to the language files directory
+   * Laravel: $app->langPath()
+   */
+  langPath(path: string = ''): string {
+    return `${this.basePath}/lang${path ? '/' + path : ''}`;
+  }
+
+  /**
    * Get the path to the bootstrap directory (cache files, etc.)
    */
   bootstrapPath(path: string = ''): string {

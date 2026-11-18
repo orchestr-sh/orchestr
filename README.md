@@ -33,6 +33,7 @@ Requires Node `^22.18.0 || >=24.0.0` and TypeScript `>=5`.
 - [Mail](#mail)
 - [Notifications](#notifications)
 - [HTTP Client](#http-client)
+- [Localization](#localization)
 - [Collections, Strings & Helpers](#collections-strings--helpers)
 - [Configuration & Environment](#configuration--environment)
 - [Queue System](#queue-system)
@@ -2297,6 +2298,112 @@ Http.stopFaking(); // drop all stubs and recordings
 the container's `http` binding; standalone scripts and tests fall back to a
 process-wide default factory, so `Http.fake()` works without an application.
 
+## Localization
+
+Validation messages and application strings resolve through a Laravel-shaped
+translator: `lang/{locale}/{group}` files, `:name` replacement, `|`
+pluralization with `{0}` / `[1,19]` / `[20,*]` specs, a locale fallback chain,
+and `package::file.key` namespaced package lines.
+
+### Setup
+
+```typescript
+import { TranslationServiceProvider } from '@orchestr-sh/orchestr';
+
+app.register(TranslationServiceProvider); // binds the 'translator'
+await app.boot();
+```
+
+```typescript
+// config/app.ts
+export default {
+  locale: 'en', // app.locale - the active language
+  fallback_locale: 'en', // app.fallback_locale - second lookup when a key misses
+};
+```
+
+Boot reads `app.locale` / `app.fallback_locale` and preloads both locales, so
+module-backed language files answer synchronous lookups from the first
+request. JSON lines always load lazily.
+
+### Language files
+
+```bash
+npx orchestr lang:publish # writes lang/en/validation.ts + lang/en/attributes.ts (--locale=fr --force)
+```
+
+```typescript
+// lang/en/messages.ts
+export default {
+  welcome: 'Welcome!',
+  greeting: 'Hello, :name!',
+  apples: 'There is one apple|There are :count apples',
+  counted: '{0} None|[1,19] A few|[20,*] Many',
+  nested: { deep: 'Dot keys reach nested lines' },
+};
+```
+
+- `lang/{locale}/{group}.ts` default-exports a nested object - `messages.nested.deep` reads through it; `{group}.json` files answer identically
+- flat `lang/{locale}.json` files answer bare keys (`__('welcome')` reads the '*' group)
+- packages ship lines under their own root and register it: `Lang.addNamespace('shop', 'vendor/shop/lang')` makes `shop::products.offer` resolve
+
+### Helpers & facade
+
+```typescript
+import { __, trans, trans_choice } from '@orchestr-sh/orchestr';
+import { Lang } from '@orchestr-sh/orchestr/Facades';
+
+__('messages.welcome'); // 'Welcome!'
+__('messages.greeting', { name: 'Sam' }); // 'Hello, Sam!'
+trans('messages.welcome'); // alias of __()
+trans_choice('messages.apples', 2); // 'There are 2 apples' - `:count` / `%count%` are provided
+
+Lang.get('messages.greeting', { name: 'Sam' });
+Lang.choice('messages.counted', 20); // 'Many'
+Lang.has('messages.nope'); // false
+Lang.setLocale('fr');
+await Lang.preload('fr'); // await module-backed lines before the first sync read
+Lang.locales(); // every locale the lang/ roots provide
+```
+
+Missing keys fall back to the fallback locale, then answer with the key
+itself. `Validator`, the `SetLocale` middleware and the `Lang` facade all
+resolve the same container translator, so validation and application strings
+never diverge.
+
+### Accept-Language negotiation
+
+```typescript
+import { SetLocale } from '@orchestr-sh/orchestr';
+
+kernel.use(SetLocale); // or kernel.middlewareAlias('locale', SetLocale)
+```
+
+The middleware parses the request's `Accept-Language` header (q-values
+included), matches the best preferred locale against `Lang.locales()` -
+exact tags first, then region folding so `en-GB` lands on `en` - and
+switches the translator for the rest of the request. Unrecognized headers
+leave `app.locale` in place.
+
+### Translated validation messages
+
+Once a translator is bound the Validator resolves its defaults from
+`lang/{locale}/validation.ts` (`validation.required`, size-based
+`validation.min.string` variants chosen by value type, per-field
+`validation.custom.{field}.{rule}`) and display names from
+`lang/{locale}/attributes.ts` (`attributes.first_name` -> "First name"):
+
+```typescript
+const v = Validator.make({ email: '' }, { email: 'required' });
+
+await v.validate();
+v.errors().email; // 'The email address field is required.' - once attributes.ts maps email => 'email address'
+```
+
+Constructor-supplied custom messages still win; untranslated rules keep the
+built-in English strings, so validation behaves exactly as before without
+published language files.
+
 ## Testing
 
 Orchestr ships a Laravel-shaped testing layer on top of Vitest: a `TestCase`
@@ -2466,11 +2573,12 @@ Everything is import-based; nothing touches `globalThis`:
 | --- | --- |
 | `config(key?, default?)` | Reads the container's `Config`; no key returns the config instance itself. Throws if no application has been created yet. |
 | `env(key, default?)` | Type-coerced `process.env` reads (see Configuration & Environment). |
-| `base_path() / storage_path() / resource_path() / routes_path()` | Application-path helpers. |
+| `base_path() / storage_path() / resource_path() / routes_path() / lang_path()` | Application-path helpers. |
 | `view(name, data)` / `route(name, params)` | View instances, named-route URLs. |
 | `session()` / `csrf_token()` / `csrf_field()` | Active request session + CSRF helpers (require StartSession). |
 | `hash(value)` / `encrypt()` / `decrypt()` / `auth(guard?)` / `mail()` / `http()` / `factory(Model, count?)` / `fake(...)` | Pass-throughs to the hashing, encryption, auth, mail, HTTP-client and factory subsystems; `http()` falls back to the process-wide client factory when no application bound one, the others throw a helpful error if their service provider isn't registered. |
 | `data_get() / data_set() / value() / tap() / throw_if() / throw_unless() / class_basename()` | Laravel's utility helpers, dot-notation aware. |
+| `__('key', replacements?)` / `trans(...)` / `trans_choice(key, count)` | Translator lookups with `:name` replacement and count-selected plural forms (see Localization). |
 | `optional(value)` | Null-safe proxy: `optional(user).get('profile.bio')`, plus chained property access, `.value`, `.call()`, `.collect()`. |
 | `now()` / `today()` | Plain `Date`s (`today()` at local midnight) - there is no Carbon-style chain. |
 | `str()` / `arr()` | Return the `Str` / `Arr` classes themselves, e.g. `str().slug('Hello')` - not fluent Stringable objects. |
@@ -2478,7 +2586,7 @@ Everything is import-based; nothing touches `globalThis`:
 
 ### Facades & import names
 
-Facades are container proxies: `Route`, `DB`, `Event`, `Queue`, `Bus`, `Cache`, `Schedule`, `Session`, `Storage`, `Auth`, `Gate`, `Hash`, `Crypt`, `View`, `Mail` and `Http`. They resolve against the application registered via `Facade.setFacadeApplication(app)` - which the framework does inside `RouteServiceProvider.register()` (it also binds the `'router'` that `Route` and URL generation need). So registering `RouteServiceProvider` lights up every facade, and apps that skip it can call `Facade.setFacadeApplication(app)` by hand.
+Facades are container proxies: `Route`, `DB`, `Event`, `Queue`, `Bus`, `Cache`, `Schedule`, `Session`, `Storage`, `Auth`, `Gate`, `Hash`, `Crypt`, `View`, `Mail`, `Http` and `Lang`. They resolve against the application registered via `Facade.setFacadeApplication(app)` - which the framework does inside `RouteServiceProvider.register()` (it also binds the `'router'` that `Route` and URL generation need). So registering `RouteServiceProvider` lights up every facade, and apps that skip it can call `Facade.setFacadeApplication(app)` by hand.
 
 Because the main entry reserves bare names for core classes (`Event` = abstract event base, `Gate` = the gate service class, `View` = the view instance class, `Config` = the config repository facade object, `Schedule` = the scheduler class, `Mail` = the Testing fake installer, `Http` = the Testing fake installer), several facades are exported **aliased** there, or bare from the `/Facades` subpath:
 
@@ -2850,6 +2958,7 @@ All commands run via `npx orchestr` (or `orchestr` when installed globally). The
 | `cache:forget <key> [store]` | Forget one key |
 | `cache:table` | Create the cache table migration |
 | `notifications:table` | Create the notifications table migration |
+| `lang:publish` | Copy the default language files into `lang/{locale}` (`--locale=`, `--force`) |
 | `config:cache` | Compile `config/*` into `bootstrap/cache/config.json` |
 | `config:clear` | Remove the configuration snapshot |
 | `route:list` | Method, URI, name, action, and middleware per route (`--json`, `--path=`) |
@@ -4056,6 +4165,7 @@ npx orchestr deploy:rollback              # point the project back to the previo
 - ✅ Mail (Mailables rendered through the view system, smtp/log/array/failover transports, storage-disk attachments, queued delivery, fakes & assertions)
 - ✅ Notifications (mail/database/broadcast channels, `Notifiable` models, on-demand routing, stored `DatabaseNotification` rows, queued sends, `NotificationSent`/`NotificationFailed` events, fakes & assertions)
 - ✅ HTTP Client (`Http` facade / `http()` helper - fluent PendingRequest, verbs, JSON/form/multipart bodies, auth headers, digest challenge, sinks, retries with backoff, `throw`/`throwIf`/`retryWhen` hooks, fakes with pattern stubs, sequences & assertions, pluggable `Transport` over Node's `fetch`)
+- ✅ Localization (Translator with `:name` replacement, `|` pluralization & `{n}`/`[min,max]` specs, locale fallback chain, JSON + nested object/TS language files, `package::file.key` namespaces, `__()` / `trans_choice()`, `Lang` facade, `Accept-Language` middleware, translated validation messages, `lang:publish`)
 - ✅ Testing Framework (TestCase over the real Kernel, RefreshDatabase/DatabaseTransactions, response & database assertions, acting-as, service fakes, time travel)
 - ✅ Collections (`Array`-subclass with the Laravel method surface, `EnsembleCollection`) & Support utilities (`Str`, `Arr`, `Number`, global helpers)
 - ✅ Timestamps

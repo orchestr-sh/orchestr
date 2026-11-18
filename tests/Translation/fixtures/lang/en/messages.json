@@ -1,0 +1,14 @@
+{
+  "welcome": "Welcome!",
+  "greeting": "Hello, :name!",
+  "apples": "There is one apple|There are %count% apples",
+  "inbox": "You have one message|You have :count messages",
+  "counted": "{0} None|[1,19] A few|[20,*] Many",
+  "upper": "Hi :Name, :NAME",
+  "nested": {
+    "deep": {
+      "key": "Deep value: :value"
+    }
+  },
+  "only_en": "English only"
+}

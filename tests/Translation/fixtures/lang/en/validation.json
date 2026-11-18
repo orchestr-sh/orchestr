@@ -1,0 +1,18 @@
+{
+  "required": "The :attribute field is required (translated).",
+  "email": "The :attribute must be a valid email address.",
+  "min": {
+    "numeric": "The :attribute must be at least :min.",
+    "file": "The :attribute must be at least :min kilobytes.",
+    "string": "The :attribute must be at least :min characters.",
+    "array": "The :attribute must have at least :min items."
+  },
+  "between": "The :attribute must be between :min and :max.",
+  "in": "The selected :attribute is invalid.",
+  "starts_with": "The :attribute must start with one of :values.",
+  "custom": {
+    "email": {
+      "required": "Please provide an email address."
+    }
+  }
+}

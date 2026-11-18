@@ -31,6 +31,7 @@ import { EventCacheCommand } from './EventCacheCommand';
 import { EventClearCommand } from './EventClearCommand';
 import { EventListCommand } from './EventListCommand';
 import { KeyGenerateCommand } from './KeyGenerateCommand';
+import { LangPublishCommand } from './LangPublishCommand';
 import { MakeCastCommand } from './MakeCastCommand';
 import { MakeChannelCommand } from './MakeChannelCommand';
 import { MakeClassCommand } from './MakeClassCommand';
@@ -167,6 +168,8 @@ export function coreCommands(app: Application): Command[] {
     new CacheClearCommand(app),
     new CacheForgetCommand(app),
     new CacheTableCommand(app),
+    // Language commands
+    new LangPublishCommand(app),
     // Config commands
     new ConfigCacheCommand(app),
     new ConfigClearCommand(app),

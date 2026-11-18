@@ -220,6 +220,25 @@ Rule classes may also provide tailored messages (`->message()` on
 invokable rules or `{ rule, message }` objects); an inline message wins
 over both the defaults and the messages map.
 
+### Localized Messages
+
+Register the `TranslationServiceProvider` (see the Localization chapter in
+the README) and the Validator resolves its defaults through the
+translator before falling back to the hard-coded English strings:
+
+- `validation.{rule}` - e.g. `validation.required`; size-based rules
+  (`min`/`max`/`size`) take a value-type variant (`validation.min.string`)
+  when the language file provides one
+- `validation.custom.{field}.{rule}` (or the wildcard pattern key) for
+  per-field translated messages
+- `attributes.{field}` - display names used for `:attribute`, ahead of the
+  underscore-split field name
+
+Publish the starting point with `npx orchestr lang:publish`, switch
+languages with `Lang.setLocale('fr')` or the `SetLocale` middleware
+(`Accept-Language` negotiation), and placeholders like `:min`/`:max` are
+filled from the rule's parameters.
+
 ## Form Requests
 
 Encapsulate validation by extending `FormRequest`. Define `rules()` and `messages()` then call `validated()`:

@@ -105,10 +105,15 @@ export {
   routes_path,
   resource_path,
   storage_path,
+  lang_path,
   view,
   route,
   str,
   arr,
+  __,
+  trans,
+  trans_choice,
+  resolveTranslator,
   data_get,
   data_set,
   value,
@@ -412,6 +417,9 @@ export { MakeJobCommand } from './Console/Commands/MakeJobCommand';
 export { CacheClearCommand } from './Console/Commands/CacheClearCommand';
 export { CacheForgetCommand } from './Console/Commands/CacheForgetCommand';
 export { CacheTableCommand } from './Console/Commands/CacheTableCommand';
+
+// Console Commands - Language
+export { LangPublishCommand } from './Console/Commands/LangPublishCommand';
 
 // Console Commands - Config
 export { ConfigCacheCommand } from './Console/Commands/ConfigCacheCommand';
@@ -819,6 +827,14 @@ export { resolveRedirect, type RedirectDestination } from './Auth/Middleware/Red
 
 // Routing Middleware
 export { ValidateSignature, makeValidateSignature, resolveSignedRouter } from './Routing/Middleware/ValidateSignature';
+export {
+  SetLocale,
+  makeSetLocale,
+  resolveTranslatorForLocale,
+  parseAcceptLanguage,
+  matchSupportedLocale,
+} from './Routing/Middleware/SetLocale';
+export type { AcceptLanguageEntry } from './Routing/Middleware/SetLocale';
 
 // View
 export { View } from './View/View';
@@ -889,6 +905,17 @@ export { NotificationSent } from './Notifications/Events/NotificationSent';
 export { NotificationFailed } from './Notifications/Events/NotificationFailed';
 export type { Channel, ChannelFactory } from './Notifications/Contracts/Channel';
 export type { NotificationRouterLike } from './Notifications/Contracts/NotificationRouter';
+
+// Translation (Illuminate\Translation)
+export { Translator, defaultTranslator, parseTranslationKey } from './Translation/Translator';
+export type { ParsedTranslationKey } from './Translation/Translator';
+export type { TranslationLines, TranslationLoader } from './Translation/Contracts/TranslationLoader';
+export { FileLoader } from './Translation/FileLoader';
+export { Pluralizer } from './Translation/Pluralizer';
+export { Replacer } from './Translation/Replacer';
+export type { ReplacementValues } from './Translation/Replacer';
+export { defaultValidationLines } from './Translation/lang/en/validation';
+export { defaultAttributeLines } from './Translation/lang/en/attributes';
 
 // Types
 export type { HttpMethod, RouteAction } from './Routing/Route';

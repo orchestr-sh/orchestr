@@ -6,3 +6,11 @@
  */
 
 export { ValidateSignature, makeValidateSignature, resolveSignedRouter } from './ValidateSignature';
+export {
+  SetLocale,
+  makeSetLocale,
+  resolveTranslatorForLocale,
+  parseAcceptLanguage,
+  matchSupportedLocale,
+} from './SetLocale';
+export type { AcceptLanguageEntry } from './SetLocale';

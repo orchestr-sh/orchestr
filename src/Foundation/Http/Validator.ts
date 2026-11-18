@@ -10,9 +10,16 @@
  * rules it covers Laravel's nested/array validation (`users.*.email`
  * wildcards expanded to concrete error keys), `bail` /
  * `stopOnFirstFailure`, `sometimes` and `nullable` semantics, `after()`
- * hooks and custom message/attribute resolution.
+ * hooks, custom message/attribute resolution, and Laravel's translator
+ * integration (`lang/{locale}/validation.ts` messages and
+ * `attributes.ts` names when a translator is bound, inline strings as
+ * the fallback).
  */
 
+import type { Translator } from '@/Translation/Translator';
+import { isUploadedFile } from '@/Routing/UploadedFile';
+import { getGlobalApp } from '@/Support/helpers';
+import { Replacer } from '@/Translation/Replacer';
 import type { MessageReplacer, RuleContext, RuleDefinition, RuleExtension } from './Rules/Registry';
 import { defaultRegistry } from './Rules/Registry';
 
@@ -24,6 +31,83 @@ export interface ValidationRuleObject {
   message?: string;
   [key: string]: any;
 }
+
+/**
+ * Rules whose default message changes with the *type* of the validated
+ * value; Laravel resolves them through `validation.{rule}.{variant}`
+ * (file/string/numeric/array) language lines.
+ */
+const SIZE_BASED_RULES = new Set(['min', 'max', 'size']);
+
+/**
+ * Conditional `*_if` / `*_unless` rules: their `:value` placeholder joins
+ * every parameter after the field, like Laravel's replace helpers.
+ */
+const IF_VALUE_RULES = new Set([
+  'accepted_if',
+  'declined_if',
+  'missing_if',
+  'missing_unless',
+  'present_if',
+  'present_unless',
+  'prohibited_if',
+  'prohibited_unless',
+  'required_if',
+  'required_unless',
+]);
+
+/**
+ * Named placeholders each rule's translated message expects, matched
+ * positionally against the rule's colon parameters (e.g. `between:1,5`
+ * fills `:min` and `:max`).
+ */
+const RULE_PARAMETER_NAMES: Record<string, string[]> = {
+  accepted_if: ['other', 'value'],
+  after: ['date'],
+  after_or_equal: ['date'],
+  before: ['date'],
+  before_or_equal: ['date'],
+  between: ['min', 'max'],
+  date_equals: ['date'],
+  decimal: ['decimal'],
+  declined_if: ['other', 'value'],
+  doesnt_end_with: ['values'],
+  doesnt_start_with: ['values'],
+  digits: ['digits'],
+  digits_between: ['min', 'max'],
+  ends_with: ['values'],
+  gt: ['value'],
+  gte: ['value'],
+  in_array: ['other'],
+  lt: ['value'],
+  lte: ['value'],
+  max: ['max'],
+  max_digits: ['max'],
+  min: ['min'],
+  min_digits: ['min'],
+  missing_if: ['other', 'value'],
+  missing_unless: ['other', 'value'],
+  missing_with: ['values'],
+  missing_with_all: ['values'],
+  multiple_of: ['value'],
+  present_if: ['other', 'value'],
+  present_unless: ['other', 'value'],
+  present_with: ['values'],
+  present_with_all: ['values'],
+  prohibited_if: ['other', 'value'],
+  prohibited_unless: ['other', 'value'],
+  prohibits: ['values'],
+  required_array_keys: ['values'],
+  required_if: ['other', 'value'],
+  required_unless: ['other', 'value'],
+  required_with: ['values'],
+  required_with_all: ['values'],
+  required_without: ['values'],
+  required_without_all: ['values'],
+  same: ['other'],
+  size: ['size'],
+  starts_with: ['values'],
+};
 
 /**
  * A hook registered with `after()`; it receives the running validator and
@@ -281,7 +365,8 @@ export class Validator {
                 entry.field,
                 item.name,
                 `The ${this.getAttribute(entry.field, entry.pattern)} is invalid.`,
-                entry.pattern
+                entry.pattern,
+                item.params
               ));
 
         this.addError(entry.field, message);
@@ -374,7 +459,7 @@ export class Validator {
       has: (name: string) => this.hasValue(bind(name)),
       validator: this,
       getMessage: (rule: string, fallback: string) => this.getMessage(entry.field, rule, fallback, entry.pattern),
-      fail: (fallback: string) => this.getMessage(entry.field, item.name, fallback, entry.pattern),
+      fail: (fallback: string) => this.getMessage(entry.field, item.name, fallback, entry.pattern, item.params),
     };
   }
 
@@ -569,12 +654,26 @@ export class Validator {
   // ---------------------------------------------------------------------
 
   /**
-   * Get custom message or default message. Wildcard-expanded attributes
-   * look up their concrete key first, then the pattern key, so
-   * `users.*.email.required` covers every item. `:attribute` placeholders
-   * are filled in and the registered replacer gets the final say.
+   * Get custom message, translated message or default message. Wildcard-
+   * expanded attributes look up their concrete key first, then the
+   * pattern key, so `users.*.email.required` covers every item. When a
+   * translator is bound, Laravel-shaped language lines resolve next
+   * (`validation.custom.{field}.{rule}` ... `validation.{rule}`, with the
+   * size-variant sub-keys Laravel uses for min/max/size); the inline
+   * strings the rules hand in stay the final fallback so validation
+   * works without localization. `:attribute` and the rule's parameter
+   * placeholders (`:min`, `:max`, ...) are filled in and the registered
+   * replacer gets the final say.
    */
-  private getMessage(field: string, rule: string, defaultMessage: string, pattern?: string): string {
+  private getMessage(
+    field: string,
+    rule: string,
+    defaultMessage: string,
+    pattern?: string,
+    params: string[] = []
+  ): string {
+    const [ruleName, ...inlineParams] = rule.split(':');
+    const ruleParams = params.length > 0 ? params : inlineParams;
     const customKey = `${field}.${rule}`;
     const patternKey = pattern ? `${pattern}.${rule}` : '';
     const attribute = this.getAttribute(field, pattern);
@@ -583,21 +682,159 @@ export class Validator {
       this.customMessages[customKey] ||
       (patternKey && this.customMessages[patternKey]) ||
       this.customMessages[rule] ||
+      this.translateMessage(field, ruleName, ruleParams, pattern) ||
       defaultMessage;
 
-    message = message.replaceAll(':attribute', attribute);
+    message = Replacer.make(message, this.messageReplacements(attribute, ruleName, ruleParams));
 
-    return defaultRegistry.applyReplacer(message, attribute, field, rule, []);
+    return defaultRegistry.applyReplacer(message, attribute, field, rule, ruleParams);
+  }
+
+  /**
+   * Resolve a translated validation message from the container's
+   * translator, following Laravel's lookup order: per-field custom lines,
+   * a value-type variant of the size-based rules, then the rule's
+   * default. Returns null when no translator is bound or no line exists,
+   * leaving the caller's hard-coded message in charge.
+   */
+  private translateMessage(field: string, rule: string, params: string[], pattern?: string): string | null {
+    const translator = this.translator();
+
+    if (translator === null) {
+      return null;
+    }
+
+    const customKeys = [`validation.custom.${field}.${rule}`, `validation.custom.${rule}`];
+
+    if (pattern) {
+      customKeys.splice(1, 0, `validation.custom.${pattern}.${rule}`);
+    }
+
+    for (const key of customKeys) {
+      const line = this.translationLine(translator, key);
+
+      if (line !== null) {
+        return line;
+      }
+    }
+
+    const variant = this.sizeVariant(rule, this.getFieldValue(field));
+
+    if (variant !== null) {
+      const line = this.translationLine(translator, `validation.${rule}.${variant}`);
+
+      if (line !== null) {
+        return line;
+      }
+    }
+
+    return this.translationLine(translator, `validation.${rule}`);
+  }
+
+  /**
+   * Read one translator line, treating missing keys (which Laravel-style
+   * lookups answer with the key itself) as "no translation".
+   */
+  private translationLine(translator: Translator, key: string): string | null {
+    return translator.has(key) ? translator.get(key) : null;
+  }
+
+  /**
+   * The value-type variant Laravel picks for size-based rule messages.
+   */
+  private sizeVariant(rule: string, value: any): string | null {
+    if (!SIZE_BASED_RULES.has(rule) || value === undefined || value === null) {
+      return null;
+    }
+
+    if (isUploadedFile(value)) {
+      return 'file';
+    }
+
+    if (typeof value === 'number') {
+      return 'numeric';
+    }
+
+    if (typeof value === 'string') {
+      return 'string';
+    }
+
+    if (Array.isArray(value)) {
+      return 'array';
+    }
+
+    return null;
+  }
+
+  /**
+   * Build the placeholder replacements for one message: the displayable
+   * attribute plus the rule's named parameters (`between:10,20` fills
+   * `:min` and `:max`, `*_if` rules join their expected values into
+   * `:value`). Parameters arrive as colon segments and/or comma lists,
+   * so they are flattened to positional values first.
+   */
+  private messageReplacements(attribute: string, rule: string, params: string[]): Record<string, string> {
+    const replacements: Record<string, string> = { attribute };
+
+    const flat = params
+      .join(',')
+      .split(',')
+      .map((param) => param.trim())
+      .filter((param) => param !== '');
+
+    for (const [index, name] of (RULE_PARAMETER_NAMES[rule] ?? []).entries()) {
+      if (name === 'values') {
+        replacements.values = flat.join(', ');
+      } else if (name === 'value' && IF_VALUE_RULES.has(rule)) {
+        replacements.value = flat.slice(1).join(', ');
+      } else {
+        replacements[name] = flat[index] ?? '';
+      }
+    }
+
+    return replacements;
+  }
+
+  /**
+   * The container's translator when the application registered one -
+   * validation works without it, using the inline message fallbacks.
+   */
+  private translator(): Translator | null {
+    const app = getGlobalApp();
+
+    if (app && app.bound('translator')) {
+      return app.make<Translator>('translator');
+    }
+
+    return null;
   }
 
   /**
    * Get custom attribute name or use field name; wildcard attributes fall
-   * back to the pattern's custom name
+   * back to the pattern's custom name, then to the translator's
+   * `attributes.{field}` language lines (lang/{locale}/attributes.ts),
+   * and finally to the underscore-split field name.
    */
   private getAttribute(field: string, pattern?: string): string {
-    return (
-      this.customAttributes[field] || (pattern ? this.customAttributes[pattern] : undefined) || field.replace(/_/g, ' ')
-    );
+    const custom = this.customAttributes[field] || (pattern ? this.customAttributes[pattern] : undefined) || undefined;
+
+    if (custom) {
+      return custom;
+    }
+
+    const translator = this.translator();
+
+    if (translator !== null) {
+      for (const key of pattern ? [field, pattern] : [field]) {
+        const name = this.translationLine(translator, `attributes.${key}`);
+
+        if (name !== null) {
+          return name;
+        }
+      }
+    }
+
+    return field.replace(/_/g, ' ');
   }
 
   // ---------------------------------------------------------------------
