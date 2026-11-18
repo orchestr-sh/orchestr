@@ -24,6 +24,15 @@ interface DatabaseManagerLike {
 }
 
 /**
+ * Minimal view of the broadcasting layer the dispatcher needs to fan a
+ * `ShouldBroadcast` event out. Duck-typed through the container so the Events
+ * subsystem never imports the Broadcasting subsystem at module load (no cycle).
+ */
+interface BroadcastDispatcherLike {
+  queue(event: Event): Promise<unknown>;
+}
+
+/**
  * Event Dispatcher
  *
  * The core event dispatcher implementation. Manages event listeners,
@@ -154,11 +163,6 @@ export class Dispatcher implements DispatcherContract {
   async dispatch(event: string | Event, payload: any[] = [], halt: boolean = false): Promise<any[]> {
     const [eventName, eventInstance] = this.parseEventAndPayload(event, payload);
 
-    // Check if we should broadcast this event (for future broadcasting support)
-    if (eventInstance) {
-      this.shouldBroadcast(eventInstance, payload);
-    }
-
     // ShouldDispatchAfterCommit events wait for the active transaction to commit
     if (eventInstance && this.shouldDeferUntilCommit(eventInstance)) {
       this.withTransactionConnection((connection) => {
@@ -168,6 +172,14 @@ export class Dispatcher implements DispatcherContract {
       });
 
       return [];
+    }
+
+    // ShouldBroadcast events fan out to the broadcasting layer once the event
+    // is actually being dispatched (so a deferred, after-commit event only
+    // broadcasts after its transaction commits). Queueing and the sync path
+    // are the broadcaster's decision, not the dispatcher's.
+    if (eventInstance) {
+      await this.broadcastEvent(eventInstance);
     }
 
     const listeners = this.getListeners(eventName);
@@ -652,27 +664,76 @@ export class Dispatcher implements DispatcherContract {
   }
 
   /**
-   * Check if an event should broadcast
+   * Broadcast an event through the container's `broadcast` binding, when one is
+   * registered. The broadcaster owns the queue-vs-sync decision (it honours
+   * `ShouldBroadcastNow`, `broadcastWhen()` and `broadcastQueue()`); the
+   * dispatcher only routes eligible events and never fails a dispatch because
+   * broadcasting is unavailable or threw.
    *
-   * This is a placeholder for future broadcasting support
-   *
-   * @param event - The event instance
-   * @param payload - The event payload
-   * @returns True if should broadcast
+   * @param event - The event instance being dispatched
    */
-  protected shouldBroadcast(event: Event, payload: any[]): boolean {
-    // Check if event has shouldBroadcast method and it returns true
-    if (typeof (event as any).shouldBroadcast === 'function') {
-      return (event as any).shouldBroadcast();
+  protected async broadcastEvent(event: Event): Promise<void> {
+    if (!this.shouldBroadcast(event)) {
+      return;
     }
 
-    // Check if event has broadcastOn method that returns channels
+    const broadcaster = this.resolveBroadcaster();
+
+    if (!broadcaster) {
+      return;
+    }
+
+    try {
+      await broadcaster.queue(event);
+    } catch (error) {
+      console.error('Error broadcasting event:', error);
+    }
+  }
+
+  /**
+   * Check if an event should broadcast
+   *
+   * True when the event names at least one channel via `broadcastOn()` (the
+   * structural twin of `implements ShouldBroadcast`) or carries the
+   * `broadcastNow` marker. The base `Event` returns an empty channel list, so
+   * plain events are never broadcast.
+   *
+   * @param event - The event instance
+   * @returns True if should broadcast
+   */
+  protected shouldBroadcast(event: Event): boolean {
+    if ((event as any).broadcastNow === true) {
+      return true;
+    }
+
     if (typeof (event as any).broadcastOn === 'function') {
       const channels = (event as any).broadcastOn();
+
       return Array.isArray(channels) ? channels.length > 0 : !!channels;
     }
 
     return false;
+  }
+
+  /**
+   * Resolve the broadcaster from the container, or null when the broadcasting
+   * subsystem is not registered.
+   *
+   * Duck-typed against the container binding `broadcast` so the Events
+   * subsystem never imports Broadcasting at module load (no dependency cycle).
+   */
+  protected resolveBroadcaster(): BroadcastDispatcherLike | null {
+    if (!this.container.bound('broadcast')) {
+      return null;
+    }
+
+    try {
+      const broadcaster = this.container.make<BroadcastDispatcherLike>('broadcast');
+
+      return typeof broadcaster?.queue === 'function' ? broadcaster : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

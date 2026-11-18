@@ -11,8 +11,10 @@
  * the Http facade's own fake() (Illuminate\Http\Client).
  */
 
+import type { BroadcastManager } from '@/Broadcasting/BroadcastManager';
 import type { Application } from '@/Foundation/Application';
 import type { StubResponse } from '@/Support/Testing/Fakes/HttpFake';
+import { BroadcastFake } from '@/Support/Testing/Fakes/BroadcastFake';
 import { HttpFake } from '@/Support/Testing/Fakes/HttpFake';
 import { MailFake } from '@/Support/Testing/Fakes/MailFake';
 import { NotificationFake } from '@/Support/Testing/Fakes/NotificationFake';
@@ -20,6 +22,7 @@ import { NotificationFake } from '@/Support/Testing/Fakes/NotificationFake';
 let currentHttp: HttpFake | null = null;
 let currentMail: MailFake | null = null;
 let currentNotifications: NotificationFake | null = null;
+let currentBroadcast: BroadcastFake | null = null;
 
 /**
  * Outbound HTTP: fake() intercepts global fetch, recording requests and
@@ -173,6 +176,56 @@ export const Notification = {
 
   stop(): void {
     currentNotifications = null;
+  },
+};
+
+/**
+ * Broadcasting: fake() records broadcasts instead of delivering them
+ * Laravel: Broadcast::fake()
+ */
+export const Broadcast = {
+  /**
+   * Install a recording broadcaster; when an application is given the fake is
+   * also bound as its `broadcast` so app code resolving the manager sees it
+   */
+  fake(app?: Application): BroadcastFake {
+    currentBroadcast = new BroadcastFake();
+
+    if (app) {
+      app.instance('broadcast', currentBroadcast as unknown as BroadcastManager);
+    }
+
+    return currentBroadcast;
+  },
+
+  /**
+   * The active fake, if any
+   */
+  instance(): BroadcastFake | null {
+    return currentBroadcast;
+  },
+
+  assertBroadcast(...args: Parameters<BroadcastFake['assertBroadcast']>): void {
+    mustFake(currentBroadcast, 'Broadcast').assertBroadcast(...args);
+  },
+
+  assertBroadcastOn(...args: Parameters<BroadcastFake['assertBroadcastOn']>): void {
+    mustFake(currentBroadcast, 'Broadcast').assertBroadcastOn(...args);
+  },
+
+  assertNotBroadcast(...args: Parameters<BroadcastFake['assertNotBroadcast']>): void {
+    mustFake(currentBroadcast, 'Broadcast').assertNotBroadcast(...args);
+  },
+
+  assertNothingBroadcast(): void {
+    mustFake(currentBroadcast, 'Broadcast').assertNothingBroadcast();
+  },
+
+  /**
+   * Discard the recorder (container bindings go with their application)
+   */
+  stop(): void {
+    currentBroadcast = null;
   },
 };
 

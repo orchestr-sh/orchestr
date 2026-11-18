@@ -52,7 +52,7 @@ export { RefreshDatabase } from '@/Testing/RefreshDatabase';
 export { clock, clockNow, freezeTime, travel, travelBack, travelTo } from '@/Testing/Clock';
 export type { TimeLike } from '@/Testing/Clock';
 
-export { Http, Mail, Notification } from '@/Testing/Fakes';
+export { Http, Mail, Notification, Broadcast } from '@/Testing/Fakes';
 
 export { InteractsWithDatabase } from '@/Testing/Concerns/InteractsWithDatabase';
 export type { DatabaseCriteria, ModelLike } from '@/Testing/Concerns/InteractsWithDatabase';
@@ -65,6 +65,8 @@ export type { TestApplication, TestApplicationConstructor } from '@/Testing/cont
 
 // Fakes the testing layer installs
 export { createFakeCacheManager, FakeCacheManager } from '@/Support/Testing/Fakes/CacheFake';
+export { BroadcastFake } from '@/Support/Testing/Fakes/BroadcastFake';
+export type { RecordedBroadcast } from '@/Support/Testing/Fakes/BroadcastFake';
 export { EventFake } from '@/Support/Testing/Fakes/EventFake';
 export { fakeHttp, HttpFake } from '@/Support/Testing/Fakes/HttpFake';
 export type { HttpRequestOptions, RecordedRequest, StubResponse } from '@/Support/Testing/Fakes/HttpFake';

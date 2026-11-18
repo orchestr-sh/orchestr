@@ -1,4 +1,12 @@
 /**
+ * A broadcast channel reference: a plain name, or anything carrying its wire
+ * name via `toString()` (the Broadcasting module's Channel/PrivateChannel/
+ * PresenceChannel value objects). Kept structural so the Events layer does not
+ * depend on the Broadcasting module.
+ */
+export type BroadcastChannelReference = string | { toString(): string };
+
+/**
  * Event Base Class
  *
  * Base class for all events in the application
@@ -259,9 +267,14 @@ export abstract class Event {
    * broadcastOn(): string | string[] {
    *   return 'users.' + this.user.id;
    * }
+   *
+   * // Or a private/presence channel via the Broadcasting value objects:
+   * broadcastOn() {
+   *   return new PresenceChannel('chat.' + this.roomId);
+   * }
    * ```
    */
-  broadcastOn(): string | string[] {
+  broadcastOn(): BroadcastChannelReference | BroadcastChannelReference[] {
     return [];
   }
 

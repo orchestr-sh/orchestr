@@ -20,5 +20,6 @@ export { Hash } from './Hash';
 export { Crypt } from './Crypt';
 export { Mail } from './Mail';
 export { Notification } from './Notification';
+export { Broadcast } from './Broadcast';
 export { Http } from './Http';
 export { Lang } from './Lang';

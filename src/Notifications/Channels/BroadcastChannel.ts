@@ -1,31 +1,34 @@
 /**
  * BroadcastChannel - delivers notifications over broadcasting
  *
- * Mirrors Illuminate\Notifications\Channels\BroadcastChannel. Orchestr has
- * no broadcasting subsystem yet, so this channel delegates through the
- * container's `broadcast` binding when one is registered (OCP: the
+ * Mirrors Illuminate\Notifications\Channels\BroadcastChannel. The channel
+ * delegates through the container's `broadcast` binding (OCP: the
  * notification layer never depends on a broadcasting implementation) and
  * fails with a clear, actionable message when nothing is there to
  * broadcast through.
  *
  * The event handed to the broadcaster carries the notification's
  * broadcast payload - `toBroadcast()` falling back to `toArray()` the way
- * Laravel wraps the notification in a BroadcastNotificationCreated event.
+ * Laravel wraps the notification in a BroadcastNotificationCreated event -
+ * delivered as the normalised `(channels, event, payload)` the Broadcaster
+ * contract defines.
  */
 
 import type { Channel } from '@/Notifications/Contracts/Channel';
 
 /**
  * The minimal structural contract a broadcasting layer must satisfy to
- * receive notification broadcasts. A future BroadcastManager binding only
- * has to expose `broadcast(event, channels)` to plug in.
+ * receive notification broadcasts. The delivered BroadcastManager matches it,
+ * so a notification broadcast is handed to the active driver as
+ * `broadcast(channels, event, payload)` - the Laravel Broadcaster shape.
  */
 export interface BroadcastDriverLike {
-  broadcast(event: BroadcastNotificationLike, channels: unknown): Promise<unknown> | unknown;
+  broadcast(channels: unknown, event: string, payload?: Record<string, any>): Promise<unknown> | unknown;
 }
 
 /**
- * The broadcast representation handed to the broadcaster.
+ * The broadcast representation built from a notification: the event name
+ * (the notification's class) and its payload, plus the channel routes.
  */
 export interface BroadcastNotificationLike {
   /** Class name of the notification being broadcast */
@@ -69,7 +72,7 @@ export class BroadcastChannel implements Channel {
       channels,
     };
 
-    return await broadcaster.broadcast(event, channels);
+    return await broadcaster.broadcast(channels, event.type, event.data);
   }
 
   /**
