@@ -369,12 +369,18 @@ export abstract class HasRelationshipsMixin {
 
   /**
    * Load a relationship if it hasn't been loaded yet
+   *
+   * This is the lazy load a model asked to prevent can refuse: the relation
+   * was not in the query that produced the model, so it would need one of its
+   * own.
    */
   public async load(relations: string | string[]): Promise<this> {
     const relationArray = Array.isArray(relations) ? relations : [relations];
 
     for (const relation of relationArray) {
       if (!this.relationLoaded(relation)) {
+        this.checkForLazyLoadingViolation(relation);
+
         const results = await this.getRelationshipFromMethod(relation).getResults();
         this.setRelation(relation, results);
       }
@@ -382,6 +388,13 @@ export abstract class HasRelationshipsMixin {
 
     return this as any;
   }
+
+  /**
+   * Hook for models that guard against lazy loading; the mixin itself lets
+   * the read through.
+   * Laravel: Model::preventLazyLoading()
+   */
+  protected checkForLazyLoadingViolation(_relation: string): void {}
 
   // -------------------------------------------------------------------------
   // Relationship aggregates
@@ -454,14 +467,6 @@ export abstract class HasRelationshipsMixin {
     }
 
     return this as any;
-  }
-
-  /**
-   * Touch the owning relations of the model
-   */
-  public async touch(): Promise<boolean> {
-    // TODO: Implement when we have timestamps
-    return true;
   }
 
   /**

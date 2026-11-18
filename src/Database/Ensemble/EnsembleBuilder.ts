@@ -232,6 +232,64 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
   }
 
   /**
+   * Get the single record matching the query
+   *
+   * Two rows are read: none is a missing record, the second is an ambiguous
+   * one. Either way the caller never gets a model that quietly discards the
+   * fact that the query did not describe exactly one row.
+   * Laravel: Eloquent\Builder::sole()
+   */
+  async sole(columns: string[] = ['*']): Promise<T> {
+    const results = await this.clone()
+      .select(...columns)
+      .limit(2)
+      .get();
+
+    const model = this.model.constructor as { name: string };
+
+    if (results.length === 0) {
+      throw new Error(`No query results for model [${model.name}]`);
+    }
+
+    if (results.length > 1) {
+      throw new Error(`The query for model [${model.name}] returned more than one result`);
+    }
+
+    return results[0];
+  }
+
+  /**
+   * First record matching one column, or none
+   */
+  async firstWhere(column: string, operator?: any, value?: any, columns: string[] = ['*']): Promise<T | null> {
+    const query = value === undefined ? this.where(column, operator) : this.where(column, operator, value);
+
+    return query.select(...columns).first();
+  }
+
+  /**
+   * Delete the rows with the given model keys, trashed rows included
+   *
+   * Every key is loaded and deleted through its own model, so a soft-deleting
+   * model stamps its rows and every delete fires the lifecycle events a plain
+   * bulk `DELETE` would skip. Returns the number of models deleted.
+   * Laravel: Eloquent\Builder::destroy()
+   */
+  async destroy(keys: any[]): Promise<number> {
+    const query = this.clone().withTrashed().whereIn(this.model.getKeyName(), keys);
+
+    let deleted = 0;
+
+    for (const model of await query.get()) {
+      if (await model.delete()) {
+        deleted++;
+      }
+    }
+
+    return deleted;
+  }
+
+  /**
    * Execute the query and get all results
    */
   async get(): Promise<T[]> {
@@ -257,6 +315,29 @@ export class EnsembleBuilder<T extends Ensemble> extends QueryBuilder<T> {
   async first(): Promise<T | null> {
     const results = await this.limit(1).get();
     return results[0] || null;
+  }
+
+  /**
+   * Read one column off the first matching row
+   *
+   * The plain builder would pluck the value out of the result row; here the
+   * row is already a model, so the value is read through `getAttribute()` and
+   * the column's casts and accessors apply the way they do everywhere else.
+   * Laravel: Eloquent\Builder::value()
+   */
+  async value(column: string): Promise<any> {
+    const model = await this.select(column).first();
+
+    return model ? model.getAttribute(column) : null;
+  }
+
+  /**
+   * Read one column off every matching row
+   */
+  async pluck(column: string): Promise<any[]> {
+    const models = await this.select(column).get();
+
+    return models.map((model) => model.getAttribute(column));
   }
 
   /**
