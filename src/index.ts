@@ -92,6 +92,7 @@ export { View as ViewFacade } from './Facades/View';
 export { Session } from './Facades/Session';
 export { Storage } from './Facades/Storage';
 export { Auth } from './Facades/Auth';
+export { Password } from './Facades/Password';
 export { Gate as GateFacade } from './Facades/Gate';
 export { Hash } from './Facades/Hash';
 export { Crypt } from './Facades/Crypt';
@@ -140,6 +141,7 @@ export {
   encrypt,
   decrypt,
   auth,
+  password,
   mail,
   notification,
   http,
@@ -187,6 +189,7 @@ export { FilesystemServiceProvider } from './Filesystem/FilesystemServiceProvide
 export { HashServiceProvider } from './Hashing/HashServiceProvider';
 export { EncryptionServiceProvider } from './Encryption/EncryptionServiceProvider';
 export { AuthServiceProvider } from './Auth/AuthServiceProvider';
+export { PasswordResetServiceProvider } from './Auth/Passwords/PasswordResetServiceProvider';
 export { ViewServiceProvider } from './View/ViewServiceProvider';
 export type { ViewConfig } from './View/ViewServiceProvider';
 export { MailServiceProvider } from './Mail/MailServiceProvider';
@@ -838,12 +841,13 @@ export { MissingAppKeyException } from './Encryption/MissingAppKeyException';
 export type { Encrypter as EncrypterContract } from './Encryption/Contracts/Encrypter';
 
 // Auth
-export { AuthManager, AUTH_DEFAULTS } from './Auth/AuthManager';
+export { AUTH_DEFAULTS, AuthManager } from './Auth/AuthManager';
 export type {
   AuthConfig,
   AuthGuardConfig,
   AuthDefaultsConfig,
   AuthPasswordBrokerConfig,
+  AuthVerificationConfig,
   AuthManagerDependencies,
   GuardFactory,
 } from './Auth/AuthManager';
@@ -861,6 +865,59 @@ export type {
 export { UserNotFoundException } from './Auth/UserNotFoundException';
 export { HasAuthenticatable } from './Auth/Concerns/HasAuthenticatable';
 export type { AttributeCarrier, AuthenticatableInstance } from './Auth/Concerns/HasAuthenticatable';
+export { HasPasswordReset } from './Auth/Concerns/HasPasswordReset';
+export type { PasswordResetMethods, PasswordResettableInstance } from './Auth/Concerns/HasPasswordReset';
+export { HasVerifiedEmail } from './Auth/Concerns/HasVerifiedEmail';
+export type { VerifiedEmailInstance, VerifiedEmailMethods, VerifiableCarrier } from './Auth/Concerns/HasVerifiedEmail';
+// Password resets (broker, repositories, controllers, routes)
+export { PasswordBroker } from './Auth/Passwords/PasswordBroker';
+export type {
+  BrokerUser,
+  PasswordBrokerStatus,
+  ResettableInstance,
+  ResetCallback,
+} from './Auth/Passwords/PasswordBroker';
+export { PasswordBrokerManager } from './Auth/Passwords/PasswordBrokerManager';
+export type {
+  PasswordBrokerDependencies,
+  PasswordResetDatabase,
+  TokenRepositoryFactory,
+} from './Auth/Passwords/PasswordBrokerManager';
+export { DatabaseTokenRepository } from './Auth/Passwords/DatabaseTokenRepository';
+export type {
+  DatabaseTokenRepositoryConfig,
+  PasswordResetTableResolver,
+  PasswordResetTokenQuery,
+} from './Auth/Passwords/DatabaseTokenRepository';
+export { PasswordResetLinkController } from './Auth/Passwords/PasswordResetLinkController';
+export { NewPasswordController } from './Auth/Passwords/NewPasswordController';
+export { registerPasswordResetRoutes } from './Auth/Passwords/routes';
+export type { PasswordResetRouteOptions } from './Auth/Passwords/routes';
+export { PASSWORD_MESSAGES, resetOutcome, respondWithOutcome, sendLinkOutcome } from './Auth/Passwords/statusResponse';
+export type { BrokerOutcome } from './Auth/Passwords/statusResponse';
+
+// Auth contracts (reset/verification)
+export type { CanResetPassword, PasswordResettable } from './Auth/Contracts/CanResetPassword';
+export type { MustVerifyEmail, Verifiable } from './Auth/Contracts/MustVerifyEmail';
+
+// Email verification (request, controllers, routes)
+export { EmailVerificationRequest, resolveVerificationProvider } from './Auth/Requests/EmailVerificationRequest';
+export type { VerifiableUser } from './Auth/Requests/EmailVerificationRequest';
+export {
+  EmailVerificationNotificationController,
+  EmailVerificationPromptController,
+  VERIFICATION_NOTICE_MESSAGE,
+  VerifyEmailController,
+} from './Auth/Verification/EmailVerificationControllers';
+export type { VerificationControllerOptions } from './Auth/Verification/EmailVerificationControllers';
+export { registerEmailVerificationRoutes } from './Auth/Verification/routes';
+export type { EmailVerificationRouteOptions } from './Auth/Verification/routes';
+
+// Auth notifications
+export { ResetPassword } from './Auth/Notifications/ResetPassword';
+export { emailVerificationHash, VerifyEmail } from './Auth/Notifications/VerifyEmail';
+export { AuthenticationMail } from './Auth/Notifications/AuthenticationMail';
+export type { AuthenticationMailContent } from './Auth/Notifications/AuthenticationMail';
 
 // Auth Access (gates and policies)
 export { Gate, resolveGate } from './Auth/Access/Gate';
@@ -894,6 +951,12 @@ export {
   type AuthenticateOptions,
 } from './Auth/Middleware/Authenticate';
 export { Can, makeCan } from './Auth/Middleware/Can';
+export {
+  EnsureEmailIsVerified,
+  makeEnsureEmailIsVerified,
+  VERIFICATION_MESSAGE,
+  type EnsureEmailIsVerifiedOptions,
+} from './Auth/Middleware/EnsureEmailIsVerified';
 export {
   RedirectIfAuthenticated,
   makeRedirectIfAuthenticated,

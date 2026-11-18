@@ -28,6 +28,7 @@ Requires Node `^22.18.0 || >=24.0.0` and TypeScript `>=5`.
 - [Hashing & Encryption](#hashing--encryption)
 - [Signed URLs](#signed-urls)
 - [Authentication](#authentication)
+- [Password Resets & Email Verification](#password-resets--email-verification)
 - [Authorization](#authorization)
 - [Filesystem & File Uploads](#filesystem--file-uploads)
 - [Mail](#mail)
@@ -1925,6 +1926,79 @@ Route.get('/me', (req) => req.user()).middleware('auth'); // 401 JSON / login re
 Route.get('/login', loginForm).middleware('guest'); // authenticated visitors go home
 await Auth.logout(); // clears the session and the stored remember token
 ```
+
+## Password Resets & Email Verification
+
+The auth flows users reach when they cannot log in or need to confirm their
+address. Both share the signed-URL and notification infrastructure: the
+`Password` facade / `password()` helper drive a `PasswordBroker` backed by a
+`DatabaseTokenRepository` (hashed tokens, expiry, one-per-minute throttle on
+the `password_reset_tokens` table), while the `HasVerifiedEmail` concern and
+the `verified` middleware guard routes behind a confirmed address.
+
+```typescript
+import {
+  Ensemble,
+  HasAuthenticatable,
+  HasPasswordReset, // Laravel's CanResetPassword trait: the broker contract
+  HasVerifiedEmail, // Laravel's MustVerifyEmail trait: the verified columns
+  Password, // facade - password() helper resolves a broker
+  PasswordResetServiceProvider,
+  PasswordBroker,
+  registerPasswordResetRoutes,
+  registerEmailVerificationRoutes,
+  EnsureEmailIsVerified, // 'verified' alias - installed on boot
+} from '@orchestr-sh/orchestr';
+
+class User extends HasVerifiedEmail(HasPasswordReset(HasAuthenticatable(Ensemble))) {
+  static fillable = ['name', 'email', 'password'];
+  getTable() {
+    return 'users';
+  }
+}
+
+// auth.passwords.<broker> = { provider, table, expire (minutes), throttle (seconds),
+//                             driver? }   - the 'database' driver ships built-in, and
+//                                           Password.extend(name, factory) adds more
+// auth.verification      = { provider, expire (minutes for the signed URL) }
+// Both sections default to Laravel's canonical values
+// (users / password_reset_tokens / 60 / 60), so registering the provider is
+// often all an app needs:
+app.register(new ConfigServiceProvider(app, { auth: { providers: { users: { driver: 'ensemble', model: User } } } }));
+app.register(PasswordResetServiceProvider); // after AuthServiceProvider
+
+registerPasswordResetRoutes(router); // password.email / password.reset (signed) / password.update
+registerEmailVerificationRoutes(router); // verification.notice / verification.verify (signed+throttled) / verification.send (throttled)
+
+// The flow, service-layer:
+const status = await Password.sendResetLink({ email: 'ada@example.com' });
+// RESET_LINK_SENT | INVALID_USER | RESET_THROTTLED - the mailed link is a
+// signed URL to password.reset valid for the broker's expire window
+
+await Password.reset({ email, token, password: 'new-secret' }); // hashes, rotates the remember
+// token, invalidates the link; PASSWORD_RESET | INVALID_USER | INVALID_TOKEN
+
+// Controllers stay thin; the route helpers ship Breeze/Fortify-shaped ones
+// (PasswordResetLinkController, NewPasswordController, VerifyEmailController,
+// EmailVerificationNotificationController, EmailVerificationPromptController)
+// and EmailVerificationRequest validates the signed {id}/{hash} pair.
+
+Route.get('/dashboard', dashboard).middleware('verified');
+// guests -> 401/login redirect, unverified -> 403 JSON or verification.notice
+```
+
+- `Password.sendResetLink({ email })` mails the `CanResetPassword`
+  notification only for known addresses and reports `INVALID_USER` otherwise;
+  re-requesting inside the throttle window answers `RESET_THROTTLED`.
+- Tokens are stored as HMAC-SHA256 hashes with their creation time; a valid
+  token resets the password and is deleted (expired or reused tokens fail
+  with `INVALID_TOKEN`).
+- `registerEmailVerificationRoutes` sends a temporary signed URL to
+  `verification.verify` (`{id}/{sha1(email)}`); clicking it marks
+  `email_verified_at` and redirects. Resends run behind `auth` + a
+  6-per-minute throttle (`resendThrottle` option to tune).
+- The `password_reset_tokens` table matches Laravel's migration shape:
+  `email` (primary), `token`, `created_at` (unix seconds).
 
 ## Authorization
 
@@ -4429,6 +4503,7 @@ npx orchestr deploy:rollback              # point the project back to the previo
 - ✅ Password Hashing (scrypt default, bcrypt/argon2 optional, needsRehash)
 - ✅ Encryption (AES-256-GCM payloads, encrypted casts) & Signed URLs
 - ✅ Authentication (session + token guards, remember me, Ensemble user provider, auth/guest middleware)
+- ✅ Password Resets & Email Verification (`Password` facade / `password()` helper - broker with hashed `password_reset_tokens`, expiry + throttling, signed reset-link mail, `password.*` routes, `MustVerifyEmail` concern, signed `verification.verify` URLs, `verified` middleware, throttled resend, `EmailVerificationRequest`)
 - ✅ Authorization (Gate, policies, `can` middleware, gate-backed validation rules)
 - ✅ Filesystem & Uploads (local/public/null disks, path-traversal protection, atomic writes, multipart parsing, UploadedFile storage, upload validation rules)
 - ✅ Mail (Mailables rendered through the view system, smtp/log/array/failover transports, storage-disk attachments, queued delivery, fakes & assertions)

@@ -3,6 +3,7 @@
  */
 
 import type { StatefulGuard } from '@/Auth/Contracts/Guard';
+import type { PasswordBroker } from '@/Auth/Passwords/PasswordBroker';
 import type { BroadcastManager } from '@/Broadcasting/BroadcastManager';
 import type { Ensemble } from '@/Database/Ensemble/Ensemble';
 import type { EnsembleClass, Factory, FactoryState } from '@/Database/Factories/Factory';
@@ -338,6 +339,24 @@ export function auth(guard?: string): StatefulGuard {
   }
 
   return globalApp.make<{ guard(name?: string): StatefulGuard }>('auth').guard(guard);
+}
+
+/**
+ * Access a password broker.
+ * Laravel: Password::broker() - spelled as a helper for app code that
+ * prefers function calls. The manager is resolved from the container, so
+ * no import of the Auth module is needed here; the PasswordBrokerManager
+ * registered by PasswordResetServiceProvider answers.
+ *
+ *   await password().sendResetLink({ email: 'ada@example.com' });
+ *   await password('admin').reset(credentials);
+ */
+export function password(broker?: string): PasswordBroker {
+  if (!globalApp || !globalApp.bound('auth.password')) {
+    throw new Error('Password resets are not available. Register the PasswordResetServiceProvider first.');
+  }
+
+  return globalApp.make<{ broker(name?: string): PasswordBroker }>('auth.password').broker(broker);
 }
 
 /**
