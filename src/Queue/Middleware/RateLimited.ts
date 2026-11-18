@@ -4,6 +4,12 @@
  * Rate limits job execution. When the rate limit is exceeded,
  * the job is released back onto the queue.
  *
+ * The counting is delegated to the application's RateLimiter service -
+ * the same cache-backed bucket the HTTP `throttle` middleware drives - so
+ * a job and an HTTP route registered under one key share their window
+ * instead of keeping parallel books (DRY). When no application is running
+ * the middleware falls back to a process-local array-backed limiter.
+ *
  * Mirrors Laravel's Illuminate\Queue\Middleware\RateLimited.
  *
  * @example
@@ -16,11 +22,40 @@
  * ```
  */
 
+import type { RateLimiter } from '@/Cache/RateLimiter';
 import type { Job } from '@/Queue/Job';
+import { RateLimiter as CacheRateLimiter } from '@/Cache/RateLimiter';
+import { Repository } from '@/Cache/Repository';
+import { ArrayStore } from '@/Cache/Stores/ArrayStore';
+import { getGlobalApp } from '@/Support/helpers';
 import type { JobMiddleware } from './JobMiddleware';
 
-// Simple in-memory rate limiter store
-const rateLimiterStore: Map<string, { count: number; resetAt: number }> = new Map();
+/**
+ * Process-local limiter used when the application has not bound the
+ * container's 'limiter'; counters live in an array cache store so the
+ * decay-window semantics match the HTTP side exactly
+ */
+let fallbackLimiter: RateLimiter | null = null;
+
+function resolveLimiter(): RateLimiter {
+  const app = getGlobalApp();
+
+  if (app) {
+    try {
+      if (app.bound('limiter')) {
+        return app.make<RateLimiter>('limiter');
+      }
+    } catch {
+      // Container not ready for it; fall through to the process-local limiter
+    }
+  }
+
+  fallbackLimiter ??= new CacheRateLimiter(
+    new Repository(new ArrayStore({ serialize: false }, 'orchestr_queue_limiter:'))
+  );
+
+  return fallbackLimiter;
+}
 
 export class RateLimited implements JobMiddleware {
   /**
@@ -46,32 +81,16 @@ export class RateLimited implements JobMiddleware {
   ) {}
 
   async handle(job: Job, next: () => Promise<void>): Promise<void> {
-    const now = Math.floor(Date.now() / 1000);
-    const limiter = rateLimiterStore.get(this.key);
+    const limiter = resolveLimiter();
 
-    // Check if the rate limit has expired
-    if (limiter && limiter.resetAt <= now) {
-      rateLimiterStore.delete(this.key);
-    }
-
-    const current = rateLimiterStore.get(this.key);
-
-    if (current && current.count >= this.maxAttempts) {
-      // Rate limited - release the job back
-      const retryAfter = current.resetAt - now;
+    if (await limiter.tooManyAttempts(this.key, this.maxAttempts)) {
+      // Rate limited - release the job back for the rest of the window
+      const retryAfter = await limiter.retryAfter(this.key);
       job.release(this.releaseAfterSeconds || retryAfter);
       return;
     }
 
-    // Increment the counter
-    if (current) {
-      current.count++;
-    } else {
-      rateLimiterStore.set(this.key, {
-        count: 1,
-        resetAt: now + this.decaySeconds,
-      });
-    }
+    await limiter.hit(this.key, this.maxAttempts, this.decaySeconds);
 
     await next();
   }

@@ -53,6 +53,11 @@ export interface CacheConfig {
   prefix: string;
   stores: Record<string, StoreConfig>;
   remember?: CacheRememberConfig;
+  /**
+   * Optional store the rate limiter keeps its counters in
+   * Laravel: config/cache.php 'rate_limiter'
+   */
+  rate_limiter?: string;
 }
 
 export type StoreFactory = (config: StoreConfig) => Store;

@@ -10,6 +10,14 @@ export type { CacheConfig, StoreConfig, StoreFactory } from './CacheManager';
 export { CacheServiceProvider } from './CacheServiceProvider';
 export { Repository } from './Repository';
 
+// Rate limiting
+export { RateLimiter, Limited } from './RateLimiter';
+export type { RateLimiterCache, NamedLimiterCallback, NamedLimiterResult } from './RateLimiter';
+export { RateLimiterServiceProvider } from './RateLimiterServiceProvider';
+export { Limit } from './RateLimiting/Limit';
+export type { LimitKeyResolver, LimitResponseCallback } from './RateLimiting/Limit';
+export { Unlimited } from './RateLimiting/Unlimited';
+
 // Contracts
 export type { Store } from './Contracts/Store';
 export type { RepositoryContract } from './Contracts/Repository';
