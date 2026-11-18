@@ -2026,7 +2026,7 @@ assertions (see [Testing](#testing)).
 `NotificationSender` routes a notification to its recipients and hands each
 one to a channel - `mail` (delivered by the mail subsystem), `database` (rows
 in the `notifications` table) and `broadcast` (through the `broadcast`
-container binding once a broadcasting layer registers one). A `Notification`
+container binding, the broadcasting layer). A `Notification`
 only *describes* the message (`via`, `toMail`, `toDatabase`, `toBroadcast`,
 `toArray`); routing is the sender's business and delivery belongs to the
 channel classes behind the `Channel` contract, so
@@ -2183,6 +2183,116 @@ notifications.assertCount(1);
 with the application, and because the fake lives at the `notifications`
 binding, model calls, facades and helpers all record against it without
 knowing.
+
+## Broadcasting
+
+`Broadcast` (the facade, or the `broadcast()` helper) is Orchestr's port of
+Laravel's broadcasting layer. A `BroadcastManager` selects a **driver**
+(`log`, `null`, `pusher`) from the `broadcasting` config; the driver's
+`Broadcaster` **delivers** a normalised event to its channels; and a
+`ChannelAuthorizer` keeps private/presence channel **authorization** in its
+own place - three concerns that never reach into each other (SRP). Every
+driver shares one event/payload normalisation path, so `broadcastAs()`,
+`broadcastWith()` and channel resolution behave identically no matter which
+driver is configured (DRY), and a new driver only formats its own wire payload
+(OCP).
+
+```typescript
+import { BroadcastServiceProvider } from '@orchestr-sh/orchestr';
+import { Broadcast } from '@orchestr-sh/orchestr/Facades';
+
+app.register(new ConfigServiceProvider(app, {
+  broadcasting: {
+    default: 'log', // 'log' | 'null' | 'pusher'
+    connections: {
+      log: { driver: 'log' },
+      null: { driver: 'null' },
+      pusher: { driver: 'pusher', key: 'AP…RET', app_id: '42' },
+    },
+  },
+}));
+app.register(BroadcastServiceProvider);
+```
+
+### Broadcasting events
+
+An event broadcasts the moment it names channels through `broadcastOn()`
+(the structural twin of Laravel's `implements ShouldBroadcast`). It can
+customise the wire name (`broadcastAs()`), the payload
+(`broadcastWith()`), gate itself (`broadcastWhen()`), and choose a queue
+(`broadcastQueue()` / `broadcastConnection()`):
+
+```typescript
+import { Event, PrivateChannel } from '@orchestr-sh/orchestr';
+
+class OrderShipped extends Event {
+  constructor(private order: Order) {
+    super();
+  }
+
+  broadcastOn() {
+    return [new PrivateChannel(`orders.${this.order.id}`), `users.${this.order.userId}`];
+  }
+
+  broadcastAs() {
+    return 'order.shipped';
+  }
+
+  broadcastWith() {
+    return { id: this.order.id, carrier: this.order.carrier };
+  }
+}
+
+// Dispatching a ShouldBroadcast event fans it out to the active driver.
+await OrderShipped.dispatch(order);
+
+// Or broadcast directly, without an event class.
+await Broadcast.broadcast(new PrivateChannel('orders.1'), 'order.shipped', { id: 1 });
+```
+
+The dispatcher defers the broadcast until an event's database transaction
+commits (when the event carries `shouldDispatchAfterCommit`), and a broadcast
+with a `broadcastQueue()` is pushed through the queue subsystem as a
+`BroadcastEvent` job. Mark an event `readonly broadcastNow = true`
+(`ShouldBroadcastNow`) to always deliver it synchronously.
+
+### Authorizing channels
+
+Private and presence channels are guarded by callbacks registered with
+`Broadcast.channel()` / `Broadcast.presence()`. The `{param}` placeholders in
+the pattern are extracted from the incoming channel name and passed to the
+callback after the authenticated user; a falsey result - or a guest on a
+guarded channel - is denied.
+
+```typescript
+Broadcast.channel('orders.{id}', (user, id) => user.ownsOrder(Number(id)));
+Broadcast.presence('rooms.{id}', (user, id) => user.canJoin(Number(id)) && { user_id: user.id, user_info: { name: user.name } });
+```
+
+`registerBroadcastRoutes(router)` (or the `BroadcastController`) serves the
+`/broadcasting/auth` endpoint: it verifies the subscription through those
+callbacks and returns the active driver's auth response (a Pusher-signed
+`auth`/`channel_data` pair, or `{}` for log/null).
+
+### Faking broadcasts
+
+`Broadcast.fake()` swaps the subsystem for a recorder; nothing is delivered and
+broadcasts are remembered for assertions:
+
+```typescript
+const broadcast = Broadcast.fake();
+
+await OrderShipped.dispatch(order);
+
+broadcast.assertBroadcast(OrderShipped);
+broadcast.assertBroadcastOn(['private-orders.1', 'users.7'], OrderShipped);
+broadcast.assertNotBroadcast(OrderCancelled);
+broadcast.assertBroadcastTimes(OrderShipped, 1);
+broadcast.assertNothingBroadcast(); // throws once anything was recorded
+```
+
+`this.fakeBroadcast()` in a TestCase does the same thing, restored with the
+application.
 
 ## HTTP Client
 
@@ -4166,6 +4276,7 @@ npx orchestr deploy:rollback              # point the project back to the previo
 - ✅ Notifications (mail/database/broadcast channels, `Notifiable` models, on-demand routing, stored `DatabaseNotification` rows, queued sends, `NotificationSent`/`NotificationFailed` events, fakes & assertions)
 - ✅ HTTP Client (`Http` facade / `http()` helper - fluent PendingRequest, verbs, JSON/form/multipart bodies, auth headers, digest challenge, sinks, retries with backoff, `throw`/`throwIf`/`retryWhen` hooks, fakes with pattern stubs, sequences & assertions, pluggable `Transport` over Node's `fetch`)
 - ✅ Localization (Translator with `:name` replacement, `|` pluralization & `{n}`/`[min,max]` specs, locale fallback chain, JSON + nested object/TS language files, `package::file.key` namespaces, `__()` / `trans_choice()`, `Lang` facade, `Accept-Language` middleware, translated validation messages, `lang:publish`)
+- ✅ Broadcasting (`Broadcast` facade / `broadcast()` helper - log/null/pusher drivers over the HTTP client, `ShouldBroadcast`/`ShouldBroadcastNow` events with `broadcastOn`/`broadcastAs`/`broadcastWith`/`broadcastWhen`/`broadcastQueue`, channel + presence authorization callbacks, the `/broadcasting/auth` controller & route helper, queued delivery through the queue subsystem, and `Broadcast::fake()` assertions)
 - ✅ Testing Framework (TestCase over the real Kernel, RefreshDatabase/DatabaseTransactions, response & database assertions, acting-as, service fakes, time travel)
 - ✅ Collections (`Array`-subclass with the Laravel method surface, `EnsembleCollection`) & Support utilities (`Str`, `Arr`, `Number`, global helpers)
 - ✅ Timestamps

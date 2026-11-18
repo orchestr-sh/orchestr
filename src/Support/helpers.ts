@@ -3,6 +3,7 @@
  */
 
 import type { StatefulGuard } from '@/Auth/Contracts/Guard';
+import type { BroadcastManager } from '@/Broadcasting/BroadcastManager';
 import type { Ensemble } from '@/Database/Ensemble/Ensemble';
 import type { EnsembleClass, Factory, FactoryState } from '@/Database/Factories/Factory';
 import type { Encrypter as EncrypterContract } from '@/Encryption/Contracts/Encrypter';
@@ -353,6 +354,24 @@ export function mail(): MailManager {
   }
 
   return globalApp.make<MailManager>('mailer');
+}
+
+/**
+ * Access the broadcast manager.
+ * Laravel: the broadcast facade's instance - spelled as a helper for app code
+ * that prefers function calls. The manager is resolved from the container, so
+ * no import of the Broadcasting module is needed here; the BroadcastManager
+ * registered by the provider - or the BroadcastFake installed by
+ * `Broadcast.fake()` - is what app code talks to.
+ *
+ *   await broadcast().broadcast('orders.1', 'OrderShipped', { id: 1 });
+ */
+export function broadcast(): BroadcastManager {
+  if (!globalApp || !globalApp.bound('broadcast')) {
+    throw new Error('Broadcasting is not available. Register the BroadcastServiceProvider first.');
+  }
+
+  return globalApp.make<BroadcastManager>('broadcast');
 }
 
 /**

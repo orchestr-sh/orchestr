@@ -96,6 +96,7 @@ export { Crypt } from './Facades/Crypt';
 export { Schedule as ScheduleFacade } from './Facades/Schedule';
 export { Mail as MailFacade } from './Facades/Mail';
 export { Notification as NotificationFacade } from './Facades/Notification';
+export { Broadcast as BroadcastFacade } from './Facades/Broadcast';
 export { Http as HttpFacade } from './Facades/Http';
 
 // Helpers
@@ -140,6 +141,7 @@ export {
   mail,
   notification,
   http,
+  broadcast,
   factory,
   fake,
 } from './Support/helpers';
@@ -905,6 +907,62 @@ export { NotificationSent } from './Notifications/Events/NotificationSent';
 export { NotificationFailed } from './Notifications/Events/NotificationFailed';
 export type { Channel, ChannelFactory } from './Notifications/Contracts/Channel';
 export type { NotificationRouterLike } from './Notifications/Contracts/NotificationRouter';
+
+// Broadcasting (Illuminate\Broadcasting)
+export { BroadcastManager, BROADCASTING_DEFAULTS } from './Broadcasting/BroadcastManager';
+export type {
+  BroadcastConfig,
+  BroadcastConnectionConfig,
+  BroadcastDriverFactory,
+  BroadcastQueueLike,
+} from './Broadcasting/BroadcastManager';
+export { BroadcastServiceProvider } from './Broadcasting/BroadcastServiceProvider';
+export { BroadcastEvent } from './Broadcasting/BroadcastEvent';
+export {
+  Channel as BroadcastChannelClass,
+  PrivateChannel,
+  PresenceChannel,
+  AnonymousChannel,
+  toChannels,
+  formatChannels,
+  channelPrefix,
+  normalizeChannelName,
+} from './Broadcasting/Channels';
+export type { ChannelLike } from './Broadcasting/Channels';
+export { ChannelAuthorizer } from './Broadcasting/ChannelAuthorizer';
+export type { ChannelAuthorizationCallback, ChannelAuthorization } from './Broadcasting/ChannelAuthorizer';
+export type {
+  Broadcaster as BroadcasterContract,
+  BroadcastPayload,
+  BroadcastAuthRequest,
+} from './Broadcasting/Contracts/Broadcaster';
+export type { ShouldBroadcast, ShouldBroadcastNow } from './Broadcasting/Contracts/ShouldBroadcast';
+export { isShouldBroadcast, isShouldBroadcastNow } from './Broadcasting/Contracts/ShouldBroadcast';
+export {
+  normalizeBroadcastEvent,
+  broadcastEventName,
+  broadcastPayload,
+  broadcastChannels,
+} from './Broadcasting/Concerns/NormalizesBroadcastEvent';
+export type { NormalizedBroadcast } from './Broadcasting/Concerns/NormalizesBroadcastEvent';
+export { AbstractBroadcaster } from './Broadcasting/Broadcasters/Broadcaster';
+export { LogBroadcaster } from './Broadcasting/Broadcasters/LogBroadcaster';
+export type {
+  LoggedBroadcast,
+  BroadcastLogger,
+  LogBroadcasterOptions,
+} from './Broadcasting/Broadcasters/LogBroadcaster';
+export { NullBroadcaster } from './Broadcasting/Broadcasters/NullBroadcaster';
+export { PusherBroadcaster } from './Broadcasting/Broadcasters/PusherBroadcaster';
+export type {
+  PusherBroadcasterConfig,
+  PusherHttpLike,
+  PusherResponseLike,
+} from './Broadcasting/Broadcasters/PusherBroadcaster';
+export { BroadcastException } from './Broadcasting/BroadcastException';
+export { BroadcastController, resolveBroadcastManager } from './Broadcasting/BroadcastController';
+export { registerBroadcastRoutes } from './Broadcasting/routes';
+export type { BroadcastRouteOptions } from './Broadcasting/routes';
 
 // Translation (Illuminate\Translation)
 export { Translator, defaultTranslator, parseTranslationKey } from './Translation/Translator';

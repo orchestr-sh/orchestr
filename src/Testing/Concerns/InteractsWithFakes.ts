@@ -10,6 +10,7 @@
  */
 
 import type { CacheManager } from '@/Cache/CacheManager';
+import type { BroadcastFake } from '@/Support/Testing/Fakes/BroadcastFake';
 import type { EventFake } from '@/Support/Testing/Fakes/EventFake';
 import type { HttpFake, StubResponse } from '@/Support/Testing/Fakes/HttpFake';
 import type { MailFake } from '@/Support/Testing/Fakes/MailFake';
@@ -22,7 +23,7 @@ import { Event } from '@/Facades/Event';
 import { Mail as MailFacade } from '@/Facades/Mail';
 import { Queue } from '@/Facades/Queue';
 import { Storage } from '@/Facades/Storage';
-import { Http, Mail, Notification } from '@/Testing/Fakes';
+import { Broadcast, Http, Mail, Notification } from '@/Testing/Fakes';
 
 export function InteractsWithFakes<T extends TestApplicationConstructor>(Base: T) {
   abstract class InteractsWithFakesMixin extends Base {
@@ -88,6 +89,14 @@ export function InteractsWithFakes<T extends TestApplicationConstructor>(Base: T
     }
 
     /**
+     * Record broadcasts instead of delivering them (bound as `broadcast`)
+     * Laravel: Broadcast::fake()
+     */
+    fakeBroadcast(): BroadcastFake {
+      return Broadcast.fake(this.app);
+    }
+
+    /**
      * Undo every process-wide fake installed through these helpers.
      * Teardown does this automatically.
      */
@@ -95,6 +104,7 @@ export function InteractsWithFakes<T extends TestApplicationConstructor>(Base: T
       Http.stop();
       Mail.stop();
       Notification.stop();
+      Broadcast.stop();
     }
 
     constructor(...args: any[]) {
