@@ -4,6 +4,8 @@
  * Provides attribute handling functionality for models
  */
 
+import type { CastDefinition } from '../Casts';
+
 export interface HasAttributes {
   /**
    * The model's attributes
@@ -16,9 +18,11 @@ export interface HasAttributes {
   original: Record<string, any>;
 
   /**
-   * The attributes that should be cast
+   * The attributes that should be cast. Values are cast strings
+   * (`'int'`, `'decimal:2'`, `'enum:Status'`), cast classes or instances,
+   * `{ class, arguments }` objects, or TypeScript enum objects.
    */
-  casts: Record<string, string>;
+  casts: Record<string, CastDefinition>;
 
   /**
    * The attributes that should be hidden
@@ -37,7 +41,9 @@ export interface HasAttributes {
 }
 
 /**
- * Cast types supported by the model
+ * Cast types supported by the model, as the base name of a casts-map
+ * entry. Anything beyond these is a registered cast class resolved by
+ * name through the CastRegistry.
  */
 export type CastType =
   | 'int'
@@ -55,8 +61,12 @@ export type CastType =
   | 'collection'
   | 'date'
   | 'datetime'
+  | 'immutable_date'
+  | 'immutable_datetime'
   | 'timestamp'
-  | 'encrypted';
+  | 'encrypted'
+  | 'hashed'
+  | 'enum';
 
 /**
  * Attribute mutator function type

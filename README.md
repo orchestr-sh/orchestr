@@ -368,6 +368,65 @@ user.isClean(); // nothing waiting to be written
 
 `increment()` and `decrement()` hand the arithmetic to the database (`votes = votes + ?`), so two processes adding to the same column add up rather than overwrite; the model mirrors the amount it asked for, and only the columns that were written stop being dirty. `firstOrCreate`, `createOrFirst` and `updateOrCreate` all run through one find-or-write path, so the search and the merged attributes are built the same way in each case.
 
+### Attribute Casting
+
+Casts shape what a column means on the way in and the way out: `setAttribute` runs the cast's `set` and stores its result (so the database bindings carry the stored form), while `getAttribute`, `toObject`, `toJSON` and dirty comparison run its `get`. Everything resolves through one registry, so the read path and the persistence path cannot disagree.
+
+```typescript
+import { AsArrayObject, AsCollection, AsStringable, Ensemble } from '@orchestr-sh/orchestr';
+
+class Post extends Ensemble {
+  static fillable = ['title', 'body', 'options', 'tags', 'views', 'published_at'];
+
+  static casts = {
+    views: 'int',                      // int/real/string/bool, decimal:2, json, array, object
+    body: 'encrypted',                 // ciphertext at rest, plaintext on read
+    options: AsArrayObject,            // read/write an object with array semantics
+    tags: AsCollection,                // a Support Collection, stored as JSON
+    slug: 'AsStringable',              // a fluent Stringable
+    published_at: 'datetime',          // date / datetime:Y-m-d H:i / timestamp / immutable_date
+  };
+}
+
+post.getAttribute('tags'); // Collection(['laravel']) - toObject() hands back the array
+post.setAttribute('tags', ['laravel', 'orchestr']); // writes go through the cast's set
+```
+
+Enums, aggregates and modern accessors come from the same vocabulary Laravel ships:
+
+```typescript
+import { AsEncryptedCollection, Attribute, CastRegistry, Ensemble, Str } from '@orchestr-sh/orchestr';
+
+enum Status { Draft = 'draft', Published = 'published' }
+CastRegistry.registerEnum('Status', Status); // makes 'enum:Status' resolvable
+
+class Article extends Ensemble {
+  static casts = {
+    status: 'enum:Status',                   // string column <-> enum member
+    flags: 'AsEnumCollection:Status',        // JSON array of enum values
+    labels: AsEncryptedCollection,           // one payload per item
+  };
+
+  // Modern accessor: camelCase of the column, same as Laravel's Attribute::make
+  protected firstName(): Attribute {
+    return Attribute.make(
+      (value, attributes) => value ?? `${attributes.given_name} ${attributes.family_name}`,
+      (value) => String(value).toLowerCase()
+    );
+  }
+
+  // ...or as a property
+  slug = Attribute.make({ set: (value) => Str.slug(value) });
+
+  // The legacy pair still works and still wins where both exist
+  getTaglineAttribute() {
+    return `~ ${this.getAttribute('tagline')}`;
+  }
+}
+```
+
+Custom casts implement the `CastsAttributes` contract - `get` and `set` - and register by name instead of editing a switch (`php artisan make:cast` scaffolds one). `mergeCasts`, `getCasts`, `ensureCastsAreStringValues` and `hasCast(key, types?)` expose the metadata; dirty tracking compares cast values rather than stored bytes, so re-encrypting the same plaintext or rewriting the same JSON is not a change. `Ensemble.encryptUsing(crypter)` and `Ensemble.hashUsing(hasher)` install the services `encrypted`, `AsEncryptedCollection` and `hashed` run through - the providers wire both automatically when the container is booted.
+
 ## Querying
 
 Fluent query builder with chainable methods.

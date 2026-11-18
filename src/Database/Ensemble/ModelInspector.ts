@@ -18,6 +18,7 @@
  * the command's business.
  */
 
+import { CastRegistry } from './Casts';
 import { Ensemble } from './Ensemble';
 import { Relation } from './Relations/Relation';
 
@@ -75,7 +76,11 @@ export class ModelInspector {
         ? (anyClass[property] ?? fallback)
         : (anyInstance[property] ?? fallback);
 
-    const casts = (ownOrInstance<Record<string, string>>('casts', {}) ?? {}) as Record<string, string>;
+    // Read the casts through the model itself, so the precedence Ensemble
+    // uses - static over instance, runtime merges over declared - and the
+    // display stay in one place. Entries that are not strings (cast classes,
+    // instances, enums) are reduced to a name worth showing.
+    const casts = this.displayCasts((instance as any).getCasts() ?? {});
     const fillable = (ownOrInstance<string[]>('fillable', []) ?? []) as string[];
 
     const attributes = this.attributeNames(
@@ -117,6 +122,50 @@ export class ModelInspector {
   }
 
   // ------------------------------------------------------------- internals
+
+  /**
+   * Reduce casts-map entries to display strings: cast strings pass through,
+   * classes and instances name themselves, argument forms fold into the
+   * `name:arguments` shape, and bare enum objects report as `enum`.
+   */
+  private displayCasts(casts: Record<string, any>): Record<string, string> {
+    const display: Record<string, string> = {};
+
+    for (const [key, entry] of Object.entries(casts)) {
+      display[key] = this.displayCast(entry);
+    }
+
+    return display;
+  }
+
+  private displayCast(entry: any): string {
+    if (typeof entry === 'string') {
+      return entry;
+    }
+
+    try {
+      return CastRegistry.nameFor(entry);
+    } catch {
+      // Unregistered: name it the best way available.
+    }
+
+    if (typeof entry === 'function') {
+      return entry.name;
+    }
+
+    if (entry && typeof entry.get === 'function') {
+      return entry.constructor?.name ?? 'cast';
+    }
+
+    if (entry && 'class' in entry) {
+      const form = entry as { class: any; arguments?: any[] };
+      const name = typeof form.class === 'string' ? form.class : this.displayCast(form.class);
+
+      return form.arguments && form.arguments.length > 0 ? `${name}:${form.arguments.join(',')}` : name;
+    }
+
+    return 'enum';
+  }
 
   /**
    * The attributes worth listing: primary key, fillable list, cast map,
