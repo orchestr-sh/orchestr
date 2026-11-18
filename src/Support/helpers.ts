@@ -15,6 +15,7 @@ import type { RouteUrlParameters } from '@/Routing/UrlGenerator';
 import type { Store as SessionStore } from '@/Session/Contracts/Store';
 import type { SessionManager } from '@/Session/SessionManager';
 import type { CollectionKey } from '@/Support/Collection';
+import type { Translator as TranslatorContract } from '@/Translation/Translator';
 import type { View } from '@/View/View';
 import type { ViewFactory } from '@/View/ViewFactory';
 import { resolveModelFactory } from '@/Database/Factories/HasFactory';
@@ -24,6 +25,7 @@ import { defaultFactory } from '@/Http/Client/Factory';
 import { Arr } from '@/Support/Arr';
 import { Collection, collect as createCollection } from '@/Support/Collection';
 import { Str } from '@/Support/Str';
+import { defaultTranslator } from '@/Translation/Translator';
 
 // Global application instance for helpers
 let globalApp: Application | null = null;
@@ -113,6 +115,22 @@ export function routes_path(path: string = ''): string {
  */
 export function resource_path(path: string = ''): string {
   return base_path(`resources${path ? '/' + path : ''}`);
+}
+
+/**
+ * Get the language files directory path
+ * Laravel: lang_path('en/validation.php')
+ *
+ * Resolves through the application instance when one is running so the
+ * helper and the translator agree on the lang root; falls back to the
+ * current working directory otherwise.
+ */
+export function lang_path(path: string = ''): string {
+  if (globalApp) {
+    return globalApp.langPath(path);
+  }
+
+  return base_path(`lang${path ? '/' + path : ''}`);
 }
 
 /**
@@ -371,6 +389,54 @@ export function http(): HttpFactoryClass {
   }
 
   return defaultFactory();
+}
+
+/**
+ * Resolve the translator: the container's 'translator' binding when an
+ * application registered one (via TranslationServiceProvider), the
+ * process-wide default otherwise, so `__()` never crashes a standalone
+ * script - unknown keys answer with the key, like Laravel's fallback.
+ */
+export function resolveTranslator(): TranslatorContract {
+  if (globalApp && globalApp.bound('translator')) {
+    return globalApp.make<TranslatorContract>('translator');
+  }
+
+  return defaultTranslator();
+}
+
+/**
+ * Get a translation line with `:name` replacements applied.
+ * Laravel: __('messages.welcome') / __('validation.required')
+ *
+ * Resolution walks the active locale, then the fallback locale, then
+ * the key itself; dot notation addresses nested keys inside a language
+ * file (`lang/en/messages.ts` -> `messages.welcome`) and `package::`
+ * prefixes address namespaced package lines.
+ */
+export function __(key: string, replacements: Record<string, any> = {}, locale?: string): string {
+  return resolveTranslator().get(key, replacements, locale);
+}
+
+/**
+ * Alias of `__()`, mirroring Laravel's trans() helper.
+ */
+export function trans(key: string, replacements: Record<string, any> = {}, locale?: string): string {
+  return resolveTranslator().get(key, replacements, locale);
+}
+
+/**
+ * Get a pluralized translation line: the count selects one of the
+ * line's `|` forms and fills `:count` / `%count%`.
+ * Laravel: trans_choice('messages.apples', 2)
+ */
+export function trans_choice(
+  key: string,
+  number: number = 1,
+  replacements: Record<string, any> = {},
+  locale?: string
+): string {
+  return resolveTranslator().choice(key, number, replacements, locale);
 }
 
 /**
