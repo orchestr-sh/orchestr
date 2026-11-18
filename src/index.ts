@@ -50,7 +50,7 @@ export { Router } from './Routing/Router';
 export { Pipeline } from './Routing/Pipeline';
 export { Route as RouteClass } from './Routing/Route';
 export { Request } from './Routing/Request';
-export type { ParseBodyOptions } from './Routing/Request';
+export type { ParseBodyOptions, ProxyTrust } from './Routing/Request';
 export {
   UploadedFile,
   isUploadedFile,
@@ -488,6 +488,8 @@ export { RouteClearCommand } from './Console/Commands/RouteClearCommand';
 export { RouteListCommand } from './Console/Commands/RouteListCommand';
 export { ServeCommand } from './Console/Commands/ServeCommand';
 export { StorageLinkCommand } from './Console/Commands/StorageLinkCommand';
+export { DownCommand } from './Console/Commands/DownCommand';
+export { UpCommand } from './Console/Commands/UpCommand';
 
 // Console Commands - Generators
 export { GeneratorCommand } from './Console/Generators/GeneratorCommand';
@@ -704,6 +706,28 @@ export { CorsPolicy, DEFAULT_CORS_CONFIG, resolveCorsConfig } from './Http/Middl
 export type { CorsConfig } from './Http/Middleware/CorsPolicy';
 export { HandleCors, makeHandleCors, resolveCorsOptions } from './Http/Middleware/HandleCors';
 export { CorsServiceProvider } from './Http/Middleware/CorsServiceProvider';
+
+// HTTP Middleware (Trusted Proxies)
+export {
+  TrustedProxyResolver,
+  DEFAULT_TRUSTED_PROXY_CONFIG,
+  resolveTrustedProxyConfig,
+} from './Http/Middleware/TrustedProxyResolver';
+export type { TrustedProxyConfig } from './Http/Middleware/TrustedProxyResolver';
+export { TrustProxies, makeTrustProxies, resolveTrustedProxyOptions } from './Http/Middleware/TrustProxies';
+export { TrustProxiesServiceProvider } from './Http/Middleware/TrustProxiesServiceProvider';
+
+// Foundation - Maintenance Mode
+export { MaintenanceMode } from './Foundation/MaintenanceMode';
+export type { MaintenanceModeData } from './Foundation/MaintenanceMode';
+export {
+  PreventRequestsDuringMaintenance,
+  makePreventRequestsDuringMaintenance,
+  resolveMaintenanceConfig,
+  resolveMaintenanceOptions,
+  MAINTENANCE_COOKIE,
+} from './Foundation/Http/Middleware/PreventRequestsDuringMaintenance';
+export type { MaintenanceMiddlewareConfig } from './Foundation/Http/Middleware/PreventRequestsDuringMaintenance';
 
 // Cache Contracts
 export type { Store as CacheStore } from './Cache/Contracts/Store';

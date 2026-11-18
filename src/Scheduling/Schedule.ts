@@ -22,7 +22,6 @@
  * ```
  */
 
-import { existsSync } from 'node:fs';
 import type { Application } from '@/Foundation/Application';
 import type { Job } from '@/Queue/Job';
 import { CacheManager } from '@/Cache/CacheManager';
@@ -195,20 +194,16 @@ export class Schedule {
   }
 
   /**
-   * Whether the application is in maintenance mode. Matches Laravel's
-   * `php artisan down` contract: the presence of
-   * `storage/framework/down`.
+   * Whether the application is in maintenance mode. Read through the
+   * Application so the state has one owner (DRY) - matches the contract
+   * `php artisan down` writes.
    */
   inMaintenanceMode(): boolean {
     if (!this.app) {
       return false;
     }
 
-    try {
-      return existsSync(this.app.storagePath('framework/down'));
-    } catch {
-      return false;
-    }
+    return this.app.isDownForMaintenance();
   }
 
   /**

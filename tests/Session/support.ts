@@ -9,17 +9,23 @@ import { Router } from '@/Routing/Router';
  * middleware-pipeline tests build IncomingMessage instances. Pushing the
  * body before the Kernel attaches listeners keeps it buffered until
  * parseBody() flows it. Header names are lowercased like Node's http
- * layer does for real incoming requests.
+ * layer does for real incoming requests. `remoteAddress` pins the socket's
+ * peer - the source the trusted-proxy rules judge.
  */
 export function createRawRequest(
   method: string,
   url: string,
-  options: { headers?: Record<string, string>; body?: string } = {}
+  options: { headers?: Record<string, string>; body?: string; remoteAddress?: string } = {}
 ): IncomingMessage {
   const req = new IncomingMessage(new Socket());
   req.method = method;
   req.url = url;
   req.headers = {};
+
+  if (options.remoteAddress !== undefined) {
+    // Socket exposes remoteAddress as a getter; tests pin it per instance
+    Object.defineProperty(req.socket, 'remoteAddress', { value: options.remoteAddress, configurable: true });
+  }
 
   for (const [name, value] of Object.entries(options.headers ?? {})) {
     req.headers[name.toLowerCase()] = value;

@@ -4,6 +4,7 @@ import { setGlobalApp } from '@/Support/helpers';
 import { Str } from '@/Support/Str';
 import { ConfigServiceProvider } from './Config/ConfigServiceProvider';
 import { Env } from './Env/Env';
+import { MaintenanceMode } from './MaintenanceMode';
 import { packageVersion } from './PackageVersion';
 import { ServiceProvider } from './ServiceProvider';
 
@@ -277,6 +278,30 @@ export class Application extends Container {
    */
   version(): string {
     return packageVersion();
+  }
+
+  /**
+   * The maintenance-mode state, resolved lazily and memoised
+   * Laravel: $app->maintenanceMode() (the maintenance driver contract)
+   */
+  private maintenanceModeState?: MaintenanceMode;
+
+  maintenanceMode(): MaintenanceMode {
+    this.maintenanceModeState ??= new MaintenanceMode(this);
+
+    return this.maintenanceModeState;
+  }
+
+  /**
+   * Determine whether the application is down for maintenance.
+   *
+   * This is the single read path every subsystem uses - the maintenance
+   * middleware, the queue worker and the scheduler - so the state itself
+   * is never re-implemented anywhere else.
+   * Laravel: $app->isDownForMaintenance()
+   */
+  isDownForMaintenance(): boolean {
+    return this.maintenanceMode().active();
   }
 
   /**
