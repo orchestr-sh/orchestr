@@ -734,6 +734,44 @@ export class Builder<T = any> implements QueryBuilderInterface<T> {
   }
 
   /**
+   * Increment a column's value on every matching row
+   *
+   * The statement adjusts the stored value itself, so the binding order is the
+   * amount, then any `extra` columns, then the where clauses: the order the
+   * compiled placeholders appear in. Laravel: Query\Builder::increment()
+   */
+  async increment(column: string, amount: number = 1, extra: Record<string, any> = {}): Promise<number> {
+    return this.incrementOrDecrement(column, amount, extra, false);
+  }
+
+  /**
+   * Decrement a column's value on every matching row
+   */
+  async decrement(column: string, amount: number = 1, extra: Record<string, any> = {}): Promise<number> {
+    return this.incrementOrDecrement(column, amount, extra, true);
+  }
+
+  /**
+   * The shared increment/decrement statement: the same compiled update, with
+   * the arithmetic operator as the only difference.
+   */
+  protected async incrementOrDecrement(
+    column: string,
+    amount: number,
+    extra: Record<string, any>,
+    decrement: boolean
+  ): Promise<number> {
+    if (!this._table) {
+      throw new Error('Cannot increment or decrement without specifying a table');
+    }
+
+    const sql = this.grammar.compileIncrement(this.toQueryState(), column, extra, decrement);
+    const bindings = [amount, ...Object.values(extra), ...this.getBindingsFor(['where'])];
+
+    return await this.adapter.update(sql, bindings);
+  }
+
+  /**
    * Truncate the table
    */
   async truncate(): Promise<void> {

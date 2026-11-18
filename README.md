@@ -315,6 +315,59 @@ await User.query().withTrashedRelations().with('posts.comments').get();
 
 The scope can also be removed like any global scope, e.g. `User.query().withoutGlobalScope(SoftDeletingScope)`, and models expose `getDeletedAtColumn()` / `getQualifiedDeletedAtColumn()` for custom column names via `protected static DELETED_AT`. Soft deletes fire the `deleting`, `softDeleting`, `softDeleted`, `deleted`, `restoring`, `restored`, `forceDeleting` and `forceDeleted` hooks, so observers and listeners can react to or halt each phase. Models without the flag keep plain hard-delete behaviour.
 
+### Everyday Conveniences
+
+The Eloquent habits that are not querying or persistence, in the same shape - each one runs through the model's own builder and connection, so nothing here is a second way to write SQL.
+
+```typescript
+// Find or write, in one call
+const user = await User.firstOrCreate({ email: 'ada@example.com' }, { name: 'Ada' });
+const raced = await User.createOrFirst({ email: 'ada@example.com' }, { name: 'Ada' }); // insert first
+const built = await User.firstOrNew({ email: 'ada@example.com' }, { name: 'Ada' }); // unsaved
+const missing = await User.findOrNew(42); // carries the key it looked for
+await User.updateOrCreate({ email: 'ada@example.com' }, { name: 'Augusta' });
+
+// One row, loudly
+const only = await User.sole(); // throws if the query is not exactly one row
+const ada = await User.firstWhere('name', 'Ada');
+const name = await User.value('name');
+const emails = await User.pluck('email');
+
+// Instance writes
+await user.increment('votes', 2); // UPDATE ... SET votes = votes + 2, memory follows
+await user.decrement('votes');
+await user.touch(); // updated_at only, no other column
+const copy = user.replicate(['email']); // unsaved copy, minus the key and what you exclude
+await user.push(); // the model and every relation loaded onto it
+await user.saveOrFail(); // in a transaction; a cancelled event throws
+
+// Comparing and reloading
+user.is(other); // same class, same key - not the same object
+const current = await user.fresh(); // what the table holds, as its own instance
+
+// Quiet, briefly
+await user.withoutTimestamps(async () => user.save()); // the row's clock does not move
+await user.withoutEvents(async () => user.save()); // observers and listeners hear nothing
+await user.unguard((model) => model.fill({ id: 7 })); // mass assignment protection off
+user.reguard();
+
+// Strictness: mistakes instead of surprises
+user.preventLazyLoading(); // reading an unloaded relation is an error
+user.shouldBeStrict(); // ...and so is an attribute fill() would drop
+
+// Serialization
+user.makeHidden(['token']).makeVisible(['token']); // toObject()/toJSON() follow along
+user.append('full_name'); // accessors to add to the serialized form
+user.only(['id', 'name']); // ...narrowed, or
+user.except(['email']); // ...minus
+user.getOriginal('name'); // the value that was read
+user.getChanges(); // what the last write put in the table
+user.wasChanged('name'); // ...and whether a column was one of them
+user.isClean(); // nothing waiting to be written
+```
+
+`increment()` and `decrement()` hand the arithmetic to the database (`votes = votes + ?`), so two processes adding to the same column add up rather than overwrite; the model mirrors the amount it asked for, and only the columns that were written stop being dirty. `firstOrCreate`, `createOrFirst` and `updateOrCreate` all run through one find-or-write path, so the search and the merged attributes are built the same way in each case.
+
 ## Querying
 
 Fluent query builder with chainable methods.
@@ -1229,6 +1282,8 @@ Available model events:
 - `ModelForceDeleting` / `ModelForceDeleted` - Before (can halt) / after a hard delete
 
 All of these fire. The core `Model*` classes are exported from `@orchestr-sh/orchestr`; every event above can additionally be matched by its name string, e.g. `Event.listen('ModelRestored', ...)` - or handled through observer hooks (`restoring`, `restored`, `forceDeleting`, `forceDeleted`), which cover them all.
+
+The partial writes fire the update pair around the statement they run: `increment()`, `decrement()` and `touch()` dispatch `ModelUpdating` (which can halt them) and `ModelUpdated`, but not `ModelSaving`/`ModelSaved` - a column that moved by two and a row whose clock was stamped are updates, not saves. `withoutEvents()` silences both the observers and the dispatcher for the model it is called on, which is what a backfill wants: the rows change and nobody is notified.
 
 ### Testing Events
 
@@ -2841,17 +2896,54 @@ export class AppServiceProvider extends ServiceProvider {
 User.query()              // Get query builder
 User.find(id)             // Find by primary key
 User.findOrFail(id)       // Find or throw error
+User.findOrNew(id)        // Find, or a model carrying that key
 User.all()                // Get all records
 User.create(data)         // Create and save
+User.firstOrCreate(attrs, values)   // First match, or write the merge
+User.createOrFirst(attrs, values)   // Write first, read the row the index refused
+User.updateOrCreate(attrs, values)  // First match (updated) or create
+User.firstOrNew(attrs, values)      // First match, or an unsaved instance
+User.firstWhere(column, operator, value)
+User.sole()               // Exactly one row, or an exception
+User.value('name')        // One column off the first row
+User.pluck('email')       // One column off every row
+User.destroy(ids)         // Delete each keyed model, events and all
+User.truncate()           // Empty the table
 
 // Instance methods
 user.setAttribute(k, v)   // Mutate a tracked attribute (fill({...}) for many)
 user.save()               // Save changes
+user.saveOrFail()         // Save inside a transaction, throw if it was refused
 user.delete()             // Delete record
-user.refresh()            // Reload from database
+user.refresh()            // Reload this instance from the database
+user.fresh()              // What the table holds now, as its own instance
+user.increment('votes', 2)// The row does the arithmetic; memory follows
+user.decrement('votes')   // ...and back down again
+user.touch()              // Stamp updated_at, and nothing else
+user.replicate(['email']) // An unsaved copy minus the key and the named columns
+user.push()               // Save the model and every loaded relation
+user.is(other)            // Same class, same key
+user.withoutTimestamps(async () => user.save())  // Leave the clock alone
+user.withoutEvents(async () => user.save())      // Nobody is notified
+user.unguard((model) => model.fill({ id: 7 }))   // Mass assignment off, briefly
+user.preventLazyLoading() // Reading an unloaded relation becomes an error
+user.shouldBeStrict()     // ...and reporting silently dropped attributes
+
+// Serialization
+user.makeHidden(['token'])// Out of toObject()/toJSON()
+user.makeVisible(['token'])
+user.append('full_name')  // Add an accessor to the serialized form
+user.getAppends()         // ...and what it carries now
+user.only(['id', 'name']) // The serialized form, narrowed
+user.except(['email'])    // The serialized form, minus
+user.getOriginal('name')  // The value that was read
+user.getChanges()         // What the last write put in the table
+user.wasChanged('name')   // ...and whether a column was one of them
+user.isClean()            // Nothing waiting to be written
+
+// Relationships
 user.load('posts')        // Lazy load relationship
 user.loadCount('posts')   // Lazy load an aggregate of a relationship
-user.loadSum('comments', 'votes') // ...sums, averages, minimums, maximums, existence
 user.toObject()           // Convert to plain object
 ```
 
@@ -2888,6 +2980,14 @@ user.toObject()           // Convert to plain object
 .withCount('comments')                 // Relationship aggregates
 .withSum('comments', 'votes')
 .withExists('comments')
+.firstWhere(column, operator, value)   // The one-row reads
+.sole(columns)                         // Exactly one row, or an exception
+.value(column)                         // One column off the first row
+.pluck(column)                         // One column off every row
+.increment(column, amount, extra)      // The row does the arithmetic
+.decrement(column, amount, extra)
+.destroy(keys)                         // Delete each keyed model, events and all
+.truncate()                            // Empty the table
 .toSql()                  // Compiled statement, with bindings separate
 .toRawSql()               // Same statement with bindings interpolated in, for debugging only
 ```

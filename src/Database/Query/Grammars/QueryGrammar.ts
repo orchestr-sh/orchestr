@@ -383,6 +383,31 @@ export abstract class QueryGrammar {
     return `TRUNCATE TABLE ${this.wrapTable(this.requireTable(query))}`;
   }
 
+  /**
+   * Compile a column-wise increment or decrement.
+   *
+   * The adjusted column reads its own value back (`votes = votes + ?`), so the
+   * arithmetic runs at the row the statement targets rather than against a
+   * number the caller read earlier. Any `extra` columns are assigned plainly
+   * after it, which is where a model slips its own `updated_at` in.
+   * Laravel: Grammar::compileIncrement()
+   */
+  compileIncrement(query: QueryState, column: string, extra: Record<string, any> = {}, decrement = false): string {
+    const sets = [`${this.wrap(column)} = ${this.wrap(column)} ${decrement ? '-' : '+'} ?`];
+
+    for (const key of Object.keys(extra)) {
+      sets.push(`${this.wrap(key)} = ?`);
+    }
+
+    let sql = `UPDATE ${this.wrapTable(this.requireTable(query))} SET ${sets.join(', ')}`;
+
+    if (query.wheres.length > 0) {
+      sql += ` WHERE ${this.compileWheres(query)}`;
+    }
+
+    return sql;
+  }
+
   // -------------------------------------------------------------------------
   // Identifier wrapping
   // -------------------------------------------------------------------------

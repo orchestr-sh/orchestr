@@ -322,6 +322,16 @@ export interface QueryBuilderInterface<T = any> {
   delete(): Promise<number>;
 
   /**
+   * Increment a column's value on every matching row
+   */
+  increment(column: string, amount?: number, extra?: Record<string, any>): Promise<number>;
+
+  /**
+   * Decrement a column's value on every matching row
+   */
+  decrement(column: string, amount?: number, extra?: Record<string, any>): Promise<number>;
+
+  /**
    * Truncate the table
    */
   truncate(): Promise<void>;

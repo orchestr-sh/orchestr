@@ -139,6 +139,41 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
   protected timestamps: boolean = true;
 
   /**
+   * Timestamps are skipped for this model alone while `withoutTimestamps()`
+   * runs, which is how a one-off write keeps the row's own clock untouched.
+   */
+  protected timestampsSuppressed: boolean = false;
+
+  /**
+   * Lifecycle events are skipped for this model alone while
+   * `withoutEvents()` runs.
+   */
+  protected eventsSuppressed: boolean = false;
+
+  /**
+   * Mass assignment protection is off for this model while `unguard()` has it
+   * off, so a guarded column can be written without editing the class.
+   */
+  protected unguarded: boolean = false;
+
+  /**
+   * Reading a relation that was never loaded throws instead of querying.
+   */
+  protected preventsLazyLoading: boolean = false;
+
+  /**
+   * Strict mode: `fill()` reports the attributes it would silently drop.
+   */
+  protected strict: boolean = false;
+
+  /**
+   * The attributes the last write put into the table, which is what
+   * `getChanges()` and `wasChanged()` report. The edits waiting to be written
+   * are `getDirty()`.
+   */
+  protected changes: Record<string, any> = {};
+
+  /**
    * The name of the "created at" column
    */
   protected static CREATED_AT: string = 'created_at';
@@ -215,11 +250,16 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
 
   /**
    * Fill the model with an array of attributes
+   *
+   * Strict mode reports what it refuses instead of dropping it, which is the
+   * difference between a typo in a column name and a silent no-op.
    */
   fill(attributes: Record<string, any>): this {
     for (const [key, value] of Object.entries(attributes)) {
       if (this.isFillable(key)) {
         this.setAttribute(key, value);
+      } else if (this.strict) {
+        throw new Error(`This [${this.constructor.name}] does not allow [${key}] to be mass assigned.`);
       }
     }
     return this;
@@ -329,6 +369,9 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
   /**
    * Determine if the given attribute may be mass assigned.
    *
+   * `unguard()` answers first: while the model is unguarded every key is
+   * fillable and the lists below are not consulted at all.
+   *
    * Resolution order for `fillable` and `guarded`:
    *   1. Static property on the concrete class (e.g. `static fillable = [...]`)
    *      – safe because static properties exist before any constructor runs.
@@ -341,6 +384,10 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    * fillable list is the authoritative allow-list).
    */
   protected isFillable(key: string): boolean {
+    if (this.unguarded) {
+      return true;
+    }
+
     const ctor = this.constructor as typeof Ensemble;
 
     // Prefer static fillable if the subclass has defined one on itself
@@ -802,21 +849,214 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
 
   /**
    * Update or create a model matching the attributes
+   * Laravel: Eloquent\Model::updateOrCreate()
    */
   static async updateOrCreate<T extends Ensemble>(
     this: { new (): T },
     attributes: Record<string, any>,
     values: Record<string, any> = {}
   ): Promise<T> {
-    const instance = await (this as any).query().where(attributes).first();
+    return (this as any).findOrCreate(attributes, values, { updateExisting: true });
+  }
 
-    if (instance) {
-      instance.fill(values);
-      await instance.save();
-      return instance;
+  /**
+   * Find the first model matching the attributes or create it
+   * Laravel: Eloquent\Model::firstOrCreate()
+   */
+  static async firstOrCreate<T extends Ensemble>(
+    this: { new (): T },
+    attributes: Record<string, any>,
+    values: Record<string, any> = {}
+  ): Promise<T> {
+    return (this as any).findOrCreate(attributes, values);
+  }
+
+  /**
+   * Create the model, or return the row that beat it to the unique index
+   *
+   * The insert runs first, so the index is what decides whether this process
+   * wrote the row. Only a unique-constraint conflict is turned into a re-read:
+   * every other failure keeps travelling up the stack untouched.
+   * Laravel: Eloquent\Model::createOrFirst()
+   */
+  static async createOrFirst<T extends Ensemble>(
+    this: { new (): T },
+    attributes: Record<string, any>,
+    values: Record<string, any> = {}
+  ): Promise<T> {
+    return (this as any).findOrCreate(attributes, values, { createFirst: true });
+  }
+
+  /**
+   * Find the first model matching the attributes or return an unsaved instance
+   * Laravel: Eloquent\Model::firstOrNew()
+   */
+  static async firstOrNew<T extends Ensemble>(
+    this: { new (attributes?: Record<string, any>): T },
+    attributes: Record<string, any>,
+    values: Record<string, any> = {}
+  ): Promise<T> {
+    const existing = await (this as any).matching(attributes).first();
+
+    return existing ?? new this({ ...attributes, ...values });
+  }
+
+  /**
+   * Find a model by its primary key or return an instance carrying that key
+   * Laravel: Eloquent\Model::findOrNew()
+   */
+  static async findOrNew<T extends Ensemble>(
+    this: { new (attributes?: Record<string, any>): T },
+    id: any,
+    columns: string[] = ['*']
+  ): Promise<T> {
+    const existing = await (this as any).find(id, columns);
+
+    if (existing) {
+      return existing;
     }
 
-    return (this as any).create({ ...attributes, ...values });
+    const instance: T = new this();
+    instance.setAttribute(instance.getKeyName(), id);
+
+    return instance;
+  }
+
+  /**
+   * The single find-or-write path `firstOrCreate`, `createOrFirst`, and
+   * `updateOrCreate` run through: look for the row the matching attributes
+   * describe, and when there is none write one from the merge of those
+   * attributes and the values.
+   *
+   * `createFirst` reverses the order for `createOrFirst`, which lets the
+   * unique index decide and only reads when the insert is rejected.
+   * `updateExisting` saves the values onto the row that was found rather than
+   * leaving it as it is, which is all that separates `updateOrCreate` from
+   * `firstOrCreate`.
+   */
+  protected static async findOrCreate<T extends Ensemble>(
+    this: { new (): T },
+    attributes: Record<string, any>,
+    values: Record<string, any>,
+    options: { createFirst?: boolean; updateExisting?: boolean } = {}
+  ): Promise<T> {
+    const merged = { ...attributes, ...values };
+
+    if (options.createFirst) {
+      try {
+        return await (this as any).create(merged);
+      } catch (error) {
+        if (!(this as any).isUniqueViolation(error)) {
+          throw error;
+        }
+
+        const raced = await (this as any).matching(attributes).first();
+
+        if (!raced) {
+          throw error;
+        }
+
+        return raced;
+      }
+    }
+
+    const existing = await (this as any).matching(attributes).first();
+
+    if (existing) {
+      if (options.updateExisting) {
+        existing.fill(values);
+        await existing.save();
+      }
+
+      return existing;
+    }
+
+    return (this as any).create(merged);
+  }
+
+  /**
+   * The query that matches an attribute map, each pair applied as an equality
+   * constraint - which is how Eloquent reads `where(['email' => ...])`.
+   */
+  protected static matching<T extends Ensemble>(
+    this: { new (): T },
+    attributes: Record<string, any>
+  ): EnsembleBuilder<T> {
+    const query = (this as any).query() as EnsembleBuilder<T>;
+
+    for (const [column, value] of Object.entries(attributes)) {
+      query.where(column, '=', value);
+    }
+
+    return query;
+  }
+
+  /**
+   * Whether a failed write was rejected by a unique index, the one conflict
+   * `createOrFirst` can resolve by reading the row somebody else committed.
+   */
+  protected static isUniqueViolation(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+
+    return /unique|duplicate/i.test(message);
+  }
+
+  /**
+   * Get the single record matching the given columns, or fail loudly
+   * Laravel: Eloquent\Model::sole()
+   */
+  static async sole<T extends Ensemble>(this: { new (): T }, columns: string[] = ['*']): Promise<T> {
+    return (this as any).query().sole(columns);
+  }
+
+  /**
+   * Get the first record matching a column, or none
+   * Laravel: Eloquent\Model::firstWhere()
+   */
+  static async firstWhere<T extends Ensemble>(
+    this: { new (): T },
+    column: string,
+    operator?: any,
+    value?: any,
+    columns: string[] = ['*']
+  ): Promise<T | null> {
+    return (this as any).query().firstWhere(column, operator, value, columns);
+  }
+
+  /**
+   * Get a single column's value from the first matching record
+   * Laravel: Eloquent\Model::value()
+   */
+  static async value<T extends Ensemble>(this: { new (): T }, column: string): Promise<any> {
+    return (this as any).query().value(column);
+  }
+
+  /**
+   * Get a column's values from every matching record
+   * Laravel: Eloquent\Model::pluck()
+   */
+  static async pluck<T extends Ensemble>(this: { new (): T }, column: string): Promise<any[]> {
+    return (this as any).query().pluck(column);
+  }
+
+  /**
+   * Delete the models with the given keys, firing each one's lifecycle
+   *
+   * Every key is loaded and deleted through its own model, so a soft-deleting
+   * class stamps its rows and the observers see the deletes a bulk statement
+   * would skip. Returns the number of models deleted.
+   * Laravel: Eloquent\Model::destroy()
+   */
+  static async destroy<T extends Ensemble>(this: { new (): T }, ...ids: any[]): Promise<number> {
+    return (this as any).query().destroy(ids.flat(Infinity) as any[]);
+  }
+
+  /**
+   * Empty the model's table
+   * Laravel: Eloquent\Model::truncate()
+   */
+  static async truncate<T extends Ensemble>(this: { new (): T }): Promise<void> {
+    await (this as any).query().truncate();
   }
 
   /**
@@ -836,6 +1076,89 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
   }
 
   /**
+   * Save the model inside a transaction
+   *
+   * A write that halts mid-way leaves the database exactly as it was, so a
+   * failure never strands part of a multi-row operation. A cancelled lifecycle
+   * event is the same kind of refusal, and it surfaces as an exception instead
+   * of a quiet `false`. Laravel: Model::saveOrFail()
+   */
+  async saveOrFail(): Promise<boolean> {
+    return this.getConnection().transaction(async () => {
+      const saved = await this.save();
+
+      if (saved === false) {
+        throw new Error(`The save of [${this.constructor.name}] was cancelled by a model event.`);
+      }
+
+      return true;
+    });
+  }
+
+  /**
+   * Save the model and every relation loaded onto it
+   *
+   * The parent writes first so the children have a key to hang on to, and each
+   * relation pushes its own loaded relations the same way.
+   * Laravel: Model::push()
+   */
+  async push(): Promise<boolean> {
+    if (!(await this.save())) {
+      return false;
+    }
+
+    return this.pushLoadedRelations(new Set([this]));
+  }
+
+  /**
+   * Write every relation already loaded on this model
+   *
+   * Models already on the way down are skipped, so a parent and a child that
+   * reference each other are written once rather than forever.
+   */
+  protected async pushLoadedRelations(visited: Set<Ensemble>): Promise<boolean> {
+    for (const value of Object.values(this.relations)) {
+      for (const related of Ensemble.walkModels(value)) {
+        if (visited.has(related)) {
+          continue;
+        }
+
+        visited.add(related);
+
+        if (!(await related.save())) {
+          return false;
+        }
+
+        if (!(await related.pushLoadedRelations(visited))) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * The models inside a relation value: one model, a list of them, or a
+   * collection holding them.
+   */
+  protected static walkModels(value: any): Ensemble[] {
+    if (value instanceof Ensemble) {
+      return [value];
+    }
+
+    if (Array.isArray(value)) {
+      return value.filter((model) => model instanceof Ensemble);
+    }
+
+    if (value && typeof value.all === 'function') {
+      return value.all().filter((model: any) => model instanceof Ensemble);
+    }
+
+    return [];
+  }
+
+  /**
    * Perform a model insert operation
    */
   protected async performInsert(): Promise<boolean> {
@@ -846,7 +1169,7 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
 
     const attributes = this.getAttributesForInsert();
 
-    if (this.timestamps) {
+    if (this.updatesTimestamps()) {
       this.updateTimestamps();
     }
 
@@ -863,6 +1186,7 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
 
     this.exists = true;
     this.wasRecentlyCreated = true;
+    this.changes = { ...attributes };
     this.syncOriginal();
 
     // Fire created event
@@ -889,7 +1213,7 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
       return false;
     }
 
-    if (this.timestamps) {
+    if (this.updatesTimestamps()) {
       this.updateTimestamps();
     }
 
@@ -898,6 +1222,7 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
 
     await connection.table(table).where(this.getKeyName(), '=', this.getKey()).update(dirty);
 
+    this.changes = dirty;
     this.syncOriginal();
 
     // Fire updated event
@@ -907,6 +1232,17 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
     await this.fireModelEvent('saved');
 
     return true;
+  }
+
+  /**
+   * Whether the model's timestamps are being written right now
+   *
+   * Both the class setting and the per-model `withoutTimestamps()` window have
+   * to allow it: a timestamp is a promise about the row, and either party can
+   * take it back.
+   */
+  protected updatesTimestamps(): boolean {
+    return this.timestamps && !this.timestampsSuppressed;
   }
 
   /**
@@ -1006,6 +1342,18 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    */
   protected syncOriginal(): this {
     this.original = { ...this.attributes };
+    return this;
+  }
+
+  /**
+   * Sync one attribute back to its stored value
+   *
+   * The columns an increment or a touch wrote are already what the table
+   * holds, while anything else the caller still has pending stays dirty.
+   * Laravel: Model::syncOriginalAttribute()
+   */
+  protected syncOriginalAttribute(attribute: string): this {
+    this.original[attribute] = this.attributes[attribute];
     return this;
   }
 
@@ -1194,6 +1542,439 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
   }
 
   /**
+   * Read the model's row back as a separate instance
+   *
+   * `refresh()` rewrites this model in place; `fresh()` hands over what the
+   * table holds now and leaves the caller's copy untouched, which is how a
+   * concurrent write becomes visible without losing the edits in hand.
+   * Laravel: Model::fresh()
+   */
+  async fresh(columns: string[] = ['*']): Promise<this | null> {
+    if (!this.exists) {
+      return null;
+    }
+
+    const query: EnsembleBuilder<any> = (this.constructor as any).query();
+
+    // A trashed row is still this model's row, so the exclusion comes off.
+    if (this.usesSoftDeletes() && this.trashed()) {
+      query.withTrashed();
+    }
+
+    return (await query.select(...columns).find(this.getKey())) as this | null;
+  }
+
+  /**
+   * Add to a numeric column and write just that
+   *
+   * The statement lets the database do the arithmetic (`votes = votes + ?`),
+   * so two processes incrementing the same row add up instead of the later
+   * write overwriting the earlier one. The model mirrors the value it asked
+   * for, and only the columns that went to the table are synced back to their
+   * originals: anything else still held pending stays pending.
+   * Laravel: Model::incrementOrDecrement()
+   */
+  async increment(column: string, amount: number = 1, extra: Record<string, any> = {}): Promise<this> {
+    return this.adjustColumn(column, amount, extra, true);
+  }
+
+  /**
+   * Subtract from a numeric column and write just that
+   */
+  async decrement(column: string, amount: number = 1, extra: Record<string, any> = {}): Promise<this> {
+    return this.adjustColumn(column, amount, extra, false);
+  }
+
+  /**
+   * The shared increment/decrement path: one statement, the operator is all
+   * that differs.
+   */
+  protected async adjustColumn(column: string, amount: number, extra: Record<string, any>, up: boolean): Promise<this> {
+    const moved = Number(this.getAttribute(column) ?? 0) + (up ? amount : -amount);
+
+    // No row to move yet: the value rides along on the first save.
+    if (!this.exists) {
+      this.setAttribute(column, moved);
+      await this.save();
+
+      return this;
+    }
+
+    if ((await this.fireModelEvent('updating')) === false) {
+      return this;
+    }
+
+    const values: Record<string, any> = { ...extra };
+    const updatedAt = this.getUpdatedAtColumn();
+
+    if (updatedAt && this.updatesTimestamps()) {
+      values[updatedAt] = new Date();
+    }
+
+    // The statement addresses this row and lets the database do the
+    // arithmetic, so a concurrent writer adds to the same total rather than
+    // being overwritten by this one.
+    const statement = this.getConnection().table(this.getTable()).where(this.getKeyName(), '=', this.getKey());
+
+    await (up ? statement.increment(column, amount, values) : statement.decrement(column, amount, values));
+
+    // Memory and table now agree, and only the columns that went to the table
+    // stop being dirty: an edit the caller never asked to write stays pending.
+    this.setAttribute(column, moved);
+
+    for (const [key, value] of Object.entries(values)) {
+      this.setAttribute(key, value);
+    }
+
+    this.changes = { [column]: moved, ...values };
+
+    for (const key of Object.keys(this.changes)) {
+      this.syncOriginalAttribute(key);
+    }
+
+    await this.fireModelEvent('updated');
+
+    return this;
+  }
+
+  /**
+   * Stamp the model's timestamps, and only them
+   *
+   * The rest of the row waits for a real save: a touch moves the row's clock,
+   * not its content. With timestamps suppressed there is nothing to stamp, so
+   * neither the write nor the events around it happen at all.
+   * Laravel: Model::touch()
+   */
+  async touch(columns?: string[]): Promise<boolean> {
+    const updatedAt = this.getUpdatedAtColumn();
+
+    if (!this.exists || !updatedAt || !this.updatesTimestamps()) {
+      return false;
+    }
+
+    const names = columns && columns.length > 0 ? columns : [updatedAt];
+    const time = new Date();
+    const values: Record<string, any> = {};
+
+    for (const name of names) {
+      values[name] = time;
+      this.setAttribute(name, time);
+    }
+
+    if ((await this.fireModelEvent('updating')) === false) {
+      return false;
+    }
+
+    await this.getConnection().table(this.getTable()).where(this.getKeyName(), '=', this.getKey()).update(values);
+
+    this.changes = values;
+
+    for (const name of names) {
+      this.syncOriginalAttribute(name);
+    }
+
+    await this.fireModelEvent('updated');
+
+    return true;
+  }
+
+  /**
+   * Copy the model into a new, unsaved instance
+   *
+   * The identity does not travel with the copy: the primary key is dropped, so
+   * what comes back is a row waiting to be written rather than a second name
+   * for the one it came from. `except` names the other columns to leave out -
+   * typically the ones a unique index will not accept twice - and the
+   * timestamps go too, because a new row starts its own clock.
+   * Laravel: Model::replicate()
+   */
+  replicate(except: string[] = []): this {
+    const attributes = { ...this.attributes };
+
+    const dropped = [this.getKeyName(), this.getCreatedAtColumn(), this.getUpdatedAtColumn(), ...except].filter(
+      (column): column is string => typeof column === 'string'
+    );
+
+    for (const column of dropped) {
+      delete attributes[column];
+    }
+
+    const copy = this.newInstance();
+
+    copy.setRawAttributes(attributes);
+    copy.setRelations({ ...this.relations });
+    copy.connection = this.connection;
+    copy.exists = false;
+    copy.wasRecentlyCreated = false;
+
+    return copy as this;
+  }
+
+  /**
+   * Determine whether this model *is* the given one
+   *
+   * Same class, same key: identity belongs to the row rather than to the
+   * object holding it, so two separate reads of one record are the same model.
+   * A row that was never written has no key to share, and two unsaved models
+   * are therefore never each other.
+   * Laravel: Model::is()
+   */
+  is(other: Ensemble): boolean {
+    if (!(other instanceof Ensemble)) {
+      return false;
+    }
+
+    const key = this.getKey();
+
+    if (key === null || key === undefined) {
+      return false;
+    }
+
+    return this.constructor === other.constructor && key === other.getKey();
+  }
+
+  /**
+   * Determine whether this model is not the given one
+   */
+  isNot(other: Ensemble): boolean {
+    return !this.is(other);
+  }
+
+  /**
+   * Run a callback without writing this model's timestamps
+   *
+   * Laravel: Model::withoutTimestamps()
+   */
+  async withoutTimestamps<TResult>(callback: (model: this) => TResult | Promise<TResult>): Promise<TResult> {
+    const previous = this.timestampsSuppressed;
+
+    this.timestampsSuppressed = true;
+
+    try {
+      return await callback(this);
+    } finally {
+      this.timestampsSuppressed = previous;
+    }
+  }
+
+  /**
+   * Run a callback with this model's lifecycle events switched off
+   *
+   * Neither the observers nor the dispatcher hear about the writes the
+   * callback makes, which is what a backfill needs: the row changes, nobody
+   * is notified.
+   * Laravel: Model::withoutEvents()
+   */
+  async withoutEvents<TResult>(callback: (model: this) => TResult | Promise<TResult>): Promise<TResult> {
+    const previous = this.eventsSuppressed;
+
+    this.eventsSuppressed = true;
+
+    try {
+      return await callback(this);
+    } finally {
+      this.eventsSuppressed = previous;
+    }
+  }
+
+  /**
+   * Run a callback with mass assignment protection off for this model
+   *
+   * The lists come back whether the callback returns or throws, so a failure
+   * cannot leave the model permanently unguarded. `reguard()` is the same
+   * switch for code that opens and closes it by hand.
+   * Laravel: Model::unguard()
+   */
+  async unguard<TResult>(callback: (model: this) => TResult | Promise<TResult>): Promise<TResult> {
+    const previous = this.unguarded;
+
+    this.unguarded = true;
+
+    try {
+      return await callback(this);
+    } finally {
+      this.unguarded = previous;
+    }
+  }
+
+  /**
+   * Put the fillable and guarded lists back in charge
+   * Laravel: Model::reguard()
+   */
+  reguard(): this {
+    this.unguarded = false;
+    return this;
+  }
+
+  /**
+   * Make an unloaded relation an error rather than a query
+   *
+   * The eager load belongs where the query is written; `load()` and a dynamic
+   * property read both go out to the database on their own, which is the
+   * performance bug that shows up as a page issuing one select per row.
+   * Laravel: Model::preventLazyLoading()
+   */
+  preventLazyLoading(value: boolean = true): this {
+    this.preventsLazyLoading = value;
+    return this;
+  }
+
+  /**
+   * Turn on every check that reports a mistake instead of papering over it
+   *
+   * Right now that is lazy loading and silently discarded attributes; both
+   * are the shape of "it worked, and the numbers were wrong".
+   * Laravel: Model::shouldBeStrict()
+   */
+  shouldBeStrict(value: boolean = true): this {
+    this.strict = value;
+
+    return this.preventLazyLoading(value);
+  }
+
+  /**
+   * The attributes the last write put into the table
+   * Laravel: Model::getChanges()
+   */
+  getChanges(): Record<string, any> {
+    return { ...this.changes };
+  }
+
+  /**
+   * Determine whether an attribute was written by the last save
+   * Laravel: Model::wasChanged()
+   */
+  wasChanged(attribute?: string | string[]): boolean {
+    if (attribute === undefined) {
+      return Object.keys(this.changes).length > 0;
+    }
+
+    return Ensemble.attributeList(attribute).some((key) => key in this.changes);
+  }
+
+  /**
+   * Determine whether there is nothing left to write
+   * Laravel: Model::isClean()
+   */
+  isClean(attribute?: string | string[]): boolean {
+    if (attribute === undefined) {
+      return !this.isDirty();
+    }
+
+    return Ensemble.attributeList(attribute).every((key) => !this.isDirty(key));
+  }
+
+  /**
+   * The attributes as they were read, or one of them
+   * Laravel: Model::getOriginal()
+   */
+  getOriginal(attribute?: string): any {
+    return attribute === undefined ? { ...this.original } : this.original[attribute];
+  }
+
+  /**
+   * Hide attributes from serialization
+   *
+   * Laravel: Model::makeHidden()
+   */
+  makeHidden(attributes: string | string[]): this {
+    const names = Ensemble.attributeList(attributes);
+
+    this.hidden = [...new Set([...this.hidden, ...names])];
+    this.visible = this.visible.filter((key) => !names.includes(key));
+
+    return this;
+  }
+
+  /**
+   * Make hidden attributes serialize again
+   *
+   * A whitelist keeps its shape: when the model already lists the columns it
+   * shows, what comes back is that list plus the newly visible one, rather
+   * than the whole row.
+   * Laravel: Model::makeVisible()
+   */
+  makeVisible(attributes: string | string[]): this {
+    const names = Ensemble.attributeList(attributes);
+
+    this.hidden = this.hidden.filter((key) => !names.includes(key));
+
+    if (this.visible.length > 0) {
+      this.visible = [...new Set([...this.visible, ...names])];
+    }
+
+    return this;
+  }
+
+  /**
+   * Add accessors to the serialized form
+   * Laravel: Model::append()
+   */
+  append(attributes: string | string[]): this {
+    this.appends = [...new Set([...this.appends, ...Ensemble.attributeList(attributes)])];
+
+    return this;
+  }
+
+  /**
+   * Replace the accessors the serialized form carries
+   * Laravel: Model::setAppends()
+   */
+  setAppends(attributes: string | string[]): this {
+    this.appends = Ensemble.attributeList(attributes);
+
+    return this;
+  }
+
+  /**
+   * The accessors the serialized form carries
+   */
+  getAppends(): string[] {
+    return [...this.appends];
+  }
+
+  /**
+   * The serialized form, narrowed to the given attributes
+   *
+   * Everything the model shows applies first: casts, hidden columns, appended
+   * accessors. `only` filters the shape the model already has.
+   * Laravel: Model::only()
+   */
+  only(attributes: string | string[]): Record<string, any> {
+    const serialized = this.toObject();
+    const picked: Record<string, any> = {};
+
+    for (const key of Ensemble.attributeList(attributes)) {
+      if (key in serialized) {
+        picked[key] = serialized[key];
+      }
+    }
+
+    return picked;
+  }
+
+  /**
+   * The serialized form, without the given attributes
+   * Laravel: Model::except()
+   */
+  except(attributes: string | string[]): Record<string, any> {
+    const serialized = this.toObject();
+
+    for (const key of Ensemble.attributeList(attributes)) {
+      delete serialized[key];
+    }
+
+    return serialized;
+  }
+
+  /**
+   * One attribute name or a list of them, read the same way everywhere
+   */
+  protected static attributeList(attributes: string | string[]): string[] {
+    return Array.isArray(attributes) ? attributes : [attributes];
+  }
+
+  /**
    * Convert a string to studly case
    */
   protected studly(value: string): string {
@@ -1231,6 +2012,24 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    */
   newQuery(): EnsembleBuilder<any> {
     return (this.constructor as any).query();
+  }
+
+  /**
+   * Reading a relation that was never loaded is a violation, not a query
+   *
+   * The alternative is a page that issues one select per row and never says
+   * so; the relation stays something the query asks for with `with()`, rather
+   * than something the model goes out to fetch when a caller reads it.
+   * Laravel: Model::preventLazyLoading()
+   */
+  protected checkForLazyLoadingViolation(relation: string): void {
+    if (!this.preventsLazyLoading) {
+      return;
+    }
+
+    throw new Error(
+      `Lazy loading violation: the [${this.constructor.name}] model attempted to lazy load the [${relation}] relation.`
+    );
   }
 
   /**
@@ -1274,6 +2073,12 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    * @returns false if event is halting and a listener returned false, undefined otherwise
    */
   protected async fireModelEvent(event: string): Promise<boolean | undefined> {
+    // `withoutEvents()` puts this model's lifecycle on hold: the row changes
+    // and nobody hears about it.
+    if (this.eventsSuppressed) {
+      return undefined;
+    }
+
     // Observer hooks fire through the same lifecycle path as the dispatcher.
     if ((await ObserverRegistry.notify(this, event)) === false) {
       return false;

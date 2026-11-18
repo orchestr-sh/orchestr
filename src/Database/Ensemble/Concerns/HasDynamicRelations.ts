@@ -17,24 +17,39 @@ function isRelation(value: any): boolean {
 /**
  * Create a hybrid function/promise for relationship access
  * This allows both: await user.posts AND user.posts().get()
+ *
+ * The awaited read is a lazy load, so it runs through the model's own `load()`
+ * rather than straight into the relation: that is where a model guarding
+ * against lazy loading gets to say no, and it is also where the result ends up
+ * cached on the model instead of being re-queried on the next read.
  */
-function createRelationshipProxy(relationGetter: () => any): any {
+function createRelationshipProxy(relationGetter: () => any, model?: any, relation?: string): any {
   // Create a function that returns the relation when called
   const fn: any = function (...args: any[]) {
     return relationGetter();
   };
 
+  const read = (): Promise<any> => {
+    if (relation && typeof model?.load === 'function' && typeof model?.relationLoaded === 'function') {
+      return model.relationLoaded(relation)
+        ? Promise.resolve(model.getRelation(relation))
+        : model.load(relation).then(() => model.getRelation(relation));
+    }
+
+    return relationGetter().getResults();
+  };
+
   // Make the function thenable (Promise-like) by adding then/catch methods
   fn.then = function (onFulfilled?: any, onRejected?: any) {
-    return relationGetter().getResults().then(onFulfilled, onRejected);
+    return read().then(onFulfilled, onRejected);
   };
 
   fn.catch = function (onRejected?: any) {
-    return relationGetter().getResults().catch(onRejected);
+    return read().catch(onRejected);
   };
 
   fn.finally = function (onFinally?: any) {
-    return relationGetter().getResults().finally(onFinally);
+    return read().finally(onFinally);
   };
 
   return fn;
@@ -89,6 +104,11 @@ const EXCLUDED_METHODS = [
   'touch',
   'makeHidden',
   'makeVisible',
+  'push',
+  'replicate',
+  'wasChanged',
+  'reguard',
+  'preventLazyLoading',
 ];
 
 /**
@@ -125,6 +145,7 @@ const INTERNAL_PROPERTIES = new Set([
   'attributes',
   'original',
   'relations',
+  'changes',
   'exists',
   'wasRecentlyCreated',
   'table',
@@ -138,6 +159,11 @@ const INTERNAL_PROPERTIES = new Set([
   'appends',
   'casts',
   'timestamps',
+  'timestampsSuppressed',
+  'eventsSuppressed',
+  'unguarded',
+  'preventsLazyLoading',
+  'strict',
   'connection',
   'dynamicRelations',
 ]);
@@ -184,9 +210,10 @@ export function withDynamicRelations<T extends object>(instance: T): T {
 
       // Only create proxy for zero-parameter methods (potential relationships)
       if (paramCount === 0) {
-        // Return a hybrid that can be both called and awaited
-        // We don't call the method here - we let the proxy call it when needed
-        return createRelationshipProxy(boundMethod);
+        // Return a hybrid that can be both called and awaited. The model and
+        // the relation name come along so the awaited read goes through
+        // `load()`, which is where lazy-loading prevention lives.
+        return createRelationshipProxy(boundMethod, target, property);
       }
 
       // Return the original value for methods with parameters
