@@ -16,6 +16,7 @@ export { Schedule } from './Schedule';
 export { Session } from './Session';
 export { Storage } from './Storage';
 export { Auth } from './Auth';
+export { Password } from './Password';
 export { Gate } from './Gate';
 export { Hash } from './Hash';
 export { Crypt } from './Crypt';

@@ -57,7 +57,7 @@ export interface AuthGuardConfig {
 
 /**
  * `auth.defaults` — the guard every Auth::/auth() call lands on, plus the
- * password-broker defaults the later reset ticket reads
+ * password-broker name Password::/password() lands on
  */
 export interface AuthDefaultsConfig {
   guard: string;
@@ -65,13 +65,29 @@ export interface AuthDefaultsConfig {
 }
 
 /**
- * One `auth.passwords.*` broker entry; stored for the password-reset ticket
+ * One `auth.passwords.*` broker entry. `expire` is in minutes (the token's
+ * validity window), `throttle` in seconds (the gap between two freshly
+ * created tokens for the same address).
  */
 export interface AuthPasswordBrokerConfig {
+  /** Token storage driver; 'database' ships built-in, custom ones via extend() */
+  driver?: string;
   provider?: string;
   table?: string;
+  /** Named database connection; the default connection when omitted */
+  connection?: string;
   expire?: number;
   throttle?: number;
+  [key: string]: any;
+}
+
+/**
+ * `auth.verification` — the email-verification flow's settings. `expire` is
+ * how many minutes a signed verification URL stays valid.
+ */
+export interface AuthVerificationConfig {
+  provider?: string;
+  expire?: number;
 }
 
 /**
@@ -83,6 +99,7 @@ export interface AuthConfig {
   guards: Record<string, AuthGuardConfig>;
   providers: Record<string, EnsembleUserProviderConfig>;
   passwords?: Record<string, AuthPasswordBrokerConfig>;
+  verification?: AuthVerificationConfig;
 }
 
 /**
@@ -114,7 +131,9 @@ export interface AuthManagerDependencies {
 
 /**
  * Default configuration merged under whatever the app provides: the
- * Laravel-shaped session/token guards plus an `users` ensemble provider.
+ * Laravel-shaped session/token guards plus an `users` ensemble provider,
+ * the canonical `users` password broker and the email-verification
+ * defaults.
  */
 export const AUTH_DEFAULTS: AuthConfig = {
   defaults: { guard: 'session' },
@@ -125,7 +144,13 @@ export const AUTH_DEFAULTS: AuthConfig = {
   providers: {
     users: { driver: 'ensemble' },
   },
-  passwords: {},
+  passwords: {
+    users: { provider: 'users', table: 'password_reset_tokens', expire: 60, throttle: 60 },
+  },
+  verification: {
+    provider: 'users',
+    expire: 60,
+  },
 };
 
 export class AuthManager {
@@ -166,7 +191,8 @@ export class AuthManager {
       defaults: { ...AUTH_DEFAULTS.defaults, ...(config.defaults ?? {}) },
       guards: this.mergeSection(AUTH_DEFAULTS.guards, config.guards),
       providers: this.mergeSection(AUTH_DEFAULTS.providers, config.providers),
-      passwords: { ...AUTH_DEFAULTS.passwords, ...(config.passwords ?? {}) },
+      passwords: this.mergeSection(AUTH_DEFAULTS.passwords ?? {}, config.passwords),
+      verification: { ...AUTH_DEFAULTS.verification, ...(config.verification ?? {}) },
     };
   }
 

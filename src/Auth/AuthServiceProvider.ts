@@ -12,9 +12,11 @@
  * guard so every authorization surface (the 'can' middleware, Rule.can,
  * Request.can/authorize and FormRequest) consults the same service.
  *
- * On boot it ships the Laravel Kernel's 'auth', 'guest' and 'can' middleware
- * aliases (Illuminate\Auth\Middleware\Authenticate / RedirectIfAuthenticated
- * / Authorize) when the application has not claimed them already.
+ * On boot it ships the Laravel Kernel's 'auth', 'guest', 'can', 'verified'
+ * and 'signed' middleware aliases (Illuminate\Auth\Middleware\Authenticate /
+ * RedirectIfAuthenticated / Authorize / EnsureEmailIsVerified, plus the
+ * framework-wide ValidateSignature) when the application has not claimed
+ * them already.
  *
  * Laravel: Illuminate\Auth\AuthServiceProvider
  *
@@ -40,8 +42,10 @@ import { Gate } from '@/Auth/Access/Gate';
 import { AuthManager } from '@/Auth/AuthManager';
 import { Authenticate } from '@/Auth/Middleware/Authenticate';
 import { Can } from '@/Auth/Middleware/Can';
+import { EnsureEmailIsVerified } from '@/Auth/Middleware/EnsureEmailIsVerified';
 import { RedirectIfAuthenticated } from '@/Auth/Middleware/RedirectIfAuthenticated';
 import { ServiceProvider } from '@/Foundation/ServiceProvider';
+import { ValidateSignature } from '@/Routing/Middleware/ValidateSignature';
 
 export class AuthServiceProvider extends ServiceProvider {
   register(): void {
@@ -104,9 +108,10 @@ export class AuthServiceProvider extends ServiceProvider {
   }
 
   /**
-   * Ship the 'auth', 'guest' and 'can' middleware aliases, like the Laravel
-   * app Kernel's $middlewareAliases. Apps can re-register any name with
-   * Router::aliasMiddleware() before or after boot to take control.
+   * Ship the 'auth', 'guest', 'can' and 'verified' middleware aliases,
+   * like the Laravel app Kernel's $middlewareAliases. Apps can
+   * re-register any name with Router::aliasMiddleware() before or after
+   * boot to take control.
    */
   boot(): void {
     if (!this.app.bound('router')) {
@@ -133,6 +138,14 @@ export class AuthServiceProvider extends ServiceProvider {
 
     if (!aliases.can) {
       router.aliasMiddleware('can', Can);
+    }
+
+    if (!aliases.verified) {
+      router.aliasMiddleware('verified', EnsureEmailIsVerified);
+    }
+
+    if (!aliases.signed) {
+      router.aliasMiddleware('signed', ValidateSignature);
     }
   }
 
