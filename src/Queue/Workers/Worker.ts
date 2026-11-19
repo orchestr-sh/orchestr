@@ -43,6 +43,14 @@ export class Worker {
     this.listenForSignals();
 
     while (!this.shouldQuit) {
+      // Laravel: the daemon quits when the application enters maintenance
+      // mode - unless the worker was started with --force to keep running
+      if (!opts.force && this.app.isDownForMaintenance()) {
+        console.log(`[${new Date().toISOString()}] Quitting queue worker: Application is in maintenance mode.`);
+        this.stop();
+        break;
+      }
+
       // Fire looping callbacks
       this.manager.fireLoopingCallbacks();
 
@@ -78,9 +86,18 @@ export class Worker {
 
   /**
    * Process a single job (--once mode)
+   *
+   * Maintenance mode gates the worker the same way the daemon loop does:
+   * no job is taken while the application is down unless --force opted in
+   * to running through it.
    */
   async runOnce(connectionName: string, queues: string, options: WorkerOptions = {}): Promise<boolean> {
     const opts = { ...DEFAULT_WORKER_OPTIONS, ...options };
+
+    if (!opts.force && this.app.isDownForMaintenance()) {
+      return false;
+    }
+
     return this.runNextJob(connectionName, queues, opts);
   }
 

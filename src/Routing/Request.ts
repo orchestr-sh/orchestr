@@ -1,3 +1,4 @@
+import type { TLSSocket } from 'tls';
 import { IncomingMessage } from 'http';
 import { parse as parseQuery } from 'querystring';
 import { parse as parseUrl } from 'url';
@@ -24,6 +25,26 @@ export type UserResolver = (guard?: string) => Authenticatable | null | Promise<
  * Resolves the guard handling a request
  */
 export type GuardResolver = (guard?: string) => StatefulGuard;
+
+/**
+ * The proxy-trust boundary a request consults to decide whether
+ * `X-Forwarded-*` headers may override what the socket says. The TrustProxies
+ * middleware installs one (an implementation backed by the `trustedproxy`
+ * configuration); without it nothing is forwarded and every value comes from
+ * the socket and the request's own headers.
+ * Laravel: Symfony's Request::setTrustedProxies() header trust semantics
+ */
+export interface ProxyTrust {
+  /**
+   * Whether an IP address belongs to a proxy the application trusts
+   */
+  isTrustedProxy(ip: string | undefined): boolean;
+
+  /**
+   * Whether a forwarded header (lowercase) is in the configured set
+   */
+  trusts(header: string): boolean;
+}
 
 /**
  * Body limits honoured while parsing multipart uploads
@@ -56,6 +77,12 @@ export class Request {
   private userResolver?: UserResolver;
 
   private guardResolver?: GuardResolver;
+
+  /**
+   * The proxy trust boundary installed by the TrustProxies middleware;
+   * without it all forwarded headers are treated as untrusted input
+   */
+  private proxyTrust?: ProxyTrust;
 
   private bodyParsed: boolean = false;
 
@@ -592,17 +619,211 @@ export class Request {
   }
 
   /**
-   * Get the IP address of the request
+   * Bind the proxy trust boundary that decides whether `X-Forwarded-*`
+   * headers may be honoured for this request
+   * Laravel/Symfony: $request->setTrustedProxies($proxies, $headerSet)
+   */
+  setTrustedProxies(trust: ProxyTrust): void {
+    this.proxyTrust = trust;
+  }
+
+  /**
+   * Determine whether the request's immediate source is a trusted proxy.
+   * Only meaningful once the TrustProxies middleware has installed the
+   * trust boundary; without it nothing counts as trusted.
+   */
+  fromTrustedProxy(): boolean {
+    return this.proxyTrust !== undefined && this.proxyTrust.isTrustedProxy(this.raw.socket.remoteAddress);
+  }
+
+  /**
+   * The comma-separated entries of a forwarded header, but only when the
+   * source is a trusted proxy and the header is in the configured trust set;
+   * untrusted forwarded input is silently dropped.
+   */
+  private forwarded(header: string): string[] {
+    if (!this.fromTrustedProxy() || !this.proxyTrust?.trusts(header)) {
+      return [];
+    }
+
+    const value = this.header(header);
+
+    if (value === undefined) {
+      return [];
+    }
+
+    const list = Array.isArray(value) ? value.join(',') : value;
+
+    return list
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  /**
+   * The IP address of the client behind (possible) proxies.
+   *
+   * With a trusted proxy, the `X-Forwarded-For` chain is walked right to
+   * left - the closest hop is what the trusted proxy observed - and the
+   * first untrusted address wins, so a chain a client spoofed cannot
+   * masquerade as the caller. From untrusted sources the forwarded header
+   * is ignored entirely and the socket address stands.
    * Laravel: $request->ip()
    */
   ip(): string | undefined {
-    const forwarded = this.header('x-forwarded-for');
-    if (forwarded) {
-      return Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0];
+    if (!this.fromTrustedProxy()) {
+      return this.raw.socket.remoteAddress;
     }
 
-    return this.raw.socket.remoteAddress;
+    const chain = this.forwarded('x-forwarded-for');
+
+    for (let i = chain.length - 1; i >= 0; i--) {
+      if (!this.proxyTrust?.isTrustedProxy(chain[i])) {
+        return chain[i];
+      }
+    }
+
+    // Either no chain was sent, or every hop in it is a trusted proxy; the
+    // chain's leftmost entry (or the socket) then describes the client.
+    return chain[0] ?? this.raw.socket.remoteAddress;
   }
+
+  /**
+   * All addresses from the client through the proxy chain, client first
+   * Laravel: $request->ips() (Symfony's getClientIps)
+   *
+   * Returns the trusted `X-Forwarded-For` chain when the request came from a
+   * trusted proxy, and just the socket address otherwise - untrusted
+   * forwarded headers carry no chain at all.
+   */
+  ips(): string[] {
+    const chain = this.forwarded('x-forwarded-for');
+
+    if (chain.length > 0) {
+      return chain;
+    }
+
+    return this.raw.socket.remoteAddress ? [this.raw.socket.remoteAddress] : [];
+  }
+
+  /**
+   * Determine whether the request arrived over HTTPS
+   *
+   * The trusted `X-Forwarded-Proto` chain answers first (TLS terminators
+   * sit in front of plain HTTP apps); otherwise the socket's encryption
+   * state decides. From untrusted sources nothing overrides the socket.
+   * Laravel: $request->isSecure()
+   */
+  isSecure(): boolean {
+    const [proto] = this.forwarded('x-forwarded-proto');
+
+    if (proto !== undefined) {
+      return proto.toLowerCase() === 'https';
+    }
+
+    // net.Socket types the property, but only a TLS socket carries it
+    return (this.raw.socket as TLSSocket).encrypted === true;
+  }
+
+  /**
+   * The request's scheme: https when the (trusted) forwarded proto or an
+   * encrypted socket says so, http otherwise
+   * Laravel: $request->scheme()
+   */
+  scheme(): string {
+    return this.isSecure() ? 'https' : 'http';
+  }
+
+  /**
+   * The host name the client addressed, without its port.
+   *
+   * The trusted `X-Forwarded-Host` wins over the `Host` header; from
+   * untrusted sources only the `Host` header is considered.
+   * Laravel: $request->getHttpHost() / $request->host()
+   */
+  host(): string | undefined {
+    const [forwardedHost] = this.forwarded('x-forwarded-host');
+    const value = forwardedHost ?? this.header('host');
+
+    return value === undefined ? undefined : hostWithoutPort(value);
+  }
+
+  /**
+   * The port the request was addressed on.
+   *
+   * Resolution order: the trusted `X-Forwarded-Port`, the port inside the
+   * forwarded/host header value, the listening socket's port, and finally
+   * the scheme's default port.
+   * Laravel: $request->getPort()
+   */
+  port(): number {
+    const forwardedPort = toPort(this.forwarded('x-forwarded-port')[0]);
+
+    if (forwardedPort !== undefined) {
+      return forwardedPort;
+    }
+
+    const headerPort = hostPort(this.header('host'));
+
+    if (headerPort !== undefined) {
+      return headerPort;
+    }
+
+    if (this.raw.socket.localPort) {
+      return this.raw.socket.localPort;
+    }
+
+    return this.isSecure() ? 443 : 80;
+  }
+}
+
+/**
+ * Strip a trailing `:port` from a host value, keeping bracketed IPv6
+ * literals intact: `[::1]:8080` -> `::1`, `app.test:8080` -> `app.test`
+ */
+function hostWithoutPort(value: string): string {
+  if (value.startsWith('[')) {
+    const bracket = value.indexOf(']');
+
+    return bracket === -1 ? value : value.slice(1, bracket);
+  }
+
+  const colon = value.lastIndexOf(':');
+
+  return colon !== -1 && !value.slice(colon + 1).includes(':') ? value.slice(0, colon) : value;
+}
+
+/**
+ * The port carried by a host value like `app.test:8080`, or undefined when
+ * it names no port
+ */
+function hostPort(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value.startsWith('[')) {
+    const bracket = value.indexOf(']');
+
+    return bracket === -1 ? undefined : toPort(value.slice(bracket + 1).replace(':', ''));
+  }
+
+  const colon = value.lastIndexOf(':');
+
+  return colon === -1 || value.slice(colon + 1).includes(':') ? undefined : toPort(value.slice(colon + 1));
+}
+
+/**
+ * Coerce a forwarded port value to a valid TCP port number
+ */
+function toPort(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const port = Number.parseInt(value, 10);
+
+  return Number.isInteger(port) && port >= 0 && port <= 65535 ? port : undefined;
 }
 
 /**

@@ -27,6 +27,7 @@ import { DeployProvisionCommand } from './DeployProvisionCommand';
 import { DeployRollbackCommand } from './DeployRollbackCommand';
 import { DeployServerCommand } from './DeployServerCommand';
 import { DeployStatusCommand } from './DeployStatusCommand';
+import { DownCommand } from './DownCommand';
 import { EventCacheCommand } from './EventCacheCommand';
 import { EventClearCommand } from './EventClearCommand';
 import { EventListCommand } from './EventListCommand';
@@ -95,6 +96,7 @@ import { ScheduleWorkCommand } from './ScheduleWorkCommand';
 import { SeedCommand } from './SeedCommand';
 import { ServeCommand } from './ServeCommand';
 import { StorageLinkCommand } from './StorageLinkCommand';
+import { UpCommand } from './UpCommand';
 import { ViewCacheCommand } from './ViewCacheCommand';
 import { ViewClearCommand } from './ViewClearCommand';
 
@@ -186,6 +188,8 @@ export function coreCommands(app: Application): Command[] {
     new RouteListCommand(app),
     new ServeCommand(app),
     new StorageLinkCommand(app),
+    new DownCommand(app),
+    new UpCommand(app),
     // Schedule commands
     new ScheduleRunCommand(app),
     new ScheduleWorkCommand(app),

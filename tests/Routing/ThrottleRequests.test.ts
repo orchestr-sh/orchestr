@@ -37,7 +37,7 @@ interface Harness {
   router: Router;
   kernel: Kernel;
   limiter: RateLimiter;
-  request(method: string, url: string, headers?: Record<string, string>): Promise<Captured>;
+  request(method: string, url: string, headers?: Record<string, string>, remoteAddress?: string): Promise<Captured>;
 }
 
 /**
@@ -65,10 +65,10 @@ async function createHarness(configure?: (ctx: Harness) => void): Promise<Harnes
     router,
     kernel,
     limiter: app.make<RateLimiter>('limiter'),
-    async request(method, url, headers = {}) {
+    async request(method, url, headers = {}, remoteAddress) {
       const { raw, chunks, headers: sentHeaders } = captureResponse();
 
-      await kernel.handle(createRawRequest(method, url, { headers }), raw);
+      await kernel.handle(createRawRequest(method, url, { headers, remoteAddress }), raw);
 
       return { status: raw.statusCode, body: chunks.join(''), headers: sentHeaders };
     },
@@ -401,9 +401,11 @@ describe('ThrottleRequests middleware', () => {
         router.get('/x', respondOk).middleware('throttle:1,1');
       });
 
-      expect((await request('GET', '/x', { 'x-forwarded-for': '10.0.0.1' })).status).toBe(200);
-      expect((await request('GET', '/x', { 'x-forwarded-for': '10.0.0.1' })).status).toBe(429);
-      expect((await request('GET', '/x', { 'x-forwarded-for': '10.0.0.2' })).status).toBe(200);
+      // Guests are keyed by their real socket address; forwarded headers
+      // without a trust boundary are not (see the TrustProxies suite)
+      expect((await request('GET', '/x', {}, '10.0.0.1')).status).toBe(200);
+      expect((await request('GET', '/x', {}, '10.0.0.1')).status).toBe(429);
+      expect((await request('GET', '/x', {}, '10.0.0.2')).status).toBe(200);
     });
   });
 
