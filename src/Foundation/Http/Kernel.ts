@@ -93,6 +93,18 @@ export class Kernel {
   }
 
   /**
+   * Insert middleware at the front of the Kernel's global stack - the seam
+   * framework middleware like CORS uses to run before every app-registered
+   * global middleware, so preflight requests never touch session or CSRF
+   * Laravel: the ordered Kernel::$middleware array
+   */
+  public prepend(middleware: MiddlewareArgument | MiddlewareArgument[]): this {
+    const middlewares = Array.isArray(middleware) ? middleware : [middleware];
+    this.middleware.unshift(...middlewares);
+    return this;
+  }
+
+  /**
    * The Kernel's global middleware stack, in registration order
    */
   public getMiddleware(): MiddlewareArgument[] {

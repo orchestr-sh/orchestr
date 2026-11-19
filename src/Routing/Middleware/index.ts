@@ -6,6 +6,7 @@
  */
 
 export { ValidateSignature, makeValidateSignature, resolveSignedRouter } from './ValidateSignature';
+export { ThrottleRequests, makeThrottleRequests, resolveRateLimiter } from './ThrottleRequests';
 export {
   SetLocale,
   makeSetLocale,

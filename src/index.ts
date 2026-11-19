@@ -32,6 +32,7 @@ export {
   NotFoundHttpException,
   AccessDeniedHttpException,
   AuthenticationException,
+  ThrottleRequestsException,
   ModelNotFoundException,
   JsonRenderer,
   HtmlRenderer,
@@ -86,6 +87,7 @@ export { Event as EventFacade } from './Facades/Event';
 export { Queue as QueueFacade } from './Facades/Queue';
 export { Bus } from './Facades/Bus';
 export { Cache } from './Facades/Cache';
+export { RateLimiter as RateLimiterFacade } from './Facades/RateLimiter';
 export { View as ViewFacade } from './Facades/View';
 export { Session } from './Facades/Session';
 export { Storage } from './Facades/Storage';
@@ -690,6 +692,19 @@ export { CacheManager } from './Cache/CacheManager';
 export type { CacheConfig, StoreConfig, StoreFactory } from './Cache/CacheManager';
 export { Repository as CacheRepository } from './Cache/Repository';
 
+// Cache - Rate Limiting
+export { RateLimiter, Limited } from './Cache/RateLimiter';
+export type { RateLimiterCache, NamedLimiterCallback, NamedLimiterResult } from './Cache/RateLimiter';
+export { RateLimiterServiceProvider } from './Cache/RateLimiterServiceProvider';
+export { Limit, Unlimited } from './Cache/RateLimiting';
+export type { LimitKeyResolver, LimitResponseCallback } from './Cache/RateLimiting/Limit';
+
+// HTTP Middleware (CORS)
+export { CorsPolicy, DEFAULT_CORS_CONFIG, resolveCorsConfig } from './Http/Middleware/CorsPolicy';
+export type { CorsConfig } from './Http/Middleware/CorsPolicy';
+export { HandleCors, makeHandleCors, resolveCorsOptions } from './Http/Middleware/HandleCors';
+export { CorsServiceProvider } from './Http/Middleware/CorsServiceProvider';
+
 // Cache Contracts
 export type { Store as CacheStore } from './Cache/Contracts/Store';
 export type { RepositoryContract as CacheRepositoryContract } from './Cache/Contracts/Repository';
@@ -864,6 +879,7 @@ export { resolveRedirect, type RedirectDestination } from './Auth/Middleware/Red
 
 // Routing Middleware
 export { ValidateSignature, makeValidateSignature, resolveSignedRouter } from './Routing/Middleware/ValidateSignature';
+export { ThrottleRequests, makeThrottleRequests, resolveRateLimiter } from './Routing/Middleware/ThrottleRequests';
 export {
   SetLocale,
   makeSetLocale,

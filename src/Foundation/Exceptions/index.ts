@@ -4,6 +4,7 @@ export { HttpException, httpStatusText } from './HttpException';
 export { NotFoundHttpException } from './NotFoundHttpException';
 export { AccessDeniedHttpException } from './AccessDeniedHttpException';
 export { AuthenticationException } from './AuthenticationException';
+export { ThrottleRequestsException } from './ThrottleRequestsException';
 export { ModelNotFoundException } from './ModelNotFoundException';
 export { JsonRenderer } from './JsonRenderer';
 export { HtmlRenderer } from './HtmlRenderer';
