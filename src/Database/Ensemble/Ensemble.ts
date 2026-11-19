@@ -5,13 +5,17 @@
  * In Orchestr, your data models are called Ensembles - groups that work in harmony
  */
 
+import type { CastsAttributes } from '@/Database/Contracts/CastsAttributes';
 import type { EnsembleClass, Factory, FactoryState } from '@/Database/Factories/Factory';
 import type { Encrypter as CrypterContract } from '@/Encryption/Contracts/Encrypter';
+import type { Hasher as HasherContract } from '@/Hashing/Contracts/Hasher';
 import { Connection } from '@/Database/Connection';
 import { DatabaseManager } from '@/Database/DatabaseManager';
 import { resolveModelFactory } from '@/Database/Factories/HasFactory';
 import { getGlobalApp } from '@/Support/helpers';
+import type { CastDefinition } from './Casts';
 import type { SoftDeletes } from './SoftDeletes';
+import { Attribute, CastRegistry, DateCast, valuesEqual } from './Casts';
 import { HasRelationshipsMixin } from './Concerns/HasRelationships';
 import { EnsembleBuilder } from './EnsembleBuilder';
 import {
@@ -52,6 +56,18 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    * explicitly through Ensemble.encryptUsing()
    */
   protected static cryptResolver: (() => CrypterContract) | null = null;
+
+  /**
+   * The hasher resolver used by `hashed` casts, when one was installed
+   * explicitly through Ensemble.hashUsing()
+   */
+  protected static hashResolver: (() => HasherContract) | null = null;
+
+  /**
+   * Per-class cache of which camelCase methods are modern `Attribute`
+   * accessors, so the probe runs once per model class rather than per read.
+   */
+  private static accessorCache = new Map<Function, Map<string, Attribute | null>>();
 
   /**
    * The table associated with the model
@@ -111,7 +127,7 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    * `fill()` - and therefore `Model.create({...})` - already sees the
    * `encrypted` cast.
    */
-  static casts?: Record<string, string>;
+  static casts?: Record<string, CastDefinition>;
 
   /**
    * The attributes that should be hidden for serialization
@@ -129,9 +145,19 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
   protected appends: string[] = [];
 
   /**
-   * The attributes that should be cast
+   * The attributes that should be cast. Values may be a cast string
+   * (`'int'`, `'decimal:2'`, `'enum:Status'`, a registered custom name), a
+   * `CastsAttributes` class or instance, a `{ class, arguments }` object, or
+   * a TypeScript enum object. Everything resolves through the
+   * `CastRegistry`, so reads and writes never disagree.
    */
-  protected casts: Record<string, string> = {};
+  protected casts: Record<string, CastDefinition> = {};
+
+  /**
+   * Casts merged at runtime through `mergeCasts()`, kept apart from the
+   * declared maps so the static-over-instance precedence survives.
+   */
+  protected runtimeCasts: Record<string, CastDefinition> = {};
 
   /**
    * Indicates if the model should be timestamped
@@ -267,20 +293,35 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
 
   /**
    * Set a given attribute on the model
+   *
+   * Resolution order, mirroring Laravel's `setAttribute()`: a legacy
+   * `setXAttribute` mutator first, then a modern `Attribute` mutator, then
+   * the cast's `set` - which is where encrypted, hashed, JSON, date and
+   * custom casts turn the application value into the stored form. Whatever
+   * comes back is what the attributes (and therefore the persistence
+   * bindings) hold.
    */
   setAttribute(key: string, value: any): this {
-    // Check for mutator
+    // Legacy set mutator
     const mutator = `set${this.studly(key)}Attribute`;
     if (typeof (this as any)[mutator] === 'function') {
       (this as any)[mutator](value);
       return this;
     }
 
-    // Encrypted casts store the ciphertext; the plaintext only ever comes
-    // back out through getAttribute(), the way Laravel's encrypted casts
-    // keep the raw attribute encrypted at rest
-    if (this.castType(key) === 'encrypted') {
-      this.attributes[key] = this.encryptAttribute(value);
+    // Modern Attribute mutator: whatever it returns is stored.
+    const accessor = this.findAttributeAccessor(key);
+    if (accessor && accessor.set) {
+      const stored = accessor.set(value, this.attributes);
+      this.attributes[key] = stored === undefined ? value : stored;
+      return this;
+    }
+
+    // Cast classes own their write path, so encrypted values are encrypted,
+    // dates normalised, and so on, all through the one registered cast.
+    const cast = this.resolveCast(key);
+    if (cast) {
+      this.attributes[key] = cast.set(this, key, value, this.attributes);
       return this;
     }
 
@@ -343,27 +384,34 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
 
   /**
    * Get an attribute from the model
+   *
+   * The precedence mirrors Laravel's `getAttribute()`: a legacy
+   * `getXAttribute` accessor first, then a modern `Attribute` accessor, then
+   * the cast's read transform, and finally the raw stored value.
    */
   getAttribute(key: string): any {
     if (!key) {
       return undefined;
     }
 
-    // Check if we have an accessor
+    // Legacy accessor
     const accessor = `get${this.studly(key)}Attribute`;
     if (typeof (this as any)[accessor] === 'function') {
       return (this as any)[accessor]();
     }
 
-    // Get the attribute value
-    const value = this.attributes[key];
+    // Modern Attribute accessor
+    const attribute = this.findAttributeAccessor(key);
+    if (attribute && attribute.get) {
+      return attribute.get(this.attributes[key], this.attributes);
+    }
 
     // Cast the attribute if needed
     if (this.hasCast(key)) {
-      return this.castAttribute(key, value);
+      return this.castAttribute(key, this.attributes[key]);
     }
 
-    return value;
+    return this.attributes[key];
   }
 
   /**
@@ -432,10 +480,202 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
   }
 
   /**
-   * Determine if a cast is defined for an attribute
+   * The `Attribute` object declared for an attribute, either form of it:
+   *
+   *   - a property holding one (`slug = Attribute.make(...)`)
+   *   - a camelCase method returning one (`firstName(): Attribute`, the
+   *     return type Laravel reads through reflection)
+   *
+   * A method that merely shares the attribute's name is probed once per
+   * class and cached; probing anything else that fails, returns something
+   * other than an Attribute, or throws simply means "not an accessor".
+   * Laravel: HasAttributes::hasAttributeMutator()
    */
-  protected hasCast(key: string): boolean {
-    return this.castType(key) !== undefined;
+  protected findAttributeAccessor(key: string): Attribute | undefined {
+    const camel = this.camelCase(key);
+
+    const direct = (this as any)[camel] ?? (this as any)[key];
+
+    if (direct instanceof Attribute) {
+      return direct;
+    }
+
+    if (typeof direct !== 'function') {
+      return undefined;
+    }
+
+    let cache = Ensemble.accessorCache.get(this.constructor);
+    if (!cache) {
+      cache = new Map();
+      Ensemble.accessorCache.set(this.constructor, cache);
+    }
+
+    if (cache.has(camel)) {
+      const cached = cache.get(camel);
+      return cached ?? undefined;
+    }
+
+    let found: Attribute | null = null;
+    try {
+      const result = direct.call(this);
+      if (result instanceof Attribute) {
+        found = result;
+      }
+    } catch {
+      // The method is not an accessor; anything it raised is not our concern.
+      found = null;
+    }
+
+    cache.set(camel, found);
+
+    return found ?? undefined;
+  }
+
+  /**
+   * Whether a get accessor - legacy or modern - claims this attribute, in
+   * which case its result is the serialized value as-is.
+   */
+  protected hasGetAccessor(key: string): boolean {
+    if (this.hasGetMutator(key)) {
+      return true;
+    }
+
+    const accessor = this.findAttributeAccessor(key);
+
+    return accessor !== undefined && accessor.get !== undefined;
+  }
+
+  /**
+   * camelCase form of an attribute name, the method Laravel's `Str::camel`
+   * expects modern accessors to be declared under.
+   */
+  protected camelCase(key: string): string {
+    const studly = this.studly(key);
+
+    return studly.charAt(0).toLowerCase() + studly.slice(1);
+  }
+
+  /**
+   * Determine if a cast is defined for an attribute.
+   *
+   * `types` narrows the question to specific base cast names, the way
+   * Laravel's `hasCast($key, ['date', 'datetime'])` does.
+   * Laravel: HasAttributes::hasCast()
+   */
+  public hasCast(key: string, types?: string | string[]): boolean {
+    const entry = this.castType(key);
+
+    if (entry === undefined) {
+      return false;
+    }
+
+    if (!types) {
+      return true;
+    }
+
+    const requested = Array.isArray(types) ? types : [types];
+    const base = this.getCastType(key);
+
+    return base !== undefined && requested.includes(base);
+  }
+
+  /**
+   * The complete casts map for this model: the declared instance and static
+   * maps, anything merged at runtime, and the soft-delete column's implicit
+   * date cast. One map drives reads, dirty comparison and persistence, so
+   * they cannot disagree.
+   * Laravel: HasAttributes::getCasts()
+   */
+  public getCasts(): Record<string, CastDefinition> {
+    const ctor = this.constructor as typeof Ensemble;
+
+    const staticCasts: Record<string, CastDefinition> | undefined = Object.prototype.hasOwnProperty.call(ctor, 'casts')
+      ? ctor.casts
+      : undefined;
+
+    const casts: Record<string, CastDefinition> = { ...this.casts, ...staticCasts, ...this.runtimeCasts };
+
+    if (this.usesSoftDeletes() && !(this.getDeletedAtColumn() in casts)) {
+      casts[this.getDeletedAtColumn()] = 'datetime';
+    }
+
+    return casts;
+  }
+
+  /**
+   * Merge additional casts into the model for the life of this instance.
+   * Entries are normalized to string values first, exactly like Laravel's
+   * `mergeCasts()`.
+   * Laravel: HasAttributes::mergeCasts()
+   */
+  public mergeCasts(casts: Record<string, CastDefinition>): this {
+    this.runtimeCasts = { ...this.runtimeCasts, ...this.ensureCastsAreStringValues(casts) };
+    return this;
+  }
+
+  /**
+   * Reduce a casts map to string values. Registered classes, instances,
+   * `{ class, arguments }` objects and registered enums all have a canonical
+   * string form; entries with no registered name report themselves rather
+   * than pretending to be strings they cannot be.
+   * Laravel: HasAttributes::ensureCastsAreStringValues()
+   */
+  public ensureCastsAreStringValues(casts?: Record<string, CastDefinition>): Record<string, string> {
+    const source = casts ?? this.getCasts();
+    const strings: Record<string, string> = {};
+
+    for (const [key, entry] of Object.entries(source)) {
+      strings[key] = CastRegistry.nameFor(entry);
+    }
+
+    return strings;
+  }
+
+  /**
+   * The base cast name of an attribute - `'date'` for `'date:Y-m-d'`, the
+   * registered (or class) name for a cast object - used by `hasCast` when
+   * the caller asks about specific types.
+   * Laravel: HasAttributes::getCastType()
+   */
+  protected getCastType(key: string): string | undefined {
+    const entry = this.castType(key);
+
+    if (entry === undefined) {
+      return undefined;
+    }
+
+    if (typeof entry === 'string') {
+      const separator = entry.indexOf(':');
+      return separator === -1 ? entry : entry.slice(0, separator);
+    }
+
+    if (typeof entry === 'function') {
+      try {
+        return CastRegistry.nameFor(entry);
+      } catch {
+        return entry.name;
+      }
+    }
+
+    const candidate = entry as Partial<{ class: unknown; get: unknown }>;
+
+    if (candidate.get === undefined && candidate.class === undefined) {
+      return 'enum';
+    }
+
+    try {
+      return CastRegistry.nameFor(entry);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * The cast entry applied to an attribute, if any, resolved through the
+   * one registry every code path shares.
+   */
+  protected resolveCast(key: string): CastsAttributes | undefined {
+    return CastRegistry.resolve(this.castType(key));
   }
 
   /**
@@ -449,31 +689,15 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    * property, mirroring `static fillable`: it already exists while the
    * base constructor is filling attributes, so encrypted casts are applied
    * by `Model.create({...})` and not only by later `setAttribute()` calls.
+   * `mergeCasts()` entries beat both, because they were asked for later.
    */
-  protected castType(key: string): string | undefined {
-    const ctor = this.constructor as typeof Ensemble;
-
-    const staticCasts: Record<string, string> | undefined = Object.prototype.hasOwnProperty.call(ctor, 'casts')
-      ? ctor.casts
-      : undefined;
-
-    if (staticCasts && key in staticCasts) {
-      return staticCasts[key];
-    }
-
-    if (key in this.casts) {
-      return this.casts[key];
-    }
-
-    if (this.usesSoftDeletes() && key === this.getDeletedAtColumn()) {
-      return 'datetime';
-    }
-
-    return undefined;
+  protected castType(key: string): CastDefinition | undefined {
+    return this.getCasts()[key];
   }
 
   /**
-   * Cast an attribute to a native PHP type
+   * Cast an attribute to its application shape by running the registered
+   * cast's `get`.
    *
    * Absent and null values pass through untouched: casting `undefined` would
    * invent data (an Invalid `Date`, say) where the model simply has nothing.
@@ -483,54 +707,36 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
       return value;
     }
 
-    const castType = this.castType(key);
+    const cast = this.resolveCast(key);
 
-    switch (castType) {
-      case 'int':
-      case 'integer':
-        return parseInt(value);
-      case 'real':
-      case 'float':
-      case 'double':
-        return parseFloat(value);
-      case 'string':
-        return String(value);
-      case 'bool':
-      case 'boolean':
-        return Boolean(value);
-      case 'object':
-        return typeof value === 'string' ? JSON.parse(value) : value;
-      case 'array':
-      case 'json':
-        return typeof value === 'string' ? JSON.parse(value) : value;
-      case 'collection':
-        return typeof value === 'string' ? JSON.parse(value) : value;
-      case 'date':
-      case 'datetime':
-      case 'timestamp':
-        return value instanceof Date ? value : new Date(value);
-      case 'encrypted':
-        return this.crypter().decrypt(value);
-      default:
-        return value;
+    if (!cast) {
+      return value;
     }
+
+    return cast.get(this, key, value, this.attributes);
   }
 
   /**
    * Convert the model to a plain object
+   *
+   * Every visible attribute travels through the same read path
+   * (`getAttribute`) and then, when a cast defines a `serialize` step, that
+   * too - so a `Collection` becomes an array, an `ArrayObject` an object, a
+   * `Stringable` a string, and a formatted date its format - matching
+   * Laravel's `attributesToArray()`.
    */
   toObject(): Record<string, any> {
     const attributes: Record<string, any> = {};
 
     for (const key of Object.keys(this.attributes)) {
       if (this.isVisible(key)) {
-        attributes[key] = this.getAttribute(key);
+        attributes[key] = this.getAttributeForOutput(key);
       }
     }
 
     // Add appended accessors
     for (const key of this.appends) {
-      attributes[key] = this.getAttribute(key);
+      attributes[key] = this.getAttributeForOutput(key);
     }
 
     // Add loaded relationships
@@ -545,6 +751,32 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
     }
 
     return attributes;
+  }
+
+  /**
+   * The value an attribute takes in the model's array/JSON form: the cast's
+   * serialized shape, or the accessor's result when one owns the attribute.
+   * Laravel: HasAttributes::getAttributeFromArray() + mutateAttributeForArray
+   */
+  protected getAttributeForOutput(key: string): any {
+    const value = this.getAttribute(key);
+
+    // An accessor already owns the output; casts do not run a second pass.
+    if (this.hasGetAccessor(key)) {
+      return value;
+    }
+
+    if (!this.hasCast(key)) {
+      return value;
+    }
+
+    const cast = this.resolveCast(key);
+
+    if (cast && typeof cast.serialize === 'function') {
+      return cast.serialize(this, key, value, this.attributes);
+    }
+
+    return value;
   }
 
   /**
@@ -667,6 +899,45 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
 
     throw new Error(
       'A crypter is required for encrypted casts. Register the EncryptionServiceProvider or call Ensemble.encryptUsing().'
+    );
+  }
+
+  /**
+   * Provide the hasher used by `hashed` casts
+   *
+   * The HashServiceProvider wires this through the container; apps building
+   * a hasher by hand - or tests that want a deterministic one - can install
+   * it directly. Passing null clears the resolver again.
+   *
+   * Laravel: Hash facade resolution for the hashed cast
+   */
+  static hashUsing(hasher: HasherContract | (() => HasherContract) | null): void {
+    if (hasher === null) {
+      (Ensemble as any).hashResolver = null;
+      return;
+    }
+
+    const factory = typeof hasher === 'function' ? (hasher as () => HasherContract) : () => hasher;
+    (Ensemble as any).hashResolver = factory;
+  }
+
+  /**
+   * The hasher hashed casts run through: the resolver installed with
+   * hashUsing(), else the container's 'hash' binding
+   */
+  protected hasher(): HasherContract {
+    if (Ensemble.hashResolver) {
+      return Ensemble.hashResolver();
+    }
+
+    const app = getGlobalApp();
+
+    if (app && app.bound('hash')) {
+      return app.make<HasherContract>('hash');
+    }
+
+    throw new Error(
+      'A hasher is required for hashed casts. Register the HashServiceProvider or call Ensemble.hashUsing().'
     );
   }
 
@@ -1290,6 +1561,12 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
 
   /**
    * Determine if the original value is equivalent to the current value
+   *
+   * When a cast exists, the two stored forms are decoded through it and the
+   * *cast* values are compared, so re-serialising the same content (a JSON
+   * column rewritten key-for-key, an encrypted field re-encrypted with a new
+   * IV, a Collection set back to what it held) is recognised as no change at
+   * all. Undecodable values fall back to comparing the stored forms.
    */
   protected originalIsEquivalent(key: string, current: any): boolean {
     if (!(key in this.original)) {
@@ -1306,6 +1583,20 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
       return false;
     }
 
+    const cast = this.resolveCast(key);
+
+    if (cast) {
+      try {
+        return valuesEqual(
+          cast.get(this, key, current, this.attributes),
+          cast.get(this, key, original, this.attributes)
+        );
+      } catch {
+        // A value that will not decode is compared in its stored form.
+        return String(current) === String(original);
+      }
+    }
+
     if (this.isDateAttribute(key)) {
       return this.compareDates(current, original);
     }
@@ -1317,8 +1608,21 @@ export abstract class Ensemble extends HasRelationshipsMixin implements SoftDele
    * Determine if the given attribute is a date or date castable
    */
   protected isDateAttribute(key: string): boolean {
-    const cast = this.castType(key);
-    return cast === 'date' || cast === 'datetime' || cast === 'timestamp';
+    const cast = this.resolveCast(key);
+
+    if (cast instanceof DateCast) {
+      return true;
+    }
+
+    const entry = this.castType(key);
+
+    if (typeof entry !== 'string') {
+      return false;
+    }
+
+    const base = entry.indexOf(':') === -1 ? entry : entry.slice(0, entry.indexOf(':'));
+
+    return ['date', 'datetime', 'immutable_date', 'immutable_datetime', 'timestamp'].includes(base);
   }
 
   /**

@@ -186,7 +186,8 @@ const cases: GeneratorCase[] = [
     file: ['app/Casts/AsEncrypted.ts'],
     contains: [
       'Namespace: App\\Casts',
-      'export class AsEncrypted {',
+      "import type { CastsAttributes } from '@orchestr-sh/orchestr';",
+      'export class AsEncrypted implements CastsAttributes {',
       'get(model: any, key: string, value: any, attributes: Record<string, any>): any {',
       'set(model: any, key: string, value: any, attributes: Record<string, any>): any {',
     ],

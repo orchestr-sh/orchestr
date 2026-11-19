@@ -1,6 +1,7 @@
 /**
  * Custom cast stub - the get/set pair Laravel cast classes implement,
- * kept framework-free because Ensemble's string casts own conversion.
+ * typed against the package's CastsAttributes contract so registration
+ * (`CastRegistry.register`) and the model's casts map both accept it.
  *
  * Laravel: Illuminate\Foundation\Console\CastMakeCommand.
  */
@@ -10,7 +11,9 @@ export default `/**
  * Namespace: {{ namespace }}
  */
 
-export class {{ class }} {
+import type { CastsAttributes } from '@orchestr-sh/orchestr';
+
+export class {{ class }} implements CastsAttributes {
   /**
    * Transform the stored value into its application shape.
    * Laravel: Illuminate\\Contracts\\Database\\Eloquent\\CastsAttributes::get()
