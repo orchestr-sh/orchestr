@@ -37,6 +37,7 @@ Requires Node `^22.18.0 || >=24.0.0` and TypeScript `>=5`.
 - [Localization](#localization)
 - [Collections, Strings & Helpers](#collections-strings--helpers)
 - [Configuration & Environment](#configuration--environment)
+- [Service Container](#service-container)
 - [Queue System](#queue-system)
 - [Cache System](#cache-system)
 - [Task Scheduling](#task-scheduling)
@@ -3019,6 +3020,81 @@ export class AppServiceProvider extends ServiceProvider {
   }
 }
 ```
+
+## Service Container
+
+The container is the framework's IoC core - Laravel's `Illuminate\Container` API, adapted to TypeScript classes and `reflect-metadata`. Every `Application` *is* a container, so these calls work directly on `app`.
+
+### Registering and resolving
+
+```typescript
+app.bind(ReportService, ReportService);        // fresh instance per make()
+app.singleton(Logger, FileLogger);             // one shared instance
+app.instance('config', new Config(values));    // register a live object
+app.alias(Logger, 'log');                      // make('log') resolves Logger
+
+const service = app.make<ReportService>(ReportService);
+const withOverrides = app.makeWith(ReportService, { logger: spare }); // by name
+const built = app.build((container) => new ReportService(container.make(Logger)));
+```
+
+Constructor dependencies are injected by reflected type (`design:paramtypes`, emitted for decorated classes such as `@Injectable()`), by parameter name for explicit overrides, and by declared defaults for optional/nullable parameters. Untyped parameters of an undecorated class stay `undefined`, so `make(SomeCommand, [app])` keeps working positionally too.
+
+### Contextual bindings
+
+```typescript
+app.when(ReportService).needs(Logger).give(FileLogger);   // only for ReportService
+app.when(ReportService).needs(Logger).giveTagged('logs'); // every 'logs'-tagged service
+app.when(Mailer).needs('$timeout').giveConfig('mail.timeout');
+app.when([A, B]).needs(C).give(() => new C('ready'));     // consumers/needs accept arrays
+```
+
+Contextual rules apply to the class currently on the build stack, so `make(Logger)` anywhere else still returns the default binding, and the contextual instance never leaks into the shared cache.
+
+### Tags
+
+```typescript
+app.tag([SummaryReport, ChartsReport], 'reports');
+app.tagged('reports');                                  // resolves both members
+app.tagged('reports', (abstract, c) => c.make(abstract)); // custom resolver
+```
+
+### Extension, rebinding, and resolving hooks
+
+```typescript
+app.extend(CacheManager, (manager, container) => manager.store('redis'));
+app.rebinding('config', (container, config) => container.make(Repository).setConfig(config));
+app.afterResolving(MailChannel, (channel) => channel.pretend());
+app.resolving('*', (instance) => log(instance)); // also: resolving(callback) globally
+```
+
+`extend()` closures decorate every fresh build (and any instance already registered); `rebinding()` callbacks fire when an already-resolved abstract is registered again through `bind()`/`instance()`/`extend()` - Laravel fires them with the newly built instance.
+
+### Scoped instances
+
+```typescript
+app.scoped(RequestContext, () => new RequestContext());
+```
+
+Scoped bindings behave like singletons until `forgetScopedInstances()` runs - the HTTP kernel does that at the end of every request, and `flush()` drops them with everything else, so scopes reset between requests and test cases. `forgetInstance(abstract)` and `forgetInstances()` clear the instance cache at other granularities.
+
+### Callable injection
+
+```typescript
+app.call((logger: Logger) => logger.log('hi'));      // closures
+app.call([UserController, 'store']);                 // class tuple (constructed by the container)
+app.call('UserController@store');                    // string form (name must be bound)
+app.call('InvoiceAction');                           // bound class strings dispatch __invoke
+app.call({ __invoke: (bus: Dispatcher) => bus.dispatch() }); // objects with __invoke
+app.call('Handler', {}, 'handle');                   // explicit default method
+app.call([Controller, 'store'], { logger: spare });  // named or positional overrides
+```
+
+Parameters resolve by explicit override first, then by reflected type through the container (with contextual bindings applying, because the target class is pushed onto the build stack), then by declared defaults. `factory(abstract)` returns a reusable resolver closure, and `wrap(closure)` defers a closure's injection until it runs.
+
+### Introspection
+
+`bound(abstract)`, `resolved(abstract)`, `currentlyResolving()`, `getAlias(abstract)`, and `flush()` round out the API.
 
 ## API Reference
 

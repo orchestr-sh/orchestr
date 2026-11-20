@@ -48,6 +48,11 @@ export class Kernel {
       // Report through and render with the shared exception handler; errors
       // already answered by the Router never surface here
       await this.getExceptionHandler().handle(request, error, response);
+    } finally {
+      // Node servers outlive individual requests, so `scoped()` bindings
+      // reset here the way Laravel's scoped container resets between
+      // requests: every request gets a fresh scope.
+      this.app.forgetScopedInstances();
     }
   }
 
